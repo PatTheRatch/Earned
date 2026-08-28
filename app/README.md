@@ -9,16 +9,58 @@ allowed.
 The Xcode project is generated from [`project.yml`](project.yml) rather than committed, so
 project-file merge conflicts can't happen.
 
+**Xcode itself is required** — not just the Command Line Tools. Homebrew and XcodeGen work
+without it, so it's easy to get this far and then find nothing opens. Check with:
+
 ```sh
-brew install xcodegen          # once
-xcodegen generate --spec app/project.yml --project app
-open app/Earned.xcodeproj
+ls -d /Applications/Xcode.app        # should exist
 ```
 
-Then pick your iPhone (or a simulator) and run. A free Apple developer account is enough for
-now — builds expire after 7 days; enrolling in the Developer Program removes that.
+If it doesn't, install Xcode from the Mac App Store (a large download), open it once to let it
+finish setting up, then:
+
+```sh
+brew install xcodegen                # once
+xcodegen generate --spec app/project.yml --project app
+open app/Earned.xcodeproj            # from the repo root
+```
+
+`Earned.xcodeproj` is a *package*, not a folder. In Finder it opens Xcode on double-click; if
+you find yourself looking at `project.pbxproj` and `project.xcworkspace`, you've browsed
+inside it instead — back out and use `open` from Terminal.
 
 CI builds this target on every push, so a compile break shows up without a Mac in the loop.
+
+## Running it on your iPhone
+
+The device picker is **in Xcode's toolbar**, at the top of the window: the box to the right of
+the ▶︎ Run button showing the scheme (`Earned`) and a destination. Click the destination half
+and your iPhone appears in the list — once the phone is ready for it.
+
+Getting the phone into that list, first time only:
+
+1. **Plug the iPhone in** with a cable, unlock it, and tap **Trust This Computer**.
+   (Wireless debugging works later; cable is more reliable for the first run.)
+2. **Enable Developer Mode on the phone**: Settings → Privacy & Security → Developer Mode →
+   on, then restart the phone. This option only appears after the phone has been connected to
+   Xcode once, so do step 1 first.
+3. **Sign in to Xcode**: Xcode menu → Settings… → Accounts → **+** → Apple ID. A free account
+   is fine.
+4. **Set the signing team**: in Xcode, select the blue `Earned` project in the left sidebar →
+   the `Earned` target → **Signing & Capabilities** → tick *Automatically manage signing* and
+   pick your name under **Team**. If it complains the bundle identifier is unavailable, change
+   `PRODUCT_BUNDLE_IDENTIFIER` in `project.yml` to something unique to you and re-run
+   `xcodegen generate`.
+5. **Run** (▶︎ or ⌘R). The first launch fails with "Untrusted Developer" — on the phone go to
+   Settings → General → VPN & Device Management → tap your Apple ID → **Trust**, then run again.
+
+With a free account the app stops launching after **7 days** and you re-run it from Xcode to
+refresh. Enrolling in the Apple Developer Program ($99/yr) removes that, and is required
+anyway before enforcement (step 3) can reach the phone.
+
+Want to see it without any of this? Pick any simulator in that same destination menu — it runs
+immediately, no signing, no phone. Everything in this build works there except that it's not
+on your actual phone.
 
 ## What's here now
 

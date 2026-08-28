@@ -27,7 +27,10 @@ targets:
           - UIInterfaceOrientationPortrait
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.earned.app
+        # Must be globally unique across all of Apple's developer accounts.
+        # A free personal team rejects an identifier someone else registered,
+        # so this is namespaced rather than the generic com.earned.app.
+        PRODUCT_BUNDLE_IDENTIFIER: com.pattheratch.earned
         MARKETING_VERSION: "0.1"
         CURRENT_PROJECT_VERSION: "1"
         # Swift 5 language mode: the app shell is plain SwiftUI and does not
