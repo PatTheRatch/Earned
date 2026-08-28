@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  earnedkit-linux:
+    name: EarnedKit tests (Linux)
+    runs-on: ubuntu-latest
+    container: swift:6.1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests
+        run: swift test --package-path packages/EarnedKit
+
+  earnedkit-macos:
+    name: EarnedKit tests (macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests
+        run: swift test --package-path packages/EarnedKit
