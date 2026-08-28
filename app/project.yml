@@ -1,0 +1,37 @@
+name: Earned
+options:
+  bundleIdPrefix: com.earned
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+packages:
+  EarnedKit:
+    path: ../packages/EarnedKit
+
+targets:
+  Earned:
+    type: application
+    platform: iOS
+    sources:
+      - path: Earned
+    dependencies:
+      - package: EarnedKit
+        product: EarnedKit
+    info:
+      path: Earned/Info.plist
+      properties:
+        CFBundleDisplayName: Earned
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.earned.app
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        # Swift 5 language mode: the app shell is plain SwiftUI and does not
+        # need Swift 6 strict concurrency. EarnedKit itself builds in Swift 6.
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: NO
