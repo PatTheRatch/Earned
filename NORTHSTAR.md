@@ -2,7 +2,7 @@
 
 **North Star Product Document**
 
-v0.1 · August 2026
+v0.2 · August 2026
 
 > Do what matters first. Earn the rest.
 
@@ -309,6 +309,14 @@ Human-friendly presets may include:
 
 These resolve to explicit deadlines.
 
+### The eligible period
+
+The eligible period runs from **commitment creation** to the **deadline**.
+
+Any qualifying workout completed inside that window satisfies the commitment.
+
+Nothing completed before the commitment was created counts — a user cannot commit to a run they have already done.
+
 If the requirement has not been satisfied when the deadline arrives, its Gate becomes unsatisfied and enforcement begins.
 
 Passing the deadline does not eliminate the obligation.
@@ -324,6 +332,16 @@ After creating a commitment, the user receives a configurable correction window.
 Patrick's initial preference: **2 hours.**
 
 During this period, mistakes and legitimate immediate changes can be corrected.
+
+### Short-fuse commitments
+
+A commitment due soon must not be able to outlive its own correction window unhardened.
+
+The effective correction window is therefore:
+
+**min(configured window, a fraction of the time until the deadline).**
+
+Example: with a 2-hour configured window, a commitment due 2 hours from now might harden after ~15 minutes — enough to fix a typo, not enough to quietly un-commit.
 
 After the correction window expires, the contract hardens.
 
@@ -516,6 +534,14 @@ The interval should be configurable.
 
 The timer begins when water is acknowledged, not according to fixed clock checkpoints.
 
+### Active hours
+
+The Hydration Gate runs only during a configurable active-hours window (for example, 08:00–22:00).
+
+Outside active hours, the Gate is dormant: no expiry, no enforcement, no 3 AM nagging.
+
+When the active-hours window opens, the Gate wakes satisfied with a fresh interval on the clock — mornings do not start locked. The first expiry, and every acknowledgment after it, then follow the normal rolling rules.
+
 ---
 
 ## 19. Multiple Gates
@@ -620,6 +646,14 @@ When requesting an Override:
 Patrick's likely configuration: **2 approvals required.**
 
 The threshold should be configurable when the commitment/accountability policy is created.
+
+### MVP mechanism
+
+Accountability partners do not need the app or accounts.
+
+An Override request sends each partner a link over iMessage/SMS; the link opens a minimal approve/deny page backed by a lightweight backend.
+
+Richer partner experiences (in-app approvals, partner profiles) come later.
 
 ---
 
@@ -925,6 +959,7 @@ It does not need to prove that Earned can become a global consumer product.
 **Hydration**
 
 - rolling configurable timer;
+- configurable active-hours window;
 - self-attested completion;
 - hard restriction when expired.
 
@@ -944,10 +979,16 @@ It does not need to prove that Earned can become a global consumer product.
 
 ### MVP Commitment Rules
 
-- correction window;
+- correction window (capped for short-fuse commitments);
 - hardened commitments;
 - harder-only edits;
 - configurable warnings.
+
+### MVP Overrides
+
+- Free Overrides earned by consecutive completed exercise commitments;
+- lightweight Accountability Overrides: partners approve or deny via a link sent over iMessage/SMS, no partner app or accounts, minimal backend;
+- Solo Emergency Override with escalating friction, available only after the accountability window elapses.
 
 ### MVP UX
 
