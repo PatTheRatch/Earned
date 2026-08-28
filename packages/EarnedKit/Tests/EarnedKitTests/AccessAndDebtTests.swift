@@ -7,12 +7,12 @@ final class AccessAndDebtTests: XCTestCase {
     // independently; Full Access requires all of them.
     func testMultipleGatesTimeline() throws {
         var ledger = Ledger()
-        ledger.expectAppend(.hydrationConfigured(patrickHydration()), at: d(22, 7))
         let id = UUID()
-        // Workout due Saturday 10:00; commitment made Friday.
+        // Workout due Saturday 10:00; commitment made Friday evening.
         ledger.expectAppend(
             .commitmentCreated(makeCommitment(id: id, deadline: d(22, 10), createdAt: d(21, 18))),
             at: d(21, 18))
+        ledger.expectAppend(.hydrationConfigured(patrickHydration()), at: d(22, 7))
         ledger.expectAppend(.waterAcknowledged, at: d(22, 9, 15))
 
         // 09:30 — hydration ✓, exercise incomplete but not yet due ✓ → Full Access.
@@ -64,7 +64,6 @@ final class AccessAndDebtTests: XCTestCase {
     // NORTHSTAR §19: the system always explains exactly what is locking access.
     func testLockReasonsExplainEverything() throws {
         var ledger = Ledger()
-        ledger.expectAppend(.hydrationConfigured(patrickHydration()), at: d(22, 7))
         let id = UUID()
         ledger.expectAppend(
             .commitmentCreated(makeCommitment(
@@ -72,11 +71,14 @@ final class AccessAndDebtTests: XCTestCase {
                 requirement: .totalDuration(30 * 60),
                 deadline: d(22, 10), createdAt: d(21, 18))),
             at: d(21, 18))
+        ledger.expectAppend(.hydrationConfigured(patrickHydration()), at: d(22, 7))
         ledger.expectAppend(.workoutRecorded(workout(start: d(22, 8), minutes: 18)), at: d(22, 8, 30))
 
         // 10:30: hydration never acknowledged (expired 09:00) and run overdue at 18/30.
         let reasons = ledger.state.accessState(now: d(22, 10, 30)).lockReasons
-        XCTAssertEqual(reasons.count, 2)
+        guard reasons.count == 2 else {
+            return XCTFail("Expected 2 lock reasons, got \(reasons.count)")
+        }
         XCTAssertEqual(reasons[0].source, .hydration)
         XCTAssertEqual(reasons[1].source, .commitment(id))
         XCTAssertEqual(reasons[1].headline, "Run 30 minutes")
