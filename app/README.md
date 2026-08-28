@@ -31,6 +31,31 @@ inside it instead — back out and use `open` from Terminal.
 
 CI builds this target on every push, so a compile break shows up without a Mac in the loop.
 
+### On a macOS beta (or a just-released major version)
+
+The Mac App Store's Xcode often can't be installed or run on a macOS that shipped after it.
+The fix is to get Xcode from Apple's developer downloads instead of the App Store:
+
+1. Go to <https://developer.apple.com/download/applications/> and sign in. **A free Apple ID
+   is enough** — Xcode betas do not require the paid Developer Program.
+2. Download the Xcode beta whose major version matches your macOS (macOS 27 → Xcode 27). It's
+   a ~10–15 GB `.xip`; expanding it takes a while.
+3. Drag it to `/Applications`, then point the command line at it:
+
+   ```sh
+   sudo xcode-select -s /Applications/Xcode-beta.app
+   xcodebuild -version                 # confirms which Xcode is active
+   ```
+
+4. Open Xcode once. Recent versions download simulator runtimes on demand — let it fetch the
+   iOS one, or Settings → Components → iOS Simulator.
+
+If your iPhone is also on a beta iOS, this is required rather than optional: an older Xcode
+refuses to build for a device running a newer iOS than it knows about.
+
+Rolling macOS back is the other option, but it means erase-and-restore from a backup. The
+beta Xcode is far less disruptive.
+
 ## Running it on your iPhone
 
 The device picker is **in Xcode's toolbar**, at the top of the window: the box to the right of
