@@ -29,7 +29,21 @@ open app/Earned.xcodeproj            # from the repo root
 you find yourself looking at `project.pbxproj` and `project.xcworkspace`, you've browsed
 inside it instead — back out and use `open` from Terminal.
 
-CI builds this target on every push, so a compile break shows up without a Mac in the loop.
+**After every `git pull`, re-run `xcodegen generate`.** New or renamed Swift files show up on
+disk from the pull, but the `.xcodeproj` is generated (and gitignored) — it only learns about
+them when regenerated. Skipping this step is what "Cannot find 'X' in scope" for a file you can
+see right there in Finder almost always means. Close and reopen the project in Xcode afterward
+so it picks up the change:
+
+```sh
+git pull
+xcodegen generate --spec app/project.yml --project app
+```
+
+CI builds this target on every push, so a compile break in the *code itself* shows up without a
+Mac in the loop — but CI always regenerates fresh, so it can't catch this particular class of
+"forgot to regenerate locally" issue. If CI is green and Xcode still can't find a type, this is
+the first thing to check.
 
 ### After a macOS upgrade
 
