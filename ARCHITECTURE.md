@@ -85,20 +85,25 @@ Everything versions together; a change to gate semantics lands in EarnedKit, app
 | Where | What |
 |-------|------|
 | This repo / Claude sessions | All source, EarnedKit logic, backend functions, docs |
-| GitHub Actions (macOS runner) | Build + EarnedKit tests on every push |
+| GitHub Actions (Linux + macOS) | EarnedKit tests, and an XcodeGen + xcodebuild compile of the iOS app, on every push |
 | Patrick's Mac + iPhone | Xcode builds, on-device enforcement testing, HealthKit/Screen Time reality checks |
 | Supabase project | Hosted backend (free tier) |
 
 ## 6. Roadmap
 
-1. **EarnedKit core** — event ledger, gate engine (hydration + exercise), hardening/monotonicity, debt, override state machine. Full test suite. CI green.
-2. **App shell** — Xcode project, onboarding, Today screen, commitment creation, hydration acknowledgment. EarnedKit wired in.
+1. ~~**EarnedKit core**~~ — *done.* Event ledger, gate engine (hydration + exercise), hardening/monotonicity, debt, override state machine. 32 tests green on Linux and macOS.
+2. ~~**App shell**~~ — *done.* XcodeGen-generated project, onboarding, Today, lock-screen receipt, commitment creation, history, settings. EarnedKit wired in; CI compiles the app on every push.
 3. **Enforcement** — FamilyControls authorization, app selection, ManagedSettings shields, DeviceActivity schedules, shield UI ("the receipt").
 4. **Verification** — HealthKit workout observation → ledger events.
 5. **Overrides** — Free Override, Supabase-backed accountability links, Solo Override friction flow.
 6. **Live on Patrick's phone** — six-week success test (NORTHSTAR §41).
 
-Steps 1 and large parts of 2/5 are buildable from this environment; 3–4 need on-device iteration.
+Steps 1 and 2 are complete. Steps 3–4 need on-device iteration; step 5's backend is buildable from here.
+
+The Xcode project is **generated** from `app/project.yml` and not committed, so there are no
+project-file merge conflicts. Screen Time and HealthKit capabilities are deliberately absent
+until steps 3 and 4, which keeps the app runnable on a free Apple account with no entitlement
+paperwork.
 
 ## 7. Known OS-reality constraints (to validate in step 3)
 
