@@ -31,6 +31,21 @@ inside it instead — back out and use `open` from Terminal.
 
 CI builds this target on every push, so a compile break shows up without a Mac in the loop.
 
+### After a macOS upgrade
+
+A major macOS update usually leaves an installed Xcode intact but unwired: `xcode-select`
+points at the Command Line Tools instead of Xcode, and Xcode's components need re-running.
+That looks like "Xcode isn't supported" without actually being that. Fix it with:
+
+```sh
+sudo xcode-select -s /Applications/Xcode.app
+sudo xcodebuild -runFirstLaunch
+xcodebuild -version                  # confirms the version and that it works
+```
+
+If Xcode then launches, you're done — carry on with `xcodegen generate` above. Only if it
+refuses to launch at all do you need the beta below.
+
 ### On a macOS beta (or a just-released major version)
 
 The Mac App Store's Xcode often can't be installed or run on a macOS that shipped after it.
