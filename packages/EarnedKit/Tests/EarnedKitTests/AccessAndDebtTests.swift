@@ -13,7 +13,8 @@ final class AccessAndDebtTests: XCTestCase {
             .commitmentCreated(makeCommitment(id: id, deadline: d(22, 10), createdAt: d(21, 18))),
             at: d(21, 18))
         ledger.expectAppend(.hydrationConfigured(patrickHydration()), at: d(22, 7))
-        ledger.expectAppend(.waterAcknowledged, at: d(22, 9, 15))
+        // Water at 09:30 → hydration holds until 10:30, matching the §19 table.
+        ledger.expectAppend(.waterAcknowledged, at: d(22, 9, 30))
 
         // 09:30 — hydration ✓, exercise incomplete but not yet due ✓ → Full Access.
         XCTAssertTrue(ledger.state.accessState(now: d(22, 9, 30)).isFull)
@@ -26,7 +27,7 @@ final class AccessAndDebtTests: XCTestCase {
         ledger.expectAppend(.workoutRecorded(workout(start: d(22, 9, 40), minutes: 30)), at: d(22, 10, 15))
         XCTAssertTrue(ledger.state.accessState(now: d(22, 10, 16)).isFull)
 
-        // 10:30 — hydration timer (09:15 + 60 min = 10:15) has expired → restricted.
+        // 10:30 — hydration timer (09:30 + 60 min) expires → restricted.
         let atHalfTen = ledger.state.accessState(now: d(22, 10, 30))
         XCTAssertEqual(atHalfTen.lockReasons.map(\.source), [.hydration])
     }
