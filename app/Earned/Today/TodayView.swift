@@ -60,10 +60,18 @@ struct TodayView: View {
     private var hydrationCard: some View {
         if store.state.hydration?.enabled == true {
             VStack(alignment: .leading, spacing: 12) {
-                GateHeadline(emoji: "💧",
-                             title: "Water",
-                             status: hydrationStatusText,
-                             tint: hydrationTint)
+                NavigationLink {
+                    HydrationDetailView()
+                } label: {
+                    HStack {
+                        GateHeadline(emoji: "💧",
+                                     title: "Water",
+                                     status: hydrationStatusText,
+                                     tint: hydrationTint)
+                        Image(systemName: "chevron.right").foregroundStyle(.tertiary).font(.footnote)
+                    }
+                }
+                .buttonStyle(.plain)
                 Button("I drank some water") { store.acknowledgeWater() }
                     .buttonStyle(CommitButtonStyle(tint: hydrationTint))
             }
@@ -102,9 +110,14 @@ struct TodayView: View {
                              status: "Overdue — the deal still stands",
                              tint: Theme.locked)
                 ForEach(overdue, id: \.commitment.id) { record in
-                    CommitmentRow(record: record,
-                                  progress: store.state.progress(for: record.commitment.id),
-                                  now: store.now)
+                    NavigationLink {
+                        CommitmentDetailView(commitmentID: record.commitment.id)
+                    } label: {
+                        CommitmentRow(record: record,
+                                      progress: store.state.progress(for: record.commitment.id),
+                                      now: store.now)
+                    }
+                    .buttonStyle(.plain)
                     OverrideMenu(record: record)
                 }
             }
@@ -129,9 +142,14 @@ struct TodayView: View {
             VStack(alignment: .leading, spacing: 14) {
                 Text("Upcoming").font(.headline)
                 ForEach(upcoming, id: \.commitment.id) { record in
-                    CommitmentRow(record: record,
-                                  progress: store.state.progress(for: record.commitment.id),
-                                  now: store.now)
+                    NavigationLink {
+                        CommitmentDetailView(commitmentID: record.commitment.id)
+                    } label: {
+                        CommitmentRow(record: record,
+                                      progress: store.state.progress(for: record.commitment.id),
+                                      now: store.now)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .cardBackground()
@@ -170,18 +188,22 @@ struct CommitmentRow: View {
     let now: Date
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(record.commitment.title).font(.subheadline.weight(.medium))
-            HStack(spacing: 6) {
-                Text(Format.deadline(record.commitment.deadline, from: now))
-                if let progress, progress.required > 1 || progress.unit != .workouts {
-                    Text("·")
-                    Text(Format.progress(progress))
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(record.commitment.title).font(.subheadline.weight(.medium))
+                HStack(spacing: 6) {
+                    Text(Format.deadline(record.commitment.deadline, from: now))
+                    if let progress, progress.required > 1 || progress.unit != .workouts {
+                        Text("·")
+                        Text(Format.progress(progress))
+                    }
                 }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            Spacer()
+            Image(systemName: "chevron.right").foregroundStyle(.tertiary).font(.caption2)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 }

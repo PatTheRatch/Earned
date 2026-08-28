@@ -27,7 +27,11 @@ struct HistoryView: View {
                         Text("Nothing yet.").foregroundStyle(.secondary)
                     }
                     ForEach(store.allCommitments, id: \.commitment.id) { record in
-                        HistoryRow(record: record, now: store.now)
+                        NavigationLink {
+                            CommitmentDetailView(commitmentID: record.commitment.id)
+                        } label: {
+                            HistoryRow(record: record, now: store.now)
+                        }
                     }
                 }
             }

@@ -71,12 +71,19 @@ struct SettingsView: View {
                     onIncrement: { updateRewards(maxStored: policy.maxStored + 1) },
                     onDecrement: { updateRewards(maxStored: max(0, policy.maxStored - 1)) })
             LabeledContent("Available now", value: "\(store.freeOverrides)")
+            LabeledContent("Eligible commitments", value: "\(eligibleCommitmentCount)")
         } header: {
             Text("Free Overrides")
         } footer: {
-            Text("Consistency earns autonomy. A Free Override clears one obligation with no "
-                 + "approval, no waiting and no explanation.")
+            Text("These numbers set the shared earning mechanics — how large a streak earns one, "
+                 + "and how many can be banked. Which commitments count toward that streak is "
+                 + "chosen per commitment, when you create it (not all commitments need to be "
+                 + "able to earn one) — Patrick's Hydration Gate, for instance, never has.")
         }
+    }
+
+    private var eligibleCommitmentCount: Int {
+        store.allCommitments.filter { $0.commitment.rewardEligible }.count
     }
 
     private func updateRewards(streak: Int? = nil, maxStored: Int? = nil) {
@@ -169,6 +176,11 @@ private struct AddRestrictedView: View {
 }
 
 /// Manual workout entry, standing in for HealthKit until step 4.
+///
+/// Stays open across entries — testing usually means backfilling several
+/// sessions at once (a missed week, say), not one workout per visit to this
+/// screen. Each record resets the inputs and adds to a running list rather
+/// than dismissing.
 private struct LogWorkoutView: View {
     @EnvironmentObject private var store: EarnedStore
     @Environment(\.dismiss) private var dismiss
@@ -176,6 +188,7 @@ private struct LogWorkoutView: View {
     @State private var kilometers = 5.0
     @State private var includeDistance = false
     @State private var endedMinutesAgo = 0.0
+    @State private var logged: [Workout] = []
 
     var body: some View {
         NavigationStack {
@@ -197,13 +210,32 @@ private struct LogWorkoutView: View {
                 }
                 Section {
                     Button("Record workout") { record() }
+                } footer: {
+                    Text("Stays open so you can log several — add another right after this one.")
+                }
+                if !logged.isEmpty {
+                    Section("Logged this session") {
+                        ForEach(logged) { workout in
+                            HStack {
+                                Text(Format.duration(workout.duration))
+                                if let distance = workout.distanceMeters {
+                                    Text("·")
+                                    Text(String(format: "%.1f km", distance / 1000))
+                                }
+                                Spacer()
+                                Text(Format.relative(workout.end, from: Date()))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .font(.subheadline)
+                        }
+                    }
                 }
             }
             .navigationTitle("Log a workout")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button(logged.isEmpty ? "Cancel" : "Done") { dismiss() }
                 }
             }
             .rejectionAlert()
@@ -216,6 +248,8 @@ private struct LogWorkoutView: View {
                               start: end.addingTimeInterval(-minutes * 60),
                               end: end,
                               distanceMeters: includeDistance ? kilometers * 1000 : nil)
-        if store.recordWorkout(workout) { dismiss() }
+        guard store.recordWorkout(workout) else { return }
+        logged.append(workout)
+        endedMinutesAgo = 0
     }
 }

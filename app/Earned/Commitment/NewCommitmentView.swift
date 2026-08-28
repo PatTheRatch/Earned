@@ -52,6 +52,7 @@ struct NewCommitmentView: View {
     @State private var accountabilityMinutes = 30.0
     @State private var correctionHours = 2.0
     @State private var warnBefore = true
+    @State private var rewardEligible = true
 
     var body: some View {
         NavigationStack {
@@ -163,6 +164,13 @@ struct NewCommitmentView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 Toggle("Warn me 30 minutes before", isOn: $warnBefore)
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle("Eligible for Free Overrides", isOn: $rewardEligible)
+                    Text("Whether repeated on-time completions of this commitment count toward "
+                         + "earning a Free Override. Fixed once committed — not all commitments "
+                         + "need to be able to earn one.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
             }
 
         case .review:
@@ -173,6 +181,7 @@ struct NewCommitmentView: View {
                 ReviewLine(label: "Verified by", value: "Apple Health workout record")
                 ReviewLine(label: "Escape", value: "\(approvals) approvals, or solo after "
                            + "\(Int(accountabilityMinutes)) min")
+                ReviewLine(label: "Free Overrides", value: rewardEligible ? "Eligible" : "Not eligible")
                 ReviewLine(label: "Hardens", value: Format.relative(hardensAt, from: store.now))
                 Text("Until it hardens you can change anything. After that it can only get harder — "
                      + "and missing the deadline doesn't clear it.")
@@ -250,7 +259,7 @@ struct NewCommitmentView: View {
             correctionWindow: correctionHours * 3600,
             overridePolicy: OverridePolicy(approvalsRequired: approvals,
                                            accountabilityWindow: accountabilityMinutes * 60),
-            rewardEligible: true,
+            rewardEligible: rewardEligible,
             warningLead: warnBefore ? 30 * 60 : nil)
         if created { dismiss() }
     }
