@@ -1,8 +1,9 @@
 import SwiftUI
 import EarnedKit
 
-/// Home answers one question: what do I need to do right now? It stays
-/// intentionally sparse (NORTHSTAR §29).
+/// Home answers one question — what do I need to do right now? — in the poster
+/// voice: one huge state word, then quiet rule-separated rows (NORTHSTAR §29,
+/// docs/design-language.md).
 struct TodayView: View {
     @EnvironmentObject private var store: EarnedStore
     @State private var showingNewCommitment = false
@@ -11,199 +12,167 @@ struct TodayView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    phoneStatus
-                    hydrationCard
-                    exerciseSection
-                    upcomingSection
-                    newCommitmentButton
+                VStack(alignment: .leading, spacing: 0) {
+                    SectionLabel(text: "Earned", color: Theme.ink)
+                        .padding(.top, 12)
+
+                    Button { showingLockScreen = true } label: {
+                        StateWord(word: store.isRestricted ? "LOCKED" : "EARNED")
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
+
+                    VStack(alignment: .leading, spacing: 0) {
+                        hydrationRow
+                        ForEach(store.overdue, id: \.commitment.id) { record in
+                            overdueRow(record)
+                        }
+                        ForEach(store.upcoming, id: \.commitment.id) { record in
+                            upcomingRow(record)
+                        }
+                        ThickRule()
+                    }
+                    .padding(.top, 22)
+
+                    if store.freeOverrides > 0 {
+                        TicketView(count: store.freeOverrides)
+                            .padding(.top, 20)
+                    }
+
+                    if store.overdue.isEmpty && store.upcoming.isEmpty {
+                        Text("Nothing owed. Make a commitment when you know what you owe yourself.")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Theme.muted)
+                            .padding(.top, 20)
+                    }
+
+                    VStack(alignment: .leading, spacing: 16) {
+                        if store.state.hydration?.enabled == true {
+                            Button("I DRANK SOME WATER") { store.acknowledgeWater() }
+                                .buttonStyle(PosterButtonStyle())
+                        }
+                        Button {
+                            showingNewCommitment = true
+                        } label: {
+                            Text("+ NEW COMMITMENT")
+                                .font(.system(size: 13, weight: .bold))
+                                .tracking(1.5)
+                                .foregroundStyle(Theme.ink)
+                                .padding(.bottom, 2)
+                                .overlay(alignment: .bottom) {
+                                    Rectangle().fill(Theme.ink).frame(height: 2)
+                                }
+                        }
+                        .buttonStyle(.plain)
+                        .frame(minHeight: 44)
+                    }
+                    .padding(.top, 28)
                 }
-                .padding(20)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 24)
             }
-            .navigationTitle("Today")
-            .background(Theme.canvas)
+            .background(Theme.paper)
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showingNewCommitment) { NewCommitmentView() }
             .sheet(isPresented: $showingLockScreen) { LockScreenView() }
             .rejectionAlert()
         }
     }
 
-    // MARK: - Phone status
+    // MARK: - Rows: thick rule, small-caps label, one bold line, quiet context.
 
-    private var phoneStatus: some View {
-        Button {
-            showingLockScreen = true
-        } label: {
-            HStack(spacing: 12) {
-                Text(store.isRestricted ? "🔒" : "🔓").font(.title2)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(store.isRestricted ? "Restricted" : "Full Access")
-                        .font(.headline)
-                        .foregroundStyle(store.isRestricted ? Theme.locked : Theme.satisfied)
-                    Text(store.isRestricted
-                         ? "Tap to see what's holding it"
-                         : "Every active Gate is satisfied")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Image(systemName: "chevron.right").foregroundStyle(.tertiary).font(.footnote)
+    @ViewBuilder
+    private var hydrationRow: some View {
+        if store.state.hydration?.enabled == true {
+            NavigationLink {
+                HydrationDetailView()
+            } label: {
+                row(label: "Water", line: hydrationLine)
             }
-            .cardBackground()
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var hydrationLine: Text {
+        switch store.hydration {
+        case .satisfied(let expiresAt):
+            let left = Format.duration(max(0, expiresAt.timeIntervalSince(store.now)))
+            return Text("Fine. \(left) left.").foregroundStyle(Theme.ink)
+        case .unsatisfied:
+            return Text("Drink some water. ").foregroundStyle(Theme.ink)
+                 + Text("Now.").foregroundStyle(Theme.signal)
+        case .dormant:
+            return Text("Resting until active hours.").foregroundStyle(Theme.muted)
+        }
+    }
+
+    private func overdueRow(_ record: CommitmentRecord) -> some View {
+        NavigationLink {
+            CommitmentDetailView(commitmentID: record.commitment.id)
+        } label: {
+            row(label: record.commitment.title,
+                line: overdueLine(record),
+                context: "was due \(Format.deadline(record.commitment.deadline, from: store.now).lowercased())")
         }
         .buttonStyle(.plain)
     }
 
-    // MARK: - Hydration
+    private func overdueLine(_ record: CommitmentRecord) -> Text {
+        guard let progress = store.state.progress(for: record.commitment.id),
+              progress.unit != .workouts || progress.required > 1,
+              progress.achieved > 0 else {
+            return Text("Not done. ").foregroundStyle(Theme.ink)
+                 + Text("Still owed.").foregroundStyle(Theme.signal)
+        }
+        let done = Format.progress(progress)
+        let left = Format.remaining(progress) ?? "Done."
+        return Text("\(done). ").foregroundStyle(Theme.ink)
+             + Text(left).foregroundStyle(Theme.signal)
+    }
 
-    @ViewBuilder
-    private var hydrationCard: some View {
-        if store.state.hydration?.enabled == true {
-            VStack(alignment: .leading, spacing: 12) {
-                NavigationLink {
-                    HydrationDetailView()
-                } label: {
-                    HStack {
-                        GateHeadline(emoji: "💧",
-                                     title: "Water",
-                                     status: hydrationStatusText,
-                                     tint: hydrationTint)
-                        Image(systemName: "chevron.right").foregroundStyle(.tertiary).font(.footnote)
+    private func upcomingRow(_ record: CommitmentRecord) -> some View {
+        NavigationLink {
+            CommitmentDetailView(commitmentID: record.commitment.id)
+        } label: {
+            row(label: dayLabel(record.commitment.deadline),
+                line: Text("\(record.commitment.title) by \(timeLabel(record.commitment.deadline)).")
+                    .foregroundStyle(Theme.muted))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func row(label: String, line: Text, context: String? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ThickRule()
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 5) {
+                    SectionLabel(text: label)
+                    line.font(Theme.blocker())
+                    if let context {
+                        Text(context)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.muted)
                     }
                 }
-                .buttonStyle(.plain)
-                Button("I drank some water") { store.acknowledgeWater() }
-                    .buttonStyle(CommitButtonStyle(tint: hydrationTint))
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.muted)
+                    .padding(.top, 6)
             }
-            .cardBackground()
-        }
-    }
-
-    private var hydrationStatusText: String {
-        switch store.hydration {
-        case .satisfied(let expiresAt):
-            return "Good — locks again \(Format.relative(expiresAt, from: store.now))"
-        case .unsatisfied:
-            return "Drink some water to unlock"
-        case .dormant:
-            return store.state.hydration?.enabled == true ? "Resting until active hours" : "Off"
-        }
-    }
-
-    private var hydrationTint: Color {
-        switch store.hydration {
-        case .satisfied: return Theme.satisfied
-        case .unsatisfied: return Theme.locked
-        case .dormant: return Theme.waiting
-        }
-    }
-
-    // MARK: - Exercise
-
-    @ViewBuilder
-    private var exerciseSection: some View {
-        let overdue = store.overdue
-        if !overdue.isEmpty {
-            VStack(alignment: .leading, spacing: 14) {
-                GateHeadline(emoji: "🏃",
-                             title: overdue.count == 1 ? "Exercise" : "Exercise (\(overdue.count) overdue)",
-                             status: "Overdue — the deal still stands",
-                             tint: Theme.locked)
-                ForEach(overdue, id: \.commitment.id) { record in
-                    NavigationLink {
-                        CommitmentDetailView(commitmentID: record.commitment.id)
-                    } label: {
-                        CommitmentRow(record: record,
-                                      progress: store.state.progress(for: record.commitment.id),
-                                      now: store.now)
-                    }
-                    .buttonStyle(.plain)
-                    OverrideMenu(record: record)
-                }
-            }
-            .cardBackground()
-        }
-    }
-
-    // MARK: - Upcoming
-
-    @ViewBuilder
-    private var upcomingSection: some View {
-        let upcoming = store.upcoming
-        if upcoming.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Nothing due").font(.headline)
-                Text("No commitments outstanding. Make one when you know what you owe yourself.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-            .cardBackground()
-        } else {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Upcoming").font(.headline)
-                ForEach(upcoming, id: \.commitment.id) { record in
-                    NavigationLink {
-                        CommitmentDetailView(commitmentID: record.commitment.id)
-                    } label: {
-                        CommitmentRow(record: record,
-                                      progress: store.state.progress(for: record.commitment.id),
-                                      now: store.now)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .cardBackground()
-        }
-    }
-
-    private var newCommitmentButton: some View {
-        Button("+ New Commitment") { showingNewCommitment = true }
-            .buttonStyle(CommitButtonStyle(tint: .primary))
-    }
-}
-
-// MARK: - Shared rows
-
-struct GateHeadline: View {
-    let emoji: String
-    let title: String
-    let status: String
-    let tint: Color
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(emoji)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.headline)
-                Text(status).font(.footnote).foregroundStyle(tint)
-            }
-            Spacer()
-        }
-    }
-}
-
-struct CommitmentRow: View {
-    let record: CommitmentRecord
-    let progress: CommitmentProgress?
-    let now: Date
-
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(record.commitment.title).font(.subheadline.weight(.medium))
-                HStack(spacing: 6) {
-                    Text(Format.deadline(record.commitment.deadline, from: now))
-                    if let progress, progress.required > 1 || progress.unit != .workouts {
-                        Text("·")
-                        Text(Format.progress(progress))
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Image(systemName: "chevron.right").foregroundStyle(.tertiary).font(.caption2)
+            .padding(.vertical, 14)
         }
         .contentShape(Rectangle())
+    }
+
+    private func dayLabel(_ date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) { return "Today" }
+        if calendar.isDateInTomorrow(date) { return "Tomorrow" }
+        return date.formatted(.dateTime.weekday(.wide))
+    }
+
+    private func timeLabel(_ date: Date) -> String {
+        date.formatted(date: .omitted, time: .shortened)
     }
 }

@@ -15,6 +15,7 @@ struct SettingsView: View {
                 testingSection
                 aboutSection
             }
+            .paperList()
             .navigationTitle("Settings")
             .rejectionAlert()
             .sheet(isPresented: $showingWorkoutSheet) { LogWorkoutView() }
@@ -170,6 +171,7 @@ private struct AddRestrictedView: View {
                 }
             }
         }
+        .paperList()
         .navigationTitle("Add")
         .rejectionAlert()
     }
@@ -231,6 +233,7 @@ private struct LogWorkoutView: View {
                     }
                 }
             }
+            .paperList()
             .navigationTitle("Log a workout")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

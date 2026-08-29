@@ -35,6 +35,7 @@ struct HistoryView: View {
                     }
                 }
             }
+            .paperList()
             .navigationTitle("History")
         }
     }
@@ -49,7 +50,10 @@ private struct HistoryRow: View {
             HStack {
                 Text(record.commitment.title).font(.subheadline.weight(.medium))
                 Spacer()
-                Text(symbol).font(.subheadline)
+                Text(tag)
+                    .font(.system(size: 10, weight: .bold))
+                    .tracking(1.5)
+                    .foregroundStyle(tagColor)
             }
             Text("\(Format.deadline(record.commitment.deadline, from: now)) · \(outcome)")
                 .font(.caption)
@@ -57,12 +61,20 @@ private struct HistoryRow: View {
         }
     }
 
-    private var symbol: String {
+    private var tag: String {
         switch record.resolution {
-        case .completed: return "✅"
-        case .overridden: return "🎟️"
-        case .cancelled: return "⚪️"
-        case nil: return record.isOverdue(now: now) ? "🔴" : "⏳"
+        case .completed: return "DONE"
+        case .overridden: return "OVERRIDE"
+        case .cancelled: return "CANCELLED"
+        case nil: return record.isOverdue(now: now) ? "OVERDUE" : "OPEN"
+        }
+    }
+
+    private var tagColor: Color {
+        switch record.resolution {
+        case .completed: return Theme.ink
+        case .overridden, .cancelled: return Theme.muted
+        case nil: return record.isOverdue(now: now) ? Theme.signal : Theme.muted
         }
     }
 

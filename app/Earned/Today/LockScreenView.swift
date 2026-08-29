@@ -1,77 +1,118 @@
 import SwiftUI
 import EarnedKit
 
-/// The receipt. It explains the contract and nothing else: not a coaching
-/// surface, not a feed (NORTHSTAR §8).
-///
-/// In this build it is a screen you can open. Once the Screen Time extensions
-/// land it becomes the shield itself, rendered over a restricted app.
+/// The in-app lock surface: a red printed notice stating the deal. Factual, not
+/// taunting — "NICE TRY." is reserved for the real shield in step 3, the moment
+/// the user actually tries to open a restricted app (docs/design-language.md).
 struct LockScreenView: View {
     @EnvironmentObject private var store: EarnedStore
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 28) {
+        Group {
             switch store.access {
             case .full:
-                unlocked
+                earned
             case .restricted(let reasons):
                 locked(reasons)
             }
+        }
+    }
+
+    // MARK: - Full access
+
+    private var earned: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SectionLabel(text: "Earned", color: Theme.ink)
+                .padding(.top, 40)
+            StateWord(word: "EARNED", size: 92)
+                .padding(.top, 4)
+            Text("Every gate is satisfied.")
+                .font(Theme.blocker())
+                .foregroundStyle(Theme.ink)
+                .padding(.top, 10)
+            Text("Your rules. Your deal.")
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.muted)
+                .padding(.top, 4)
             Spacer()
-            Button("Close") { dismiss() }
-                .buttonStyle(CommitButtonStyle(tint: .primary))
+            Button("CLOSE") { dismiss() }
+                .buttonStyle(PosterButtonStyle())
         }
         .padding(28)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.canvas)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .background(Theme.paper)
     }
 
-    private var unlocked: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("🔓 Unlocked").font(.largeTitle.weight(.semibold))
-            Text("Every active Gate is satisfied.")
-                .foregroundStyle(.secondary)
-        }
-        .padding(.top, 40)
-    }
+    // MARK: - Restricted
 
     private func locked(_ reasons: [LockReason]) -> some View {
-        VStack(alignment: .leading, spacing: 24) {
-            Text("🔒 Still locked").font(.largeTitle.weight(.semibold))
+        VStack(alignment: .leading, spacing: 0) {
+            SectionLabel(text: "Earned", color: Theme.paper)
+                .padding(.top, 40)
 
-            VStack(alignment: .leading, spacing: 18) {
+            Text("STILL\nLOCKED.")
+                .font(Theme.display(88))
+                .foregroundStyle(Theme.paper)
+                .lineSpacing(-4)
+                .padding(.top, 8)
+
+            VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(reasons.enumerated()), id: \.offset) { _, reason in
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 10) {
-                            Text(emoji(for: reason))
-                            Text(reason.headline).font(.title3.weight(.medium))
+                    VStack(alignment: .leading, spacing: 0) {
+                        Rectangle().fill(Theme.paper).frame(height: 3)
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(headline(for: reason))
+                                .font(.system(size: 16, weight: .bold))
+                            Spacer()
+                            Text(detail(for: reason))
+                                .font(.system(size: 13, weight: .bold))
+                                .tracking(1)
                         }
-                        if let progress = reason.progress, progress.required > 0 {
-                            Text(Format.progress(progress))
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                            if let remaining = Format.remaining(progress) {
-                                Text(remaining).font(.subheadline).foregroundStyle(.secondary)
-                            }
-                        }
+                        .foregroundStyle(Theme.paper)
+                        .padding(.vertical, 13)
                     }
                 }
+                Rectangle().fill(Theme.paper).frame(height: 3)
             }
+            .padding(.top, 28)
 
-            Text(reasons.count == 1
-                 ? "Satisfy this to unlock."
-                 : "Satisfy all active requirements to unlock.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            Spacer()
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("THE DEAL STILL STANDS.")
+                    .font(Theme.display(24))
+                    .foregroundStyle(Theme.paper)
+                Text("You set this one.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.paper.opacity(0.8))
+            }
+            .padding(.bottom, 20)
+
+            Button("CLOSE") { dismiss() }
+                .buttonStyle(PosterButtonStyle(background: Theme.paper, foreground: Theme.signal))
         }
-        .padding(.top, 40)
+        .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .background(Theme.signal)
     }
 
-    private func emoji(for reason: LockReason) -> String {
+    private func headline(for reason: LockReason) -> String {
         switch reason.source {
-        case .hydration: return "💧"
-        case .commitment: return "🏃"
+        case .hydration: return "Drink some water"
+        case .commitment: return reason.headline
+        }
+    }
+
+    private func detail(for reason: LockReason) -> String {
+        guard let progress = reason.progress, progress.required > 0 else { return "NOW" }
+        switch progress.unit {
+        case .workouts:
+            return progress.achieved >= progress.required ? "DONE" : "OWED"
+        case .seconds:
+            return "\(Int(progress.achieved / 60))/\(Int(progress.required / 60)) MIN"
+        case .meters:
+            return String(format: "%.1f/%.1f KM", progress.achieved / 1000, progress.required / 1000)
         }
     }
 }
@@ -88,21 +129,22 @@ struct OverrideMenu: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if store.freeOverrides > 0 {
-                Button("🎟️ Use a Free Override (\(store.freeOverrides) left)") {
+                Button("USE A FREE OVERRIDE (\(store.freeOverrides) LEFT)") {
                     store.spendFreeOverride(on: record.commitment.id)
                 }
-                .font(.footnote.weight(.medium))
+                .font(.system(size: 12, weight: .bold))
+                .tint(Theme.ink)
             }
 
             if let request {
                 requestStatus(request)
             } else {
-                Button("Request an Override") {
+                Button("Request an override") {
                     store.append(.overrideRequested(id: UUID(),
                                                     commitmentID: record.commitment.id))
                 }
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 12))
+                .tint(Theme.muted)
             }
         }
     }
@@ -114,38 +156,40 @@ struct OverrideMenu: View {
 
         VStack(alignment: .leading, spacing: 6) {
             Text("Override requested · \(request.approvals.count)/\(policy.approvalsRequired) approvals")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.muted)
 
             if store.now < soloAt {
                 Text("Solo override available \(Format.relative(soloAt, from: store.now))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.muted)
             } else if let startedAt = request.soloStartedAt {
                 let friction = store.state.soloFriction(forRequest: request.id,
                                                         ifStartedAt: startedAt) ?? 0
                 let completeAt = startedAt.addingTimeInterval(friction)
                 if store.now < completeAt {
                     Text("Solo override in progress — \(Format.relative(completeAt, from: store.now))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.muted)
                 } else {
-                    Button("Complete Solo Override") {
+                    Button("COMPLETE SOLO OVERRIDE") {
                         store.append(.soloOverrideCompleted(requestID: request.id))
                     }
-                    .font(.footnote.weight(.medium))
+                    .font(.system(size: 12, weight: .bold))
+                    .tint(Theme.ink)
                 }
             } else {
-                Button("Start Solo Override") {
+                Button("START SOLO OVERRIDE") {
                     store.append(.soloOverrideStarted(requestID: request.id))
                 }
-                .font(.footnote.weight(.medium))
+                .font(.system(size: 12, weight: .bold))
+                .tint(Theme.ink)
             }
 
             Text("Accountability partners arrive with the backend; until then the "
                  + "solo route is the only one that ends in an unlock.")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.muted.opacity(0.7))
         }
     }
 }

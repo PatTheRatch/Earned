@@ -47,6 +47,13 @@ struct CommitmentDetailView: View {
         let progress = store.state.progress(for: commitmentID)
 
         List {
+            if record.isOverdue(now: store.now) {
+                Section {
+                    StateWord(word: "OVERDUE", size: 56)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 0))
+                }
+            }
             Section("Status") {
                 LabeledContent("State", value: statusText(record))
                 if let progress, progress.required > 0 {
@@ -105,6 +112,12 @@ struct CommitmentDetailView: View {
 
             restrictedAppsSection
 
+            if record.resolution == nil {
+                Section("Ways out") {
+                    OverrideMenu(record: record)
+                }
+            }
+
             if !hardened {
                 Section {
                     Button("Cancel commitment", role: .destructive) {
@@ -113,6 +126,7 @@ struct CommitmentDetailView: View {
                 }
             }
         }
+        .paperList()
     }
 
     @ViewBuilder

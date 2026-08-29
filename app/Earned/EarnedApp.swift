@@ -23,6 +23,9 @@ struct RootView: View {
                 OnboardingView()
             }
         }
+        // A printed notice has one look: light only (docs/design-language.md).
+        .preferredColorScheme(.light)
+        .tint(Theme.ink)
         .alert("Couldn't load your history",
                isPresented: .constant(store.loadFailure != nil),
                actions: { Button("OK", role: .cancel) { store.loadFailure = nil } },

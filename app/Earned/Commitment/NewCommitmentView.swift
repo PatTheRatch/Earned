@@ -57,8 +57,9 @@ struct NewCommitmentView: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 24) {
-                Text(step.question)
-                    .font(.title2.weight(.semibold))
+                Text(step.question.uppercased())
+                    .font(Theme.display(34))
+                    .foregroundStyle(Theme.ink)
                     .padding(.top, 8)
 
                 content
@@ -67,7 +68,7 @@ struct NewCommitmentView: View {
                 controls
             }
             .padding(24)
-            .background(Theme.canvas)
+            .background(Theme.paper)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -88,8 +89,7 @@ struct NewCommitmentView: View {
                     .textFieldStyle(.plain)
                     .font(.title3)
                     .padding(14)
-                    .background(Theme.card)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.corner, style: .continuous))
+                    .background(Theme.field)
                 Text("Name it the way you'd say it to yourself.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
@@ -140,7 +140,7 @@ struct NewCommitmentView: View {
                     .font(.footnote).foregroundStyle(.secondary)
                 if deadline <= store.now {
                     Text("That deadline has already passed.")
-                        .font(.footnote).foregroundStyle(Theme.locked)
+                        .font(.footnote).foregroundStyle(Theme.signal)
                 }
             }
 
@@ -202,13 +202,13 @@ struct NewCommitmentView: View {
                     .padding(.horizontal, 20)
             }
             if step == .review {
-                Button("Commit 🔒") { commit() }
-                    .buttonStyle(CommitButtonStyle(tint: .primary))
+                Button("COMMIT") { commit() }
+                    .buttonStyle(PosterButtonStyle())
             } else {
                 Button("Next") {
                     withAnimation { step = Step(rawValue: step.rawValue + 1) ?? .review }
                 }
-                .buttonStyle(CommitButtonStyle(tint: .primary))
+                .buttonStyle(PosterButtonStyle())
                 .disabled(!canAdvance)
                 .opacity(canAdvance ? 1 : 0.4)
             }

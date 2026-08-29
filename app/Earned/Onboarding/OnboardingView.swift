@@ -27,18 +27,18 @@ struct OnboardingView: View {
                     .font(.headline)
                     .padding(.vertical, 16).padding(.horizontal, 20)
                 }
-                Button(page == .activate ? "Activate Earned 🔒" : "Next") {
+                Button(page == .activate ? "ACTIVATE EARNED" : "NEXT") {
                     if page == .activate {
                         activate()
                     } else {
                         withAnimation { page = Page(rawValue: page.rawValue + 1) ?? .activate }
                     }
                 }
-                .buttonStyle(CommitButtonStyle(tint: .primary))
+                .buttonStyle(PosterButtonStyle())
             }
         }
         .padding(28)
-        .background(Theme.canvas)
+        .background(Theme.paper)
         .rejectionAlert()
     }
 
@@ -60,7 +60,7 @@ struct OnboardingView: View {
 
         case .hydration:
             VStack(alignment: .leading, spacing: 18) {
-                Text("💧 Hydration Gate").font(.title.weight(.semibold))
+                Text("HYDRATION").font(Theme.display(44)).foregroundStyle(Theme.ink)
                 Text("A behavioural interrupt, not a tracker. You just say you drank some water.")
                     .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 6) {
@@ -114,8 +114,10 @@ struct OnboardingView: View {
 
         var body: some View {
             VStack(alignment: .leading, spacing: 16) {
-                Text(title).font(.largeTitle.weight(.semibold))
-                Text(message).foregroundStyle(.secondary)
+                Text(title.uppercased())
+                    .font(Theme.display(44))
+                    .foregroundStyle(Theme.ink)
+                Text(message).foregroundStyle(Theme.muted)
             }
             .padding(.top, 40)
         }

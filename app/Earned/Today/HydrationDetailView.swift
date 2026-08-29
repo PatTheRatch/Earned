@@ -58,6 +58,7 @@ struct HydrationDetailView: View {
                 Text("Every active Gate shares one restricted set — manage it in Settings.")
             }
         }
+        .paperList()
         .navigationTitle("Hydration")
         .navigationBarTitleDisplayMode(.inline)
         .rejectionAlert()
