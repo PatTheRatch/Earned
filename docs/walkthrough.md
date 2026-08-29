@@ -326,22 +326,23 @@ Open the commitment → **Ways out**. Three rungs, two of which work today:
 
 ---
 
-## 6. Cancelling a repeating plan
+## 6. A plan hardens as a whole
 
-Settings → Repeating plans lists active plans and lets you cancel one. Cancellation
-withdraws an unresolved occurrence when it is still inside its correction window, **or**
-when its eligible window has not opened yet. Occurrences already live survive, hardened or
-not — those are real contracts.
+Making a plan is one act of commitment to the whole thing, not twelve small ones. Every
+occurrence's correction window runs from *plan creation*, not from its own day — so a
+four-week plan with a two-hour window is completely hardened two hours after you make it.
+You cannot adjust week three of a plan on the Monday of week three. That's deliberate: if
+you weren't ready to follow through on the whole plan, you shouldn't have made it.
 
-The second clause is load-bearing and it papers over something worth deciding
-deliberately: every occurrence's correction window is measured from *plan creation*, so a
-four-week plan with a two-hour window hardens completely two hours after it's made. Without
-the clause, cancelling would withdraw nothing at all.
+The creation flow says so before you commit — the weekly-repeat step warns about it, and
+the review screen's **Fully hardens** line shows exactly when the last occurrence locks in,
+computed from the plan's real occurrences rather than a guess.
 
-**Open question:** should each occurrence have its own hardening clock, running from the
-start of its own day? Today you cannot adjust week three of a plan on the Monday of week
-three. Under a per-occurrence clock you could — but a plan would then be meaningfully
-softer than the same commitments entered by hand, which may be the wrong trade.
+Settings → Repeating plans lists active plans and lets you cancel one. Because every
+occurrence hardens so quickly, cancellation would otherwise withdraw nothing at all — so it
+also withdraws any occurrence whose eligible window hasn't opened yet, on top of the
+ordinary still-in-correction-window case. An occurrence that's already live survives,
+hardened or not: once a day has arrived, its contract stands like any other.
 
 Editing a plan isn't supported at all yet; cancel and recreate.
 

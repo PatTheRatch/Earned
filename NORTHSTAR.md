@@ -2,7 +2,7 @@
 
 **North Star Product Document**
 
-v0.3 · August 2026
+v0.4 · August 2026
 
 > Do what matters first. Earn the rest.
 
@@ -312,8 +312,19 @@ eligible window, deadline, hardening clock, progress and resolution. Occurrences
 are ordinary commitments in every respect — the plan is a way of creating them,
 never a separate source of truth for Gate state.
 
-Cancelling a plan withdraws the occurrences still inside their correction
-window. Anything already hardened is a contract in its own right and survives.
+Making a plan is one act of commitment, not several. Every occurrence's
+correction window runs from the moment the plan is made, not from its own
+calendar day — so the whole plan hardens together, shortly after creation, well
+before its later weeks arrive. A user cannot adjust week three on the Monday
+of week three. This is deliberate: a plan should not be a softer way of making
+the same commitments one at a time. If you are not ready to follow through on
+the whole plan, do not make it. The app says so before the user commits.
+
+Cancelling a plan withdraws occurrences still inside their correction window,
+and also occurrences whose eligible window has not opened yet — since the plan
+as a whole hardens so quickly, this is what keeps cancellation meaningful for
+weeks that have not started. Anything already live — its window open, whether
+hardened or not — is a contract in its own right and survives.
 
 ---
 

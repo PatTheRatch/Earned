@@ -192,6 +192,10 @@ struct NewCommitmentView: View {
                         Text("One commitment per scheduled day, each with its own deadline. "
                              + "A workout only counts toward the day it belongs to.")
                             .font(.footnote).foregroundStyle(.secondary)
+                        Text("The whole plan hardens together, shortly after you commit — "
+                             + "not one day at a time as each day arrives. You shouldn't make "
+                             + "a plan you're not ready to follow through on.")
+                            .font(.footnote).foregroundStyle(Theme.signal)
                     }
                 } else {
                     Text("A deadline, not an appointment: anything qualifying you do before "
@@ -248,11 +252,20 @@ struct NewCommitmentView: View {
                 ReviewLine(label: "Escape", value: "\(approvals) approvals, or solo after "
                            + "\(Int(accountabilityMinutes)) min")
                 ReviewLine(label: "Free Overrides", value: rewardEligible ? "Eligible" : "Not eligible")
-                ReviewLine(label: "Hardens", value: Format.relative(hardensAt, from: store.now))
-                Text("Until it hardens you can change anything. After that it can only get harder — "
-                     + "and missing the deadline doesn't clear it.")
-                    .font(.footnote).foregroundStyle(.secondary)
-                    .padding(.top, 4)
+                ReviewLine(label: repeats == .weekly ? "Fully hardens" : "Hardens",
+                           value: Format.relative(hardensAt, from: store.now))
+                if repeats == .weekly {
+                    Text("Every occurrence in this plan — including the last week — hardens by "
+                         + "then. There's no editing week three once week one has started; "
+                         + "cancelling later only spares days that haven't opened yet.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                        .padding(.top, 4)
+                } else {
+                    Text("Until it hardens you can change anything. After that it can only get harder — "
+                         + "and missing the deadline doesn't clear it.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                        .padding(.top, 4)
+                }
             }
         }
     }
@@ -319,12 +332,32 @@ struct NewCommitmentView: View {
                              second: 0, of: day) ?? day
     }
 
-    /// Mirrors Commitment.hardensAt so the review screen can promise it before
-    /// the commitment exists.
+    /// For a one-off, mirrors Commitment.hardensAt so the review screen can
+    /// promise it before the commitment exists.
+    ///
+    /// For a plan, every occurrence hardens independently but all from the
+    /// same creation moment, so the plan as a whole isn't fully hardened
+    /// until its *last* occurrence's window closes — normally the one with
+    /// the most time to its deadline, so its window sits at the configured
+    /// cap rather than the short-fuse fraction. Built from real occurrences
+    /// rather than re-deriving the formula, so this can't drift from what
+    /// `commit()` actually creates.
     private var hardensAt: Date {
-        let window = min(correctionHours * 3600,
-                         deadline.timeIntervalSince(store.now) * Commitment.hardeningFraction)
-        return store.now.addingTimeInterval(max(0, window))
+        guard repeats == .weekly else {
+            let window = min(correctionHours * 3600,
+                             deadline.timeIntervalSince(store.now) * Commitment.hardeningFraction)
+            return store.now.addingTimeInterval(max(0, window))
+        }
+        let start = Calendar.current.startOfDay(for: day)
+        let preview = CommitmentPlan(title: title, requirement: requirement, weekdays: weekdays,
+                                     deadlineMinuteOfDay: deadlineMinuteOfDay, startDate: start,
+                                     endDate: CommitmentPlan.weeks(Int(weeks), from: start),
+                                     configuredCorrectionWindow: correctionHours * 3600,
+                                     overridePolicy: OverridePolicy(approvalsRequired: approvals,
+                                                                    accountabilityWindow: accountabilityMinutes * 60),
+                                     rewardEligible: rewardEligible, createdAt: store.now)
+        let hardenTimes = preview.occurrences().map(\.hardensAt)
+        return hardenTimes.max() ?? store.now
     }
 
     private func commit() {

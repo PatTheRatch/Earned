@@ -79,23 +79,27 @@ reviewed — they are not settled product intent.
   time, so replay stays deterministic.
 - **Occurrences whose deadline has already passed at creation are skipped** — a
   commitment cannot be born overdue.
-- **[open] Cancelling a plan withdraws an unresolved occurrence when it is
-  either still inside its correction window *or* its eligible window has not
-  opened yet.** The second clause is mine, and it is load-bearing: every
-  occurrence's correction window is measured from *plan creation*, so a
-  four-week plan with a two-hour window hardens completely two hours after it
-  is made. Without the clause, cancelling a plan would withdraw nothing at
-  all. An occurrence whose day has not arrived is not yet a live obligation —
-  there has been no moment at which it could have been honoured — so
-  withdrawing it takes nothing away. Occurrences already in their window
-  survive, hardened or not.
-  *The deeper question this papers over:* should each occurrence have its own
-  hardening clock, running from the start of its own day rather than from plan
-  creation? Under the current rule you cannot adjust week three of a plan on
-  the Monday of week three — the whole plan set solid on day one. Under a
-  per-occurrence clock you could, but a plan would then be far softer than the
-  same commitments entered by hand. This is a real product choice and is not
-  settled.
+- **A plan hardens as a whole, shortly after it is made — not one occurrence at
+  a time as each day arrives.** Every occurrence's correction window runs from
+  *plan creation*, not from its own day. This was flagged as an open question
+  (should week three hardening wait until the Monday of week three?) and the
+  answer is no: making a plan is one act of commitment to the whole thing,
+  not twelve small ones you can quietly soften as you go. A plan is not
+  meant to be softer than the same commitments entered by hand — if you
+  weren't ready to follow through on the whole plan, you shouldn't have made
+  it. The creation flow warns about this explicitly before the user commits
+  (`NewCommitmentView` — the weekly-repeat step and the review screen's
+  "Fully hardens" line, computed from the plan's own occurrences so it can't
+  drift from what gets created).
+- **Cancelling a plan withdraws an unresolved occurrence when it is either
+  still inside its correction window *or* its eligible window has not opened
+  yet.** The second clause is load-bearing given the rule above: with every
+  occurrence hardening within hours of plan creation, cancellation would
+  otherwise withdraw nothing at all. An occurrence whose day has not arrived
+  is not yet a live obligation — there has been no moment at which it could
+  have been honoured — so withdrawing it takes nothing away. Occurrences
+  already in their window survive, hardened or not: once a day is live, its
+  contract stands like any other.
 - **[open] Editing a plan is not supported** — only cancel and recreate. Editing
   raises questions (does it touch hardened occurrences? already-completed ones?)
   that deserve a deliberate answer rather than an invented one.
