@@ -1,10 +1,15 @@
 # Earned — What Actually Happens
 
-**End-to-end walkthrough · 29 August 2026 · commit `8a29028`**
+**End-to-end walkthrough · 29 August 2026 · commit `8e674dd`**
 
 Every screen you'd hit from a fresh install to a live commitment, traced against the code
 that runs it. Each claim cites the file it comes from, so this can be checked rather than
 trusted. Re-verify against the code when it drifts.
+
+> Rewritten after the product-model correction pass. The previous version described a
+> single global restricted-app list, a hydration gate that woke up satisfied, and no
+> recurrence at all. All three have changed. See `docs/earnedkit-semantics.md` for the
+> decisions behind them, including the ones still marked open.
 
 ---
 
@@ -12,17 +17,17 @@ trusted. Re-verify against the code when it drifts.
 
 | Area | Status | Notes |
 |---|---|---|
-| Gate engine — hydration, exercise, hardening, debt, overrides | **Real** | EarnedKit, 32 tests green on Linux + macOS |
-| All six screens, poster identity, persistence | **Real** | Ledger saved as JSON, replayed and re-validated on launch |
+| Gate engine — hydration, exercise, hardening, debt, overrides | **Real** | EarnedKit, 71 tests on Linux + macOS |
+| Per-Gate restrictions, eligibility windows, recurring plans | **Real** | Added in the correction pass |
+| All six screens, poster identity, persistence | **Real** | Ledger saved as versioned JSON, replayed and re-validated on launch |
 | Workout verification | *Stub* | Logged by hand in Settings; HealthKit is step 4 |
-| Restricted app list | *Stub* | Typed-in names, not real app tokens; the rules around them do work |
+| Restriction tokens | *Stub* | Typed-in names, not real `ApplicationToken`s; the rules around them are real |
 | Enforcement — anything actually being blocked | **Missing** | Needs FamilyControls entitlement + paid account; step 3 |
 | Accountability partners | **Missing** | State machine exists; no way to send or collect approvals; step 5 |
-| Recurring commitments (Mon/Wed/Fri as one thing) | **Missing** | No recurrence concept, and the workaround is broken — see §6 |
 
-**One-sentence version:** the contract machinery is real and correct, the identity is real,
-and the entire loop can be driven by hand — but nothing is enforced yet, so today the app
-*tells you* you're locked rather than locking anything.
+**One-sentence version:** the contract machinery is real and now models the right product,
+the identity is real, and the whole loop can be driven by hand — but nothing is enforced
+yet, so today the app *tells you* you're locked rather than locking anything.
 
 ---
 
@@ -54,7 +59,11 @@ it's unset. It also tries to load `ledger.json` from Documents; if that file exi
 can't be replayed, it is moved aside rather than deleted and the user is told, because a
 commitment they made is in there.
 
-> Source: `app/Earned/Store/EarnedStore.swift`, `app/Earned/Store/LedgerStorage.swift`
+A ledger written by an older build is migrated on load rather than rejected: the file is a
+versioned document, and a v1 payload runs through `LedgerMigration` before replay.
+
+> Source: `app/Earned/Store/EarnedStore.swift`, `app/Earned/Store/LedgerStorage.swift`,
+> `packages/EarnedKit/Sources/EarnedKit/Migration.swift`
 
 ### Onboarding — five screens, Next / Back
 
@@ -63,7 +72,7 @@ commitment they made is in there.
 | **DO WHAT MATTERS FIRST.** | The pitch: you decide the deal while thinking clearly, Earned remembers it later. |
 | **GATES** | Every active Gate must be satisfied for full access. Calls, messages, maps, music never go behind one. |
 | **HYDRATION** | The only screen that collects input. Two sliders. |
-| **WHAT GETS RESTRICTED** | Explains the idea and admits app-picking arrives with the next build. |
+| **WHAT GETS RESTRICTED** | Each Gate takes away its own things; whatever is unsatisfied, you lose the sum of it. Admits app-picking arrives with the next build. |
 | **THE DEAL** | Correction window, harder-only edits, missing a deadline doesn't clear it. |
 
 Only the hydration screen writes anything. Defaults are a **60-minute** interval
@@ -74,22 +83,34 @@ Only the hydration screen writes anything. Defaults are a **60-minute** interval
 Tapping **ACTIVATE EARNED** appends one `hydrationConfigured` event and flips the flag.
 
 **What doesn't happen:** onboarding never asks for a first commitment, and never asks which
-apps to restrict. You land on Today with a hydration gate and nothing else. NORTHSTAR §28
-lists both in the onboarding journey — a deliberate gap to close once app-picking is real.
+apps to restrict. NORTHSTAR §28 lists both — a deliberate gap to close once app-picking is
+real.
 
 ---
 
-## 3. Today, empty
+## 3. Today, first thing in the morning
 
-Fresh out of onboarding, hydration is satisfied (the gate wakes with a full interval), so
-the state word reads EARNED and nothing is owed.
+Here is the first place the corrected model shows up, and it is not a small change.
+
+**The hydration window opens unsatisfied.** There is no free interval at 08:00. Yesterday's
+water does not open today.
+
+```swift
+guard let acknowledged = lastAcknowledgment, acknowledged >= windowOpen else {
+    return .unsatisfied(since: windowOpen)
+}
+```
+
+> Source: `packages/EarnedKit/Sources/EarnedKit/Hydration.swift` — `status(lastAcknowledgment:now:)`
+
+So a fresh day looks like this, not like EARNED:
 
 ```
 EARNED
-EARNED.
+LOCKED.
 
 WATER
-Fine. 60 min left.
+Drink some water. Now.
 ────────────────────────
 Nothing owed. Make a commitment when you know what you owe yourself.
 
@@ -97,11 +118,15 @@ Nothing owed. Make a commitment when you know what you owe yourself.
 + NEW COMMITMENT
 ```
 
-Everything here is derived, not stored — `accessState(now:)` recomputes from the ledger on
-a one-second tick. Tapping the state word opens the lock notice; tapping the water row
-opens its detail screen.
+One tap clears it and starts the rolling timer; the row flips to `Fine. 60 min left.`
+Outside active hours the Gate goes dormant — `Resting until active hours.` — so the day
+ends unlocked and the next one starts closed.
 
-> Source: `app/Earned/Today/TodayView.swift`, `packages/EarnedKit/Sources/EarnedKit/Queries.swift`
+Everything here is derived, not stored: `accessState(now:)` recomputes from the ledger on a
+one-second tick.
+
+> Source: `app/Earned/Today/TodayView.swift`,
+> `packages/EarnedKit/Sources/EarnedKit/Queries.swift`
 
 ---
 
@@ -112,20 +137,53 @@ Five screens, one decision each.
 | Step | Asks | Default |
 |---|---|---|
 | 1 | **WHAT WILL YOU DO?** Free text title. Required — Next stays disabled until non-empty. | empty |
-| 2 | **WHAT COUNTS AS COMPLETION?** Any workout / total time / total distance. Time and distance accumulate across sessions. | Any workout |
-| 3 | **BY WHEN?** One date picker + Morning (08:00) / Afternoon (14:00) / Evening (20:00) / Custom. | today, 08:00 |
+| 2 | **WHAT COUNTS AS COMPLETION?** Activity (any / running / walking / cycling / strength) **and** amount (just show up / a total time / a total distance). | Any workout, just show up |
+| 3 | **BY WHEN?** Date + Morning (08:00) / Afternoon (14:00) / Evening (20:00) / Custom, then **Just once** or **Repeat weekly**. | today, 08:00, once |
 | 4 | **WHAT ARE THE OVERRIDE RULES?** Approvals needed, solo wait, correction window, warning, Free Override eligibility. | 2 approvals · 30 min · 2 h · warn on · eligible |
 | 5 | **THE DEAL** Every term listed back, including exactly when it hardens. | — |
 
 > Source: `app/Earned/Commitment/NewCommitmentView.swift`
 
-**The hardening number is the interesting one.** The correction window is
-`min(chosen window, time-to-deadline ÷ 8)` — so a commitment due in two hours hardens in
-fifteen minutes, not two hours. That's what stops a short-fuse commitment from being
-editable right up to its own deadline.
+### Activity and amount are two questions, not one
 
-Tapping **COMMIT** appends `commitmentCreated`. Before it hardens anything can change;
-after it hardens the app only offers changes that make it harder.
+Step 2 builds a `Requirement { activity, metric }`. "Run 30 minutes" is
+`Requirement(activity: .only(.running), metric: .totalDuration(1800))` — and thirty minutes
+on a bike does not touch it, because eligibility checks the filter before any accumulation
+happens.
+
+Monotonicity follows the same split: narrowing the filter (any → running) is *harder* and
+allowed after hardening; widening is easier and refused; swapping running for cycling is
+neither, so it's refused too.
+
+> Source: `packages/EarnedKit/Sources/EarnedKit/Activity.swift`
+
+### Mon/Wed/Fri is now one thing
+
+Choosing **Repeat weekly** shows a weekday picker and a 1–12 week slider. Committing
+appends a `planCreated` event and then one ordinary `commitmentCreated` per scheduled day.
+
+```swift
+let created = store.createPlan(title:, requirement:, weekdays:, deadlineMinuteOfDay:,
+                               startDate:, endDate: CommitmentPlan.weeks(Int(weeks), from: start), …)
+```
+
+The plan is a **template, not a source of truth**. It expands once, at creation, into real
+events. Nothing re-derives a schedule at read time, so replay stays deterministic and every
+occurrence has its own deadline, hardening clock, progress and resolution.
+
+Occurrences whose deadline has already passed at creation are skipped — a commitment cannot
+be born overdue.
+
+> Source: `packages/EarnedKit/Sources/EarnedKit/Plan.swift` — `occurrences(idProvider:)`
+
+### The hardening number
+
+The correction window is `min(chosen window, time-to-deadline ÷ 8)` — so a commitment due
+in two hours hardens in fifteen minutes, not two hours. That's what stops a short-fuse
+commitment from being editable right up to its own deadline.
+
+Tapping **COMMIT** appends the events. Before it hardens anything can change; after it
+hardens the app only offers changes that make it harder.
 
 ---
 
@@ -165,16 +223,74 @@ THE DEAL STILL STANDS.
 You set this one.
 ```
 
+Each row is a `LockReason`, which now carries the restrictions that Gate is taking away —
+so the notice can eventually name what each unmet Gate costs rather than lumping it all
+together.
+
+> Source: `app/Earned/Today/LockScreenView.swift`,
+> `packages/EarnedKit/Sources/EarnedKit/Queries.swift` — `LockReason`, `AccessState`
+
+### Restrictions belong to Gates
+
+There is no single global blocked list any more. Every Gate — hydration, and one per
+commitment — carries its own `RestrictionProfile`, and what is actually in force is the
+**union across every unsatisfied Gate**:
+
+```swift
+public struct AccessState {
+    public var lockReasons: [LockReason]
+    public var effectiveRestrictions: RestrictionProfile
+}
+```
+
+So unmet water can strip the phone back to calls and messages while an unmet workout only
+takes social apps — and both unsatisfied is automatically stricter than either alone, with
+no special case anywhere.
+
+Settings → Restrictions edits each Gate's profile and the default profile applied to new
+commitments. Loosening any Gate's profile needs Full Access and nothing hardened
+outstanding; tightening is always allowed. The default profile is *not* a Gate, so editing
+it is free — it restricts nothing currently in force.
+
+EarnedKit never learns an app name. A `RestrictionToken` is an opaque string; the app puts
+typed-in names in today and will put real `ApplicationToken`s in later without the engine
+changing.
+
+> Source: `packages/EarnedKit/Sources/EarnedKit/Restrictions.swift`,
+> `app/Earned/Settings/SettingsView.swift` — `GateRestrictionsView`, `DefaultRestrictionsView`
+
 ### Doing the thing
 
-Settings → Testing → *Log a workout by hand*. Duration, optional distance, how long ago it
-finished; stays open across entries so several can be backfilled. Each entry appends
-`workoutRecorded`, and the engine re-checks every commitment.
+Settings → Testing → *Log a workout by hand*. Activity, duration, optional distance, how
+long ago it finished; stays open across entries so several can be backfilled. Each entry
+appends `workoutRecorded`, and the engine re-checks every commitment in **deadline order**,
+so the oldest debt clears first.
 
-A 30-minute workout closes a 30-minute commitment instantly and the state word flips back
-to EARNED. Partial credit accumulates — 18 minutes now, 12 later.
+### The eligibility window
 
-> Source: `app/Earned/Settings/SettingsView.swift`, `packages/EarnedKit/Sources/EarnedKit/State.swift`
+This is the bug the correction pass existed to fix. Eligibility used to be
+`start >= createdAt` with no upper bound, so three commitments made on Sunday were all
+completed by Monday's run. Now:
+
+```swift
+func isEligible(for commitment: Commitment) -> Bool {
+    start >= commitment.eligibleFrom && commitment.requirement.activity.accepts(activity)
+}
+```
+
+- For a one-off, `eligibleFrom` is creation time — you cannot commit to a workout you've
+  already done.
+- For a plan occurrence it is **midnight at the start of its own calendar day**, clamped
+  never to precede the plan's creation. Monday's run cannot reach forward into Wednesday.
+- There is still **no upper bound**, which is what makes debt work: a late workout still
+  reaches back and clears an overdue commitment.
+
+A workout can still satisfy several commitments at once where their windows genuinely
+overlap — that's yesterday's debt and today's requirement cleared together, which is
+correct. `eligibleFrom` only stops it reaching *forward*.
+
+> Source: `packages/EarnedKit/Sources/EarnedKit/Workout.swift`,
+> `packages/EarnedKit/Sources/EarnedKit/State.swift` — `resolveIfSatisfied`
 
 ### Missing it entirely
 
@@ -182,71 +298,55 @@ The obligation follows you. Debt is capped at one, so missing Saturday and Sunda
 means one workout owed — and a single qualifying workout clears the backlog and that day's
 requirement together.
 
+Hydration is different on purpose: it goes dormant at window close rather than accruing.
+It's an in-the-moment interrupt, not a debt.
+
 ### Getting out of it
 
 Open the commitment → **Ways out**. Three rungs, two of which work today:
 
 - **Free Override** — works now. Earned by consecutive on-time completions (default 5,
-  max 2 banked). Instant, no explanation.
+  max 2 banked). Instant, no explanation. The grant is an immutable ledger event: it's
+  written the moment the streak completes and is never recomputed, so changing the reward
+  policy later cannot revoke one you already earned.
 - **Accountability** — creates the request, but there's nobody to send it to until the
   backend exists.
-- **Solo** — works now. Unavailable until the accountability window elapses, then real
-  friction: 10 minutes the first time, 30 the second, 60 the third within a rolling 30 days.
+- **Solo** — works now, and now costs something. Unavailable until the accountability
+  window elapses, then requires **effort *and* elapsed time**: 60 units against a 10-minute
+  floor the first time, 180/30 min the second, 360/60 min the third within a rolling 30
+  days. Neither alone completes it — the screen will say *"Effort done. The clock is not."*
+  The requirement is frozen when the challenge starts, so a mid-challenge edit can't make
+  an in-flight escape cheaper.
+
+  The on-screen tap mechanic is a deliberately plain test implementation. The real friction
+  UX is an open design surface.
+
+> Source: `packages/EarnedKit/Sources/EarnedKit/Override.swift`,
+> `app/Earned/Today/LockScreenView.swift` — `SoloFrictionRow`
 
 ---
 
-## 6. The Mon/Wed/Fri problem
+## 6. Cancelling a repeating plan
 
-There is no way to say "run Monday, Wednesday and Friday" as one commitment. No recurrence
-concept exists anywhere in the engine — a `Commitment` has exactly one `deadline`. Today the
-only option is three separate commitments.
+Settings → Repeating plans lists active plans and lets you cancel one. Cancellation
+withdraws an unresolved occurrence when it is still inside its correction window, **or**
+when its eligible window has not opened yet. Occurrences already live survive, hardened or
+not — those are real contracts.
 
-### That workaround doesn't work either
+The second clause is load-bearing and it papers over something worth deciding
+deliberately: every occurrence's correction window is measured from *plan creation*, so a
+four-week plan with a two-hour window hardens completely two hours after it's made. Without
+the clause, cancelling would withdraw nothing at all.
 
-A workout is eligible for a commitment if it started after the commitment was *created* —
-with no upper bound at all. Every workout is checked against every unresolved commitment.
+**Open question:** should each occurrence have its own hardening clock, running from the
+start of its own day? Today you cannot adjust week three of a plan on the Monday of week
+three. Under a per-occurrence clock you could — but a plan would then be meaningfully
+softer than the same commitments entered by hand, which may be the wrong trade.
 
-```swift
-func isEligible(for commitment: Commitment) -> Bool {
-    start >= commitment.createdAt        // no upper bound
-}
-```
+Editing a plan isn't supported at all yet; cancel and recreate.
 
-So setting up all three on Sunday and running on Monday:
-
-```
-C_mon  Mon 08:00 >= Sun  ->  COMPLETED   ✓ correct
-C_wed  Mon 08:00 >= Sun  ->  COMPLETED   ✗ two days early
-C_fri  Mon 08:00 >= Sun  ->  COMPLETED   ✗ four days early
-```
-
-**One Monday run silently satisfies the whole week.**
-
-> Source: `packages/EarnedKit/Sources/EarnedKit/Workout.swift`,
-> `packages/EarnedKit/Sources/EarnedKit/State.swift` — `resolveIfSatisfied`
-
-### Why it's like that, and the fix
-
-This is a rule that was right for one case and wrong for another. The open-ended window is
-exactly what makes debt work — a workout today has to be able to clear the commitment missed
-on Saturday. But the same openness lets it reach *forward* into commitments whose day hasn't
-arrived.
-
-**The fix is one field.** Give each commitment an `eligibleFrom` alongside its deadline — the
-moment its window opens:
-
-- For a one-off, `eligibleFrom` is creation time. Identical behaviour to today.
-- For Wednesday's occurrence in a recurring plan, it's Tuesday's deadline, so Monday's run
-  can't count toward it.
-- Debt keeps working, because the window still has no upper bound: a late workout still
-  reaches back.
-
-Recurrence then becomes a thin layer on top — one plan ("run 30 min, Mon/Wed/Fri, next 4
-weeks") generating occurrences, each with its own window, deadline and hardening clock. One
-thing to create, one thing to edit, one thing to cancel.
-
-**Open design question:** when Wednesday's window opens — Tuesday's deadline (a Tuesday-night
-run counts toward Wednesday) or midnight Wednesday (stricter)?
+> Source: `packages/EarnedKit/Sources/EarnedKit/State.swift` — `case .planCancelled`,
+> `docs/earnedkit-semantics.md` § Plans
 
 ---
 
@@ -259,6 +359,8 @@ Against the north star's MVP list (§35):
 | Hydration gate — rolling timer, self-attested, hard restriction | Logic done, restriction missing |
 | Exercise — deadline, verification, persistent debt | Logic done, verification stubbed |
 | Correction window, hardened commitments, harder-only edits | Done |
+| Per-Gate restriction profiles | Logic done; tokens are strings until Screen Time lands |
+| Recurring commitments | Done |
 | User-selected restricted apps + shielding | Not started (step 3) |
 | Guided onboarding, Today, lock explanation, history | Done |
 | Apple Health workout verification | Not started (step 4) |
@@ -268,11 +370,13 @@ Controls won't provision on a free account at all, so enforcement — the actual
 can't be tested until enrollment. Everything built so far was deliberately chosen to be
 buildable without it.
 
-Three candidates for what's next:
+Two candidates for what's next:
 
-1. **Recurring commitments + the eligibility fix.** No account needed, fixes a real
-   correctness bug, removes friction hit in real use.
-2. **Enforcement.** The one that makes it a product rather than a tracker. Blocked on the
-   $99 enrollment.
-3. **The backend.** Fully buildable and testable from this environment; unblocks the
-   accountability rung.
+1. **Enforcement.** The one that makes it a product rather than a tracker. `RestrictionToken`
+   is already shaped to hold a real `ApplicationToken`, so this is adapter work plus
+   entitlement paperwork. Blocked on the $99 enrollment.
+2. **HealthKit verification.** Removes the last stub in the daily loop. `ActivityType`
+   already exists for `HKWorkoutActivityType` to map onto. Also needs the paid account.
+
+The backend (accountability partners) is fully buildable from here without an Apple
+account, but it unblocks the rung nobody can use alone anyway.

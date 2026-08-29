@@ -65,6 +65,22 @@ Rejected: **Firebase** (NoSQL modeling of contracts is clumsy; deeper lock-in), 
 
 For the single-user MVP, the phone's ledger is the working copy and the backend sees only what accountability requires. The domain model is account-shaped from day one, so promoting the server to authoritative (§33: deletion shouldn't erase debt) is an incremental step, not a migration.
 
+### Ledger schema versioning
+
+The persisted ledger is a versioned document (`{version, entries}`), not a bare array — a
+file without an envelope reads as v1. Schema changes ship with an explicit migration rather
+than tolerant decoding alone, because tolerant decoding silently reinterprets what an old
+event *meant*, and these events are contracts the user made.
+
+The v1→v2 migration is the worked example: shape changes ride on decoding, but a historical
+free-override spend that v2 has no grant for is funded by an inserted, attributed
+`freeOverrideEarned(source: .migration)` rather than being waved through. What happened to
+someone's history stays legible.
+
+Engine-derived events (an earned reward, say) are computed once at append time and written
+into the ledger as real entries. Replay never re-derives them, so a policy change cannot
+retroactively revoke something already earned.
+
 ## 4. Repository: monorepo
 
 ```
