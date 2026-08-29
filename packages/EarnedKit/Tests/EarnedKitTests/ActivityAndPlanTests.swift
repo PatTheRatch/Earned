@@ -173,9 +173,11 @@ final class PlanTests: XCTestCase {
         XCTAssertEqual(resolved.first?.commitment.deadline, d(24, 10))
     }
 
-    /// Cancelling a plan withdraws only occurrences still inside their
-    /// correction window; hardened ones are contracts in their own right.
-    func testCancellingAPlanSparesHardenedOccurrences() throws {
+    /// Cancelling a plan withdraws occurrences whose window has not opened yet,
+    /// and spares those already live. Every occurrence hardens two hours after
+    /// *plan creation*, so without the window clause cancelling would withdraw
+    /// nothing at all.
+    func testCancellingAPlanSparesLiveOccurrences() throws {
         var ledger = Ledger()
         let plan = mwfPlan(weeks: 2)
         ledger.expectAppend(.planCreated(plan), at: plan.createdAt)
@@ -183,16 +185,19 @@ final class PlanTests: XCTestCase {
             ledger.expectAppend(.commitmentCreated(occurrence), at: plan.createdAt)
         }
 
-        // Monday's occurrence hardens quickly (short fuse); later ones have not.
+        // Every occurrence hardened two hours after the plan was made.
         let monday = ledger.state.occurrences(ofPlan: plan.id).first!
         XCTAssertTrue(monday.commitment.isHardened(at: d(24, 6)))
+        XCTAssertEqual(monday.commitment.eligibleFrom, d(24), "Monday's window is already open")
 
+        // Cancel Monday 06:00 — inside Monday's window, before every later one.
         ledger.expectAppend(.planCancelled(id: plan.id), at: d(24, 6))
 
         let records = ledger.state.occurrences(ofPlan: plan.id)
-        XCTAssertNil(records.first?.resolution, "hardened occurrence survives cancellation")
+        XCTAssertNil(records.first?.resolution,
+                     "Monday is live today; it survives cancellation")
         XCTAssertTrue(records.dropFirst().allSatisfy { $0.resolution != nil },
-                      "unhardened occurrences are withdrawn")
+                      "occurrences whose window has not opened are withdrawn")
         XCTAssertTrue(ledger.state.plans[plan.id]?.isCancelled == true)
     }
 

@@ -155,13 +155,24 @@ public struct EarnedState: Codable, Equatable, Sendable {
             guard !record.isCancelled else { throw EarnedError.planAlreadyCancelled(id) }
             record.cancelledAt = date
             plans[id] = record
-            // Cancelling a plan withdraws only the occurrences that are still in
-            // their correction window. A hardened occurrence is a contract in its
-            // own right and survives (NORTHSTAR §12).
+            // Cancelling a plan withdraws an occurrence when either:
+            //
+            //   - it is still inside its correction window (the ordinary rule), or
+            //   - its eligible window has not opened yet.
+            //
+            // The second clause exists because every occurrence's correction
+            // window runs from *plan creation*, so without it a four-week plan
+            // would harden solid two hours after it was made and cancelling it
+            // would withdraw nothing at all. An occurrence whose window has not
+            // opened is not yet a live obligation — there has been no day on
+            // which it could have been honoured — so withdrawing it takes
+            // nothing away. Occurrences already in their window survive,
+            // hardened or not: those are real contracts (NORTHSTAR §12).
             for (commitmentID, commitmentRecord) in commitments
             where commitmentRecord.commitment.planID == id
                 && commitmentRecord.resolution == nil
-                && !commitmentRecord.commitment.isHardened(at: date) {
+                && (!commitmentRecord.commitment.isHardened(at: date)
+                    || commitmentRecord.commitment.eligibleFrom > date) {
                 commitments[commitmentID]?.resolution = .cancelled(at: date)
             }
 
