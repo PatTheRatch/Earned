@@ -3,11 +3,19 @@ import SwiftUI
 @main
 struct EarnedApp: App {
     @StateObject private var store = EarnedStore()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(store)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Notification permission can be revoked in iOS Settings while
+            // Earned isn't running, so re-check on every return to the
+            // foreground rather than trusting what we saw at launch.
+            guard phase == .active else { return }
+            Task { await store.refreshWarnings() }
         }
     }
 }

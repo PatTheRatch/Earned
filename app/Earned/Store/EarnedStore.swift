@@ -24,12 +24,20 @@ final class EarnedStore: ObservableObject {
 
     private static let onboardedKey = "earned.hasOnboarded"
     private let storage: LedgerStorage
+    private let notifications: NotificationScheduler
     private var ticker: AnyCancellable?
+    private var authorizationObserver: AnyCancellable?
+
+    /// Whether warnings the user configured can actually be delivered. Surfaced
+    /// so the app never presents a warning toggle as working when it isn't.
+    @Published private(set) var warningDelivery: NotificationScheduler.Authorization = .notDetermined
 
     var state: EarnedState { ledger.state }
 
     init(storage: LedgerStorage = .documents()) {
+        let notifications = NotificationScheduler()
         self.storage = storage
+        self.notifications = notifications
         self.hasOnboarded = UserDefaults.standard.bool(forKey: Self.onboardedKey)
         switch storage.load() {
         case .loaded(let ledger):
@@ -48,6 +56,54 @@ final class EarnedStore: ObservableObject {
                 // Timer.publish(on: .main) always delivers on the main thread.
                 MainActor.assumeIsolated { self?.now = date }
             }
+        authorizationObserver = notifications.$authorization
+            .sink { [weak self] status in
+                // NotificationScheduler is @MainActor, so this always arrives
+                // on the main thread — same contract as the ticker above.
+                MainActor.assumeIsolated { self?.warningDelivery = status }
+            }
+        Task { await self.refreshWarnings() }
+    }
+
+    // MARK: - Warnings
+
+    /// Re-reads the permission state and re-registers every scheduled warning.
+    /// Called on launch and whenever the app returns to the foreground, since
+    /// notification permission can be revoked in iOS Settings while Earned is
+    /// not running.
+    func refreshWarnings() async {
+        await notifications.refreshAuthorization()
+        await notifications.reschedule(plannedWarnings)
+    }
+
+    /// How many warnings are currently queued to arrive.
+    var scheduledWarningCount: Int { plannedWarnings.count }
+
+    /// Every configured warning, rendered into the words the user will read.
+    ///
+    /// EarnedKit decides which Gates warn and when (`upcomingWarnings`); this
+    /// only supplies the wording. A warning states a fact and offers no way
+    /// out — see `NotificationScheduler`.
+    private var plannedWarnings: [WarningNotification] {
+        state.upcomingWarnings(now: now).compactMap { warning in
+            switch warning.gate {
+            case .hydration:
+                guard let lead = state.hydration?.warningLead else { return nil }
+                return WarningNotification(
+                    id: NotificationScheduler.hydrationIdentifier,
+                    fireAt: warning.date,
+                    title: "Water",
+                    body: "The Hydration Gate closes in \(Format.duration(lead)).")
+            case .commitment(let id):
+                guard let commitment = state.commitments[id]?.commitment,
+                      let lead = commitment.warningLead else { return nil }
+                return WarningNotification(
+                    id: NotificationScheduler.identifier(forCommitment: id),
+                    fireAt: warning.date,
+                    title: commitment.title,
+                    body: "Due in \(Format.duration(lead)).")
+            }
+        }
     }
 
     // MARK: - Writing
@@ -75,6 +131,10 @@ final class EarnedStore: ObservableObject {
             // write failure rather than pretending the commitment is durable.
             rejection = "Saved to memory but not to disk: \(error.localizedDescription)"
         }
+        // Any accepted event can move what is due and when: a new commitment,
+        // a workout that resolves one, water that restarts the rolling timer.
+        let warnings = plannedWarnings
+        Task { await notifications.reschedule(warnings) }
         return true
     }
 

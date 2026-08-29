@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import EarnedKit
 
 /// Gate configuration and system controls (NORTHSTAR §30).
@@ -10,6 +11,7 @@ struct SettingsView: View {
         NavigationStack {
             List {
                 hydrationSection
+                warningsSection
                 rewardsSection
                 restrictedSection
                 plansSection
@@ -59,6 +61,40 @@ struct SettingsView: View {
         var updated = config
         updated.interval = max(15 * 60, config.interval + minutes * 60)
         store.configureHydration(updated)
+    }
+
+    // MARK: - Warnings
+
+    /// Warnings are the one part of Earned that depends on a permission the
+    /// user can revoke elsewhere. Say so plainly rather than letting a
+    /// configured warning quietly never arrive.
+    @ViewBuilder
+    private var warningsSection: some View {
+        Section {
+            switch store.warningDelivery {
+            case .granted:
+                LabeledContent("Notifications", value: "On")
+                LabeledContent("Scheduled", value: "\(store.scheduledWarningCount)")
+            case .notDetermined:
+                Text("Earned will ask for permission the first time a warning is due.")
+                    .foregroundStyle(.secondary)
+            case .denied:
+                Text("Notifications are off, so no warning will arrive.")
+                    .foregroundStyle(Theme.signal)
+                Button("Open iOS Settings") { openSystemSettings() }
+            }
+        } header: {
+            Text("Warnings")
+        } footer: {
+            Text("A warning says a Gate is about to close. It is information only — it never "
+                 + "delays the deadline, and there is nothing to tap to buy more time. "
+                 + "Turning notifications off makes Earned quieter, not more forgiving.")
+        }
+    }
+
+    private func openSystemSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 
     // MARK: - Rewards

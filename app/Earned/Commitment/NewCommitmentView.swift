@@ -231,7 +231,14 @@ struct NewCommitmentView: View {
                     Text("Time to fix mistakes before this hardens. After that it can only get harder.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
-                Toggle("Warn me 30 minutes before", isOn: $warnBefore)
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle("Warn me 30 minutes before", isOn: $warnBefore)
+                    if warnBefore, store.warningDelivery == .denied {
+                        Text("Notifications are off, so this warning won't arrive. The deadline "
+                             + "still stands — turn them on in Settings.")
+                            .font(.footnote).foregroundStyle(Theme.signal)
+                    }
+                }
                 VStack(alignment: .leading, spacing: 6) {
                     Toggle("Eligible for Free Overrides", isOn: $rewardEligible)
                     Text("Whether repeated on-time completions of this commitment count toward "

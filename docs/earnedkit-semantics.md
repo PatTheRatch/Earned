@@ -104,6 +104,31 @@ reviewed — they are not settled product intent.
   raises questions (does it touch hardened occurrences? already-completed ones?)
   that deserve a deliberate answer rather than an invented one.
 
+## Warnings
+
+- **A warning is information, never a reprieve.** Notifications carry no
+  actions, no snooze and nothing to tap for more time (NORTHSTAR §7, §20). Gate
+  state is computed from the ledger and is identical whether a warning was
+  delivered, ignored, or never authorised — a test asserts exactly this.
+- **Warnings are scheduled, not stored.** EarnedKit's `upcomingWarnings(now:)`
+  derives them from configured leads; nothing about a warning enters the ledger.
+  Delivery is an app concern, so the engine stays portable and testable.
+- **Hydration warns only while the Gate is satisfied**, since a closed Gate has
+  nothing pending to warn about. It is re-derived on every acknowledgment, which
+  is what makes a rolling timer's warning follow the timer.
+- **An overdue commitment is not warned about** — its Gate has already closed.
+- **[open] Nothing is announced at the moment a Gate actually closes.** Only the
+  warning before it is. Once real enforcement lands, the shield is arguably the
+  announcement; until then a Gate can close with the phone in a pocket and the
+  user finds out on next unlock. Whether a closing Gate deserves its own
+  notification is a real product question — it is not a warning, so §20 does not
+  answer it, and I have not invented an answer.
+- **Permission is asked for at the first moment a warning is actually due**, not
+  at launch: a prompt with nothing behind it is one the user cannot evaluate.
+  Where permission is refused, the app says so at both places it made the
+  promise (the creation flow's toggle and Settings) rather than letting a
+  configured warning quietly never arrive.
+
 ## Overrides
 
 - **Overrides target commitments only.** The Hydration Gate has no override path;

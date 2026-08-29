@@ -1,6 +1,6 @@
 # Earned — What Actually Happens
 
-**End-to-end walkthrough · 29 August 2026 · commit `8e674dd`**
+**End-to-end walkthrough · 29 August 2026**
 
 Every screen you'd hit from a fresh install to a live commitment, traced against the code
 that runs it. Each claim cites the file it comes from, so this can be checked rather than
@@ -20,6 +20,7 @@ trusted. Re-verify against the code when it drifts.
 | Gate engine — hydration, exercise, hardening, debt, overrides | **Real** | EarnedKit, 71 tests on Linux + macOS |
 | Per-Gate restrictions, eligibility windows, recurring plans | **Real** | Added in the correction pass |
 | All six screens, poster identity, persistence | **Real** | Ledger saved as versioned JSON, replayed and re-validated on launch |
+| Deadline warnings | **Real** | Local notifications; no entitlement needed. Informational only — no snooze |
 | Workout verification | *Stub* | Logged by hand in Settings; HealthKit is step 4 |
 | Restriction tokens | *Stub* | Typed-in names, not real `ApplicationToken`s; the rules around them are real |
 | Enforcement — anything actually being blocked | **Missing** | Needs FamilyControls entitlement + paid account; step 3 |
@@ -326,7 +327,44 @@ Open the commitment → **Ways out**. Three rungs, two of which work today:
 
 ---
 
-## 6. A plan hardens as a whole
+## 6. Warnings
+
+Turning on **"Warn me 30 minutes before"** now does something. Until this build it stored
+`warningLead` on the commitment and nothing ever read it — the app collected a promise and
+dropped it.
+
+EarnedKit decides what to warn about and when (`upcomingWarnings(now:)`); the app renders
+the words and hands them to `UNUserNotificationCenter`. These are local notifications, so
+they need no entitlement and work on a free account.
+
+**A warning is information, never a reprieve.** No actions, no snooze, nothing to tap for
+more time — anything that could buy time would be the grace period §7 and §20 both rule
+out. A test asserts the Gate closes at exactly the same instant whether a warning was
+configured or not.
+
+Two more properties worth knowing:
+
+- **Hydration warns only while the Gate is satisfied**, and is re-derived every time you
+  drink, so the warning follows the rolling timer instead of a fixed clock.
+- **Permission is asked for the first time a warning is actually due** — in practice, the
+  first time you tap I DRANK SOME WATER — rather than at launch, when there'd be nothing
+  behind the prompt to judge it by.
+
+If notifications are refused, Earned says so in both places it made the promise: the
+creation flow's toggle and Settings → Warnings. Turning them off makes Earned quieter, not
+more forgiving.
+
+**Open question:** nothing is announced at the moment a Gate actually *closes* — only
+before. Once real enforcement lands the shield is arguably that announcement; until then a
+Gate can close with the phone in a pocket. §20 covers warnings and doesn't answer this.
+
+> Source: `app/Earned/Store/NotificationScheduler.swift`,
+> `app/Earned/Store/EarnedStore.swift` — `plannedWarnings`,
+> `packages/EarnedKit/Sources/EarnedKit/Queries.swift` — `upcomingWarnings`
+
+---
+
+## 7. A plan hardens as a whole
 
 Making a plan is one act of commitment to the whole thing, not twelve small ones. Every
 occurrence's correction window runs from *plan creation*, not from its own day — so a
@@ -351,7 +389,7 @@ Editing a plan isn't supported at all yet; cancel and recreate.
 
 ---
 
-## 7. Where that leaves us
+## 8. Where that leaves us
 
 Against the north star's MVP list (§35):
 
@@ -364,6 +402,7 @@ Against the north star's MVP list (§35):
 | Recurring commitments | Done |
 | User-selected restricted apps + shielding | Not started (step 3) |
 | Guided onboarding, Today, lock explanation, history | Done |
+| Per-Gate warnings before a deadline (§20) | Done |
 | Apple Health workout verification | Not started (step 4) |
 
 **Every remaining hard problem is on the far side of the Apple Developer Program.** Family
