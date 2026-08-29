@@ -61,6 +61,18 @@ extension Workout {
             self.activity = ActivityType(rawValue: legacy.lowercased()) ?? .other
         }
     }
+
+    /// Written explicitly because `CodingKeys` carries the legacy
+    /// `activityType` key, which has no stored property to synthesize from.
+    /// Only the current shape is ever written.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(activity, forKey: .activity)
+        try container.encode(start, forKey: .start)
+        try container.encode(end, forKey: .end)
+        try container.encodeIfPresent(distanceMeters, forKey: .distanceMeters)
+    }
 }
 
 /// Progress toward a commitment's requirement, for UI and accountability context.
