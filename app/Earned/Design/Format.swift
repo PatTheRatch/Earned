@@ -69,10 +69,20 @@ enum Format {
     }
 
     static func requirement(_ requirement: Requirement) -> String {
-        switch requirement {
-        case .anyWorkout: return "Any workout"
-        case .totalDuration(let seconds): return "Exercise for \(duration(seconds))"
-        case .totalDistance(let meters): return String(format: "Cover %.1f km", meters / 1000)
+        let activity = requirement.activity.displayName
+        switch requirement.metric {
+        case .anyQualifyingWorkout:
+            return activity
+        case .totalDuration(let seconds):
+            return "\(activity) · \(duration(seconds))"
+        case .totalDistance(let meters):
+            return String(format: "%@ · %.1f km", activity, meters / 1000)
         }
+    }
+
+    /// "Mon/Wed/Fri" from Calendar weekday numbers.
+    static func weekdays(_ days: Set<Int>) -> String {
+        let names = [1: "Sun", 2: "Mon", 3: "Tue", 4: "Wed", 5: "Thu", 6: "Fri", 7: "Sat"]
+        return days.sorted().compactMap { names[$0] }.joined(separator: "/")
     }
 }

@@ -36,8 +36,10 @@ struct HydrationDetailView: View {
                 } header: {
                     Text("Configuration")
                 } footer: {
-                    Text("Loosening this — a longer interval, narrower hours, turning it off — is only "
-                         + "allowed while the Gate is currently satisfied. Tightening always works.")
+                    Text("The window opens closed: from the start of active hours this Gate is "
+                         + "unsatisfied until you drink. Loosening anything — a longer interval, "
+                         + "narrower hours, turning it off — is only allowed while the Gate is "
+                         + "currently satisfied. Tightening always works.")
                 }
             } else {
                 Section {
@@ -47,15 +49,20 @@ struct HydrationDetailView: View {
             }
 
             Section {
-                if store.state.restrictedApps.isEmpty {
-                    Text("Nothing restricted yet").foregroundStyle(.secondary)
+                let profile = store.state.restrictions(of: .hydration)
+                if profile.isEmpty {
+                    Text("Nothing").foregroundStyle(.secondary)
                 } else {
-                    ForEach(store.state.restrictedApps.sorted(), id: \.self) { Text($0) }
+                    ForEach(profile.sortedTokens, id: \.self) { Text($0.rawValue) }
+                }
+                NavigationLink("Edit") {
+                    GateRestrictionsView(gate: .hydration, title: "Hydration Gate")
                 }
             } header: {
-                Text("What's gated")
+                Text("What this Gate takes")
             } footer: {
-                Text("Every active Gate shares one restricted set — manage it in Settings.")
+                Text("The Hydration Gate's own profile — deliberately the most severe. Before the "
+                     + "first water of the day this is what the phone is reduced to.")
             }
         }
         .paperList()
@@ -68,8 +75,8 @@ struct HydrationDetailView: View {
         switch store.hydration {
         case .satisfied(let expiresAt):
             return "Good — locks again \(Format.relative(expiresAt, from: store.now))"
-        case .unsatisfied:
-            return "Locked — drink some water to unlock"
+        case .unsatisfied(let since):
+            return "Locked since \(Format.deadline(since, from: store.now)) — drink some water"
         case .dormant:
             return "Resting (outside active hours, or off)"
         }

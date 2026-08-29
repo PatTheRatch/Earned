@@ -96,6 +96,7 @@ final class EarnedStore: ObservableObject {
                           deadline: Date,
                           correctionWindow: TimeInterval,
                           overridePolicy: OverridePolicy,
+                          restrictions: RestrictionProfile? = nil,
                           rewardEligible: Bool,
                           warningLead: TimeInterval?) -> Bool {
         let createdAt = Date()
@@ -105,10 +106,54 @@ final class EarnedStore: ObservableObject {
                                     createdAt: createdAt,
                                     configuredCorrectionWindow: correctionWindow,
                                     overridePolicy: overridePolicy,
+                                    restrictions: restrictions ?? state.defaultCommitmentRestrictions,
                                     rewardEligible: rewardEligible,
                                     warningLead: warningLead)
         return append(.commitmentCreated(commitment), at: createdAt)
     }
+
+    /// Creates a recurring plan and, in the same instant, every occurrence it
+    /// generates. The occurrences are ordinary commitments from here on; the
+    /// plan is kept only so it can be shown and cancelled as one thing.
+    @discardableResult
+    func createPlan(title: String,
+                    requirement: Requirement,
+                    weekdays: Set<Int>,
+                    deadlineMinuteOfDay: Int,
+                    startDate: Date,
+                    endDate: Date,
+                    correctionWindow: TimeInterval,
+                    overridePolicy: OverridePolicy,
+                    restrictions: RestrictionProfile? = nil,
+                    rewardEligible: Bool,
+                    warningLead: TimeInterval?) -> Bool {
+        let createdAt = Date()
+        let plan = CommitmentPlan(title: title,
+                                  requirement: requirement,
+                                  weekdays: weekdays,
+                                  deadlineMinuteOfDay: deadlineMinuteOfDay,
+                                  startDate: startDate,
+                                  endDate: endDate,
+                                  configuredCorrectionWindow: correctionWindow,
+                                  overridePolicy: overridePolicy,
+                                  restrictions: restrictions ?? state.defaultCommitmentRestrictions,
+                                  rewardEligible: rewardEligible,
+                                  warningLead: warningLead,
+                                  createdAt: createdAt)
+        let occurrences = plan.occurrences()
+        guard !occurrences.isEmpty else {
+            rejection = "That plan doesn't schedule anything before its end date."
+            return false
+        }
+        guard append(.planCreated(plan), at: createdAt) else { return false }
+        for occurrence in occurrences {
+            guard append(.commitmentCreated(occurrence), at: createdAt) else { return false }
+        }
+        return true
+    }
+
+    @discardableResult
+    func cancelPlan(_ id: UUID) -> Bool { append(.planCancelled(id: id)) }
 
     @discardableResult
     func cancelCommitment(_ id: UUID) -> Bool { append(.commitmentCancelled(id: id)) }
@@ -121,9 +166,23 @@ final class EarnedStore: ObservableObject {
     @discardableResult
     func recordWorkout(_ workout: Workout) -> Bool { append(.workoutRecorded(workout)) }
 
+    /// The default profile applied to newly created commitments.
     @discardableResult
-    func changeRestrictedApps(added: Set<String>, removed: Set<String>) -> Bool {
-        append(.restrictedAppsChanged(added: added, removed: removed))
+    func setDefaultRestrictions(_ profile: RestrictionProfile) -> Bool {
+        append(.defaultCommitmentRestrictionsChanged(profile))
+    }
+
+    /// Changes one Gate's own restriction profile.
+    @discardableResult
+    func setRestrictions(_ profile: RestrictionProfile, of gate: GateID) -> Bool {
+        switch gate {
+        case .hydration:
+            guard var config = state.hydration else { return false }
+            config.restrictions = profile
+            return append(.hydrationConfigured(config))
+        case .commitment(let id):
+            return append(.commitmentEdited(id: id, edit: CommitmentEdit(restrictions: profile)))
+        }
     }
 
     @discardableResult
@@ -134,15 +193,25 @@ final class EarnedStore: ObservableObject {
     // MARK: - Reading
 
     var access: AccessState { state.accessState(now: now) }
-    var isRestricted: Bool { access != .full }
+    var isRestricted: Bool { access.isRestricted }
+    /// Everything currently blocked: the union across unsatisfied Gates.
+    var effectiveRestrictions: RestrictionProfile { access.effectiveRestrictions }
     var hydration: HydrationStatus { state.hydrationStatus(now: now) }
     var overdue: [CommitmentRecord] { state.overdueCommitments(now: now) }
     var upcoming: [CommitmentRecord] { state.pendingCommitments(now: now) }
-    var freeOverrides: Int { state.freeOverrideBalance(now: now) }
+    var freeOverrides: Int { state.freeOverrideBalance }
     var streak: Int { state.completionStreak(now: now) }
 
     /// Every commitment ever made, newest deadline first.
     var allCommitments: [CommitmentRecord] {
         state.commitments.values.sorted { $0.commitment.deadline > $1.commitment.deadline }
+    }
+
+    var activePlans: [PlanRecord] { state.activePlans() }
+
+    /// Records one unit of active friction toward a solo override.
+    @discardableResult
+    func recordFrictionProgress(requestID: UUID, units: Int = 1) -> Bool {
+        append(.soloOverrideProgressRecorded(requestID: requestID, units: units))
     }
 }

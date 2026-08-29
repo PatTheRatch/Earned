@@ -21,9 +21,35 @@ struct NewCommitmentView: View {
     }
 
     private enum Kind: String, CaseIterable, Identifiable {
+        case any = "Just show up"
+        case duration = "A total time"
+        case distance = "A total distance"
+        var id: String { rawValue }
+    }
+
+    /// Which workouts count. Separate from how much is required, so "Run 30
+    /// minutes" cannot be satisfied by half an hour on a bike.
+    private enum ActivityChoice: String, CaseIterable, Identifiable {
         case any = "Any workout"
-        case duration = "Exercise for a total time"
-        case distance = "Cover a total distance"
+        case running = "Running"
+        case walking = "Walking"
+        case cycling = "Cycling"
+        case strength = "Strength"
+        var id: String { rawValue }
+        var filter: ActivityFilter {
+            switch self {
+            case .any: return .any
+            case .running: return .only(.running)
+            case .walking: return .only(.walking)
+            case .cycling: return .only(.cycling)
+            case .strength: return .only(.strength)
+            }
+        }
+    }
+
+    private enum Repeat: String, CaseIterable, Identifiable {
+        case once = "Just once"
+        case weekly = "Repeat weekly"
         var id: String { rawValue }
     }
 
@@ -43,6 +69,10 @@ struct NewCommitmentView: View {
     @State private var step: Step = .what
     @State private var title = ""
     @State private var kind: Kind = .any
+    @State private var activity: ActivityChoice = .any
+    @State private var repeats: Repeat = .once
+    @State private var weekdays: Set<Int> = []
+    @State private var weeks = 4.0
     @State private var minutes = 30.0
     @State private var kilometers = 5.0
     @State private var day = Date()
@@ -96,15 +126,29 @@ struct NewCommitmentView: View {
 
         case .completion:
             VStack(alignment: .leading, spacing: 16) {
-                Picker("Requirement", selection: $kind) {
-                    ForEach(Kind.allCases) { Text($0.rawValue).tag($0) }
+                VStack(alignment: .leading, spacing: 6) {
+                    SectionLabel(text: "What counts")
+                    Picker("Counts", selection: $activity) {
+                        ForEach(ActivityChoice.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
                 }
-                .pickerStyle(.inline)
-                .labelsHidden()
+
+                VStack(alignment: .leading, spacing: 6) {
+                    SectionLabel(text: "How much")
+                    Picker("Requirement", selection: $kind) {
+                        ForEach(Kind.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                }
 
                 switch kind {
                 case .any:
-                    Text("Any workout recorded in Apple Health will satisfy this.")
+                    Text(activity == .any
+                         ? "Any workout recorded in Apple Health will satisfy this."
+                         : "One \(activity.rawValue.lowercased()) workout will satisfy this.")
                         .font(.footnote).foregroundStyle(.secondary)
                 case .duration:
                     VStack(alignment: .leading) {
@@ -135,11 +179,31 @@ struct NewCommitmentView: View {
                     DatePicker("Deadline", selection: $customTime, displayedComponents: .hourAndMinute)
                         .datePickerStyle(.compact)
                 }
-                Text("A deadline, not an appointment: anything qualifying you do before "
-                     + "\(Format.deadline(deadline, from: store.now)) counts.")
-                    .font(.footnote).foregroundStyle(.secondary)
-                if deadline <= store.now {
+                Picker("Repeat", selection: $repeats) {
+                    ForEach(Repeat.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+
+                if repeats == .weekly {
+                    VStack(alignment: .leading, spacing: 8) {
+                        WeekdayPicker(selection: $weekdays)
+                        Text("For \(Int(weeks)) week\(Int(weeks) == 1 ? "" : "s")")
+                        Slider(value: $weeks, in: 1...12, step: 1)
+                        Text("One commitment per scheduled day, each with its own deadline. "
+                             + "A workout only counts toward the day it belongs to.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                } else {
+                    Text("A deadline, not an appointment: anything qualifying you do before "
+                         + "\(Format.deadline(deadline, from: store.now)) counts.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                if repeats == .once, deadline <= store.now {
                     Text("That deadline has already passed.")
+                        .font(.footnote).foregroundStyle(Theme.signal)
+                }
+                if repeats == .weekly, weekdays.isEmpty {
+                    Text("Pick at least one day.")
                         .font(.footnote).foregroundStyle(Theme.signal)
                 }
             }
@@ -177,7 +241,9 @@ struct NewCommitmentView: View {
             VStack(alignment: .leading, spacing: 14) {
                 ReviewLine(label: "Do", value: title.isEmpty ? "Any workout" : title)
                 ReviewLine(label: "Counts as done", value: Format.requirement(requirement))
-                ReviewLine(label: "By", value: Format.deadline(deadline, from: store.now))
+                ReviewLine(label: "By", value: repeats == .weekly
+                           ? "\(Format.weekdays(weekdays)) at \(timeLabel), \(Int(weeks)) weeks"
+                           : Format.deadline(deadline, from: store.now))
                 ReviewLine(label: "Verified by", value: "Apple Health workout record")
                 ReviewLine(label: "Escape", value: "\(approvals) approvals, or solo after "
                            + "\(Int(accountabilityMinutes)) min")
@@ -218,18 +284,28 @@ struct NewCommitmentView: View {
     private var canAdvance: Bool {
         switch step {
         case .what: return !title.trimmingCharacters(in: .whitespaces).isEmpty
-        case .when: return deadline > store.now
+        case .when: return repeats == .weekly ? !weekdays.isEmpty : deadline > store.now
         default: return true
         }
+    }
+
+    private var timeLabel: String {
+        Format.timeOfDay(deadlineMinuteOfDay)
+    }
+
+    private var deadlineMinuteOfDay: Int {
+        let cal = Calendar.current
+        let components = cal.dateComponents([.hour, .minute], from: deadline)
+        return (components.hour ?? 8) * 60 + (components.minute ?? 0)
     }
 
     // MARK: - Derived values
 
     private var requirement: Requirement {
         switch kind {
-        case .any: return .anyWorkout
-        case .duration: return .totalDuration(minutes * 60)
-        case .distance: return .totalDistance(kilometers * 1000)
+        case .any: return Requirement(activity: activity.filter, metric: .anyQualifyingWorkout)
+        case .duration: return Requirement(activity: activity.filter, metric: .totalDuration(minutes * 60))
+        case .distance: return Requirement(activity: activity.filter, metric: .totalDistance(kilometers * 1000))
         }
     }
 
@@ -252,6 +328,23 @@ struct NewCommitmentView: View {
     }
 
     private func commit() {
+        if repeats == .weekly {
+            let start = Calendar.current.startOfDay(for: day)
+            let created = store.createPlan(
+                title: title.trimmingCharacters(in: .whitespaces),
+                requirement: requirement,
+                weekdays: weekdays,
+                deadlineMinuteOfDay: deadlineMinuteOfDay,
+                startDate: start,
+                endDate: CommitmentPlan.weeks(Int(weeks), from: start),
+                correctionWindow: correctionHours * 3600,
+                overridePolicy: OverridePolicy(approvalsRequired: approvals,
+                                               accountabilityWindow: accountabilityMinutes * 60),
+                rewardEligible: rewardEligible,
+                warningLead: warnBefore ? 30 * 60 : nil)
+            if created { dismiss() }
+            return
+        }
         let created = store.createCommitment(
             title: title.trimmingCharacters(in: .whitespaces),
             requirement: requirement,
@@ -277,6 +370,34 @@ struct ReviewLine: View {
                 .frame(width: 110, alignment: .leading)
             Text(value).font(.subheadline)
             Spacer()
+        }
+    }
+}
+
+
+/// Mon–Sun toggles, in Calendar weekday numbering (1 = Sunday).
+struct WeekdayPicker: View {
+    @Binding var selection: Set<Int>
+
+    private static let days: [(Int, String)] = [
+        (2, "M"), (3, "T"), (4, "W"), (5, "T"), (6, "F"), (7, "S"), (1, "S"),
+    ]
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(Self.days, id: \.0) { number, label in
+                let isOn = selection.contains(number)
+                Button {
+                    if isOn { selection.remove(number) } else { selection.insert(number) }
+                } label: {
+                    Text(label)
+                        .font(.system(size: 14, weight: .bold))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(isOn ? Theme.ink : Theme.field)
+                        .foregroundStyle(isOn ? Theme.paper : Theme.muted)
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 }

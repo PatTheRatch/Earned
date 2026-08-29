@@ -61,7 +61,8 @@ struct OnboardingView: View {
         case .hydration:
             VStack(alignment: .leading, spacing: 18) {
                 Text("HYDRATION").font(Theme.display(44)).foregroundStyle(Theme.ink)
-                Text("A behavioural interrupt, not a tracker. You just say you drank some water.")
+                Text("A behavioural interrupt, not a tracker. You just say you drank some water — "
+                     + "and the day begins owing it.")
                     .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Every \(Int(interval)) minutes").font(.headline)
@@ -74,18 +75,20 @@ struct OnboardingView: View {
                         Slider(value: $startHour, in: 0...12, step: 1)
                         Slider(value: $endHour, in: 13...24, step: 1)
                     }
-                    Text("Outside these hours the Gate rests — no 3 AM nagging, and mornings "
-                         + "start with a full interval.")
+                    Text("Outside these hours the Gate rests — no 3 AM nagging. Inside them it "
+                         + "opens closed: the day starts locked until the first glass of water.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }
 
         case .restrictions:
             Screen(title: "What gets restricted",
-                   message: "Instagram, YouTube, games, browsers, delivery apps — whatever you'd "
-                       + "rather not reach for instead of living.\n\nChoosing the actual apps needs "
-                       + "Apple's Screen Time permissions, which arrive in the next build. Until "
-                       + "then Earned tracks your Gates and tells you exactly what would be locked.")
+                   message: "Every Gate takes away its own things. An unmet workout can leave maps "
+                       + "and music alone; unmet water can strip the phone back to calls and "
+                       + "messages. Whatever is unsatisfied, you lose the sum of it.\n\nChoosing "
+                       + "the actual apps needs Apple's Screen Time permissions, which arrive in "
+                       + "the next build. Until then Earned tracks your Gates and tells you "
+                       + "exactly what would be locked.")
 
         case .activate:
             Screen(title: "The deal",

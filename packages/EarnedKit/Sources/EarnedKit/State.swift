@@ -13,19 +13,33 @@ public struct CommitmentRecord: Codable, Equatable, Sendable {
     }
 }
 
+/// One earned Free Override. Immutable once written.
+public struct FreeOverrideGrant: Codable, Equatable, Identifiable, Sendable {
+    public let id: UUID
+    public let earnedAt: Date
+    public let source: FreeOverrideSource
+    public internal(set) var spentAt: Date?
+    public internal(set) var spentOn: UUID?
+
+    public var isSpent: Bool { spentAt != nil }
+}
+
 /// The projected state of the whole system: a pure function of the ledger.
 public struct EarnedState: Codable, Equatable, Sendable {
     public internal(set) var hydration: HydrationConfig?
     public internal(set) var lastWaterAcknowledgment: Date?
     public internal(set) var rewardPolicy: RewardPolicy = RewardPolicy()
     public internal(set) var commitments: [UUID: CommitmentRecord] = [:]
+    public internal(set) var plans: [UUID: PlanRecord] = [:]
     public internal(set) var workouts: [Workout] = []
-    /// Opaque identifiers for the restricted app selection (FamilyControls
-    /// tokens on iOS). EarnedKit governs *when* changes are allowed, never what
-    /// the apps are.
-    public internal(set) var restrictedApps: Set<String> = []
+    /// The profile applied to new commitments that don't carry their own. A
+    /// convenience default only — the Gate that actually restricts is the
+    /// commitment, and it owns its profile from creation.
+    public internal(set) var defaultCommitmentRestrictions: RestrictionProfile = .none
     public internal(set) var overrideRequests: [UUID: OverrideRequest] = [:]
-    public internal(set) var freeOverrideSpends: [Date] = []
+    /// Free Overrides as immutable grants. Balance is the count of unspent ones;
+    /// it is never recomputed from the current reward policy.
+    public internal(set) var freeOverrideGrants: [FreeOverrideGrant] = []
     public internal(set) var lastEventDate: Date?
 
     public init() {}
@@ -44,6 +58,31 @@ public struct EarnedState: Codable, Equatable, Sendable {
         return next
     }
 
+    /// Events the engine itself produces as a consequence of the transition from
+    /// `previous` to `self`.
+    ///
+    /// Only `Ledger.append` calls this, and it appends the results as real
+    /// entries. Replay deliberately does *not* re-derive: the derived events are
+    /// already in history, which is what makes an earned Free Override immutable
+    /// rather than a function of today's reward policy.
+    func derivedEvents(from previous: EarnedState, at date: Date) -> [Event] {
+        guard completedOnTimeCount > previous.completedOnTimeCount else { return [] }
+        guard shouldEarnFreeOverride(at: date) else { return [] }
+        return [.freeOverrideEarned(id: UUID(), source: .streak)]
+    }
+
+    /// Completion is the only thing that can earn a reward, so a transition is
+    /// interesting only when this count goes up.
+    private var completedOnTimeCount: Int {
+        commitments.values.reduce(into: 0) { total, record in
+            if case .completed(let at) = record.resolution,
+               record.commitment.rewardEligible,
+               at <= record.commitment.deadline {
+                total += 1
+            }
+        }
+    }
+
     private mutating func mutate(_ event: Event, at date: Date) throws {
         switch event {
         case .hydrationConfigured(let config):
@@ -51,15 +90,19 @@ public struct EarnedState: Codable, Equatable, Sendable {
             hydration = config
 
         case .rewardPolicyConfigured(let policy):
-            guard policy.streakThreshold >= 1, policy.maxStored >= 0 else {
-                throw EarnedError.invalidCommitment("Reward policy requires streakThreshold >= 1 and maxStored >= 0.")
-            }
+            try validateRewardPolicy(policy, at: date)
             rewardPolicy = policy
 
+        case .defaultCommitmentRestrictionsChanged(let profile):
+            // The default is not itself a Gate, so loosening it restricts
+            // nothing that is currently in force; no guard is needed.
+            defaultCommitmentRestrictions = profile
+
         case .restrictedAppsChanged(let added, let removed):
-            try validateRestrictedRemoval(removed, at: date)
-            restrictedApps.formUnion(added)
-            restrictedApps.subtract(removed)
+            // v1 history: the old global set becomes the default profile.
+            defaultCommitmentRestrictions = defaultCommitmentRestrictions
+                .adding(Set(added.map(RestrictionToken.init)))
+                .removing(Set(removed.map(RestrictionToken.init)))
 
         case .waterAcknowledged:
             lastWaterAcknowledgment = date
@@ -67,6 +110,7 @@ public struct EarnedState: Codable, Equatable, Sendable {
         case .commitmentCreated(let commitment):
             try validateNewCommitment(commitment, at: date)
             commitments[commitment.id] = CommitmentRecord(commitment: commitment, resolution: nil)
+            resolveIfSatisfied(commitmentID: commitment.id)
 
         case .commitmentEdited(let id, let edit):
             let record = try unresolvedRecord(id)
@@ -80,6 +124,9 @@ public struct EarnedState: Codable, Equatable, Sendable {
                     throw EarnedError.monotonicityViolation(
                         "Commitment '\(record.commitment.title)' has hardened; edits may only make it harder.")
                 }
+            } else {
+                try validateRestrictionsLoosening(from: record.commitment.restrictions,
+                                                  to: edited.restrictions, at: date)
             }
             commitments[id]?.commitment = edited
             resolveIfSatisfied(commitmentID: id)
@@ -90,6 +137,33 @@ public struct EarnedState: Codable, Equatable, Sendable {
                 throw EarnedError.cancellationAfterHardening(id)
             }
             commitments[id]?.resolution = .cancelled(at: date)
+
+        case .planCreated(let plan):
+            guard plans[plan.id] == nil else {
+                throw EarnedError.invalidPlan("Duplicate plan id.")
+            }
+            guard plan.isValid else {
+                throw EarnedError.invalidPlan("Weekdays, deadline time, date range and requirement must all be valid.")
+            }
+            guard plan.createdAt == date else {
+                throw EarnedError.invalidPlan("createdAt must equal the event date.")
+            }
+            plans[plan.id] = PlanRecord(plan: plan, cancelledAt: nil)
+
+        case .planCancelled(let id):
+            guard var record = plans[id] else { throw EarnedError.planNotFound(id) }
+            guard !record.isCancelled else { throw EarnedError.planAlreadyCancelled(id) }
+            record.cancelledAt = date
+            plans[id] = record
+            // Cancelling a plan withdraws only the occurrences that are still in
+            // their correction window. A hardened occurrence is a contract in its
+            // own right and survives (NORTHSTAR §12).
+            for (commitmentID, commitmentRecord) in commitments
+            where commitmentRecord.commitment.planID == id
+                && commitmentRecord.resolution == nil
+                && !commitmentRecord.commitment.isHardened(at: date) {
+                commitments[commitmentID]?.resolution = .cancelled(at: date)
+            }
 
         case .workoutRecorded(let workout):
             guard workout.end > workout.start else {
@@ -105,16 +179,26 @@ public struct EarnedState: Codable, Equatable, Sendable {
             // an already-known workout is a harmless no-op.
             guard !workouts.contains(where: { $0.id == workout.id }) else { return }
             workouts.append(workout)
-            for id in commitments.keys {
+            // Resolve in deadline order so that when one workout can satisfy
+            // several obligations, the oldest debt is cleared first.
+            for id in commitments.keys.sorted(by: { deadline(of: $0) < deadline(of: $1) }) {
                 resolveIfSatisfied(commitmentID: id)
             }
 
+        case .freeOverrideEarned(let id, let source):
+            guard !freeOverrideGrants.contains(where: { $0.id == id }) else { return }
+            // Earning at the cap is forfeited, not banked (NORTHSTAR §22).
+            guard freeOverrideBalance < rewardPolicy.maxStored || source == .migration else { return }
+            freeOverrideGrants.append(FreeOverrideGrant(id: id, earnedAt: date, source: source,
+                                                        spentAt: nil, spentOn: nil))
+
         case .freeOverrideSpent(let commitmentID):
             _ = try unresolvedRecord(commitmentID)
-            guard freeOverrideBalance(now: date) >= 1 else {
+            guard let index = freeOverrideGrants.firstIndex(where: { !$0.isSpent }) else {
                 throw EarnedError.insufficientFreeOverrides
             }
-            freeOverrideSpends.append(date)
+            freeOverrideGrants[index].spentAt = date
+            freeOverrideGrants[index].spentOn = commitmentID
             commitments[commitmentID]?.resolution = .overridden(.free, at: date)
 
         case .overrideRequested(let id, let commitmentID):
@@ -153,24 +237,45 @@ public struct EarnedState: Codable, Equatable, Sendable {
                 throw EarnedError.soloOverrideNotYetAvailable(availableAt: availableAt)
             }
             request.soloStartedAt = date
+            // Freeze the requirement at start, so a policy edit mid-challenge
+            // cannot make an in-flight escape cheaper.
+            request.soloRequirement = requiredSoloFriction(startedAt: date,
+                                                           escalation: policy.soloEscalation)
+            request.soloEffortUnits = 0
+            overrideRequests[requestID] = request
+
+        case .soloOverrideProgressRecorded(let requestID, let units):
+            var request = try activeRequest(requestID)
+            guard request.soloStartedAt != nil, let requirement = request.soloRequirement else {
+                throw EarnedError.soloOverrideNotStarted(requestID)
+            }
+            guard units > 0 else {
+                throw EarnedError.invalidFrictionProgress("Effort must be positive.")
+            }
+            request.soloEffortUnits = min(requirement.effortUnits, request.soloEffortUnits + units)
             overrideRequests[requestID] = request
 
         case .soloOverrideCompleted(let requestID):
             var request = try activeRequest(requestID)
-            guard let startedAt = request.soloStartedAt else {
+            guard let startedAt = request.soloStartedAt,
+                  let requirement = request.soloRequirement else {
                 throw EarnedError.soloOverrideNotStarted(requestID)
             }
-            let policy = try unresolvedRecord(request.commitmentID).commitment.overridePolicy
-            let friction = requiredSoloFriction(startedAt: startedAt, escalation: policy.soloEscalation)
-            let completableAt = startedAt.addingTimeInterval(friction)
-            guard date >= completableAt else {
-                throw EarnedError.soloOverrideFrictionIncomplete(completableAt: completableAt)
+            let elapsed = date.timeIntervalSince(startedAt)
+            guard requirement.isSatisfied(unitsCompleted: request.soloEffortUnits, elapsed: elapsed) else {
+                throw EarnedError.soloOverrideFrictionIncomplete(
+                    unitsRemaining: max(0, requirement.effortUnits - request.soloEffortUnits),
+                    completableAt: startedAt.addingTimeInterval(requirement.minimumElapsed))
             }
             request.grantedAt = date
             request.grantedKind = .solo
             overrideRequests[requestID] = request
             commitments[request.commitmentID]?.resolution = .overridden(.solo, at: date)
         }
+    }
+
+    private func deadline(of id: UUID) -> Date {
+        commitments[id]?.commitment.deadline ?? .distantFuture
     }
 
     // MARK: - Validation helpers
@@ -190,17 +295,41 @@ public struct EarnedState: Codable, Equatable, Sendable {
         }
     }
 
-    private func validateRestrictedRemoval(_ removed: Set<String>, at date: Date) throws {
-        guard !removed.isEmpty else { return }
-        guard case .full = accessState(now: date) else {
-            throw EarnedError.restrictedRemovalNotAllowed("Removal requires Full Access.")
+    /// Loosening any Gate's restriction profile requires Full Access and no
+    /// hardened, unresolved commitment. Tightening is always allowed.
+    private func validateRestrictionsLoosening(from current: RestrictionProfile,
+                                               to proposed: RestrictionProfile,
+                                               at date: Date) throws {
+        guard !proposed.isAtLeastAsStrict(as: current) else { return }
+        guard accessState(now: date).isFullAccess else {
+            throw EarnedError.restrictionsLooseningNotAllowed("Loosening requires Full Access.")
         }
-        let hardenedUnresolved = commitments.values.contains {
-            $0.resolution == nil && $0.commitment.isHardened(at: date)
-        }
-        guard !hardenedUnresolved else {
-            throw EarnedError.restrictedRemovalNotAllowed(
+        guard !hasHardenedUnresolvedCommitment(at: date) else {
+            throw EarnedError.restrictionsLooseningNotAllowed(
                 "A hardened commitment is outstanding; its restrictions cannot shrink (NORTHSTAR §12).")
+        }
+    }
+
+    /// Same shape of rule as restrictions: stricter anytime, easier only from a
+    /// position of full access with nothing hardened outstanding. Without this a
+    /// locked user could lower the streak threshold and mint an escape route.
+    private func validateRewardPolicy(_ policy: RewardPolicy, at date: Date) throws {
+        guard policy.isValid else {
+            throw EarnedError.invalidRewardPolicy("streakThreshold must be >= 1 and maxStored >= 0.")
+        }
+        guard !policy.isAtLeastAsHard(as: rewardPolicy) else { return }
+        guard accessState(now: date).isFullAccess else {
+            throw EarnedError.rewardPolicyEasingNotAllowed("Easing requires Full Access.")
+        }
+        guard !hasHardenedUnresolvedCommitment(at: date) else {
+            throw EarnedError.rewardPolicyEasingNotAllowed(
+                "A hardened commitment is outstanding.")
+        }
+    }
+
+    func hasHardenedUnresolvedCommitment(at date: Date) -> Bool {
+        commitments.values.contains {
+            $0.resolution == nil && $0.commitment.isHardened(at: date)
         }
     }
 
@@ -213,6 +342,9 @@ public struct EarnedState: Codable, Equatable, Sendable {
         }
         guard commitment.deadline > date else {
             throw EarnedError.invalidCommitment("Deadline must be in the future.")
+        }
+        guard commitment.eligibleFrom <= commitment.deadline else {
+            throw EarnedError.invalidCommitment("Eligible period must open before the deadline.")
         }
         guard commitment.configuredCorrectionWindow >= 0 else {
             throw EarnedError.invalidCommitment("Correction window cannot be negative.")
@@ -227,13 +359,9 @@ public struct EarnedState: Codable, Equatable, Sendable {
     }
 
     private func validateCommitmentShape(_ commitment: Commitment) throws {
-        switch commitment.requirement {
-        case .anyWorkout:
-            break
-        case .totalDuration(let seconds):
-            guard seconds > 0 else { throw EarnedError.invalidCommitment("Required duration must be positive.") }
-        case .totalDistance(let meters):
-            guard meters > 0 else { throw EarnedError.invalidCommitment("Required distance must be positive.") }
+        guard commitment.requirement.isValid else {
+            throw EarnedError.invalidCommitment(
+                "Requirement needs a non-empty activity filter and a positive amount.")
         }
     }
 
@@ -278,5 +406,58 @@ public struct EarnedState: Codable, Equatable, Sendable {
                 return
             }
         }
+    }
+
+    // MARK: - Reward earning
+
+    /// Free Overrides currently banked. A plain count of unspent grants — never
+    /// a replay of history against the current policy.
+    public var freeOverrideBalance: Int {
+        freeOverrideGrants.filter { !$0.isSpent }.count
+    }
+
+    /// On-time completions of reward-eligible commitments since the last Free
+    /// Override was earned, with any missed deadline in that span resetting the
+    /// count to zero.
+    ///
+    /// Evaluated at a given instant, from resolutions that are already
+    /// determined, so it is deterministic on replay.
+    func rewardStreak(at date: Date) -> Int {
+        let since = freeOverrideGrants.map(\.earnedAt).max() ?? .distantPast
+
+        enum Outcome { case success, miss }
+        var timeline: [(Date, Outcome)] = []
+
+        for record in commitments.values where record.commitment.rewardEligible {
+            let deadline = record.commitment.deadline
+            switch record.resolution {
+            case .completed(let at):
+                timeline.append(at <= deadline ? (at, .success) : (deadline, .miss))
+            case .overridden(_, let at):
+                // An overridden commitment was not completed; the streak breaks
+                // when the obligation was cleared, or at the deadline if that
+                // came first.
+                timeline.append((min(at, deadline), .miss))
+            case .cancelled:
+                continue
+            case nil:
+                if date > deadline { timeline.append((deadline, .miss)) }
+            }
+        }
+
+        var streak = 0
+        for (at, outcome) in timeline.sorted(by: { $0.0 < $1.0 }) where at > since && at <= date {
+            switch outcome {
+            case .success: streak += 1
+            case .miss: streak = 0
+            }
+        }
+        return streak
+    }
+
+    private func shouldEarnFreeOverride(at date: Date) -> Bool {
+        guard freeOverrideBalance < rewardPolicy.maxStored else { return false }
+        let streak = rewardStreak(at: date)
+        return streak > 0 && streak >= rewardPolicy.streakThreshold
     }
 }

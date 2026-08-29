@@ -3,61 +3,85 @@ import XCTest
 
 final class HydrationTests: XCTestCase {
 
-    // NORTHSTAR §18: 08:00 ack → satisfied; 09:00 expiry → unsatisfied;
-    // 09:17 ack → satisfied; next expiry 10:17.
-    func testRollingTimerTimeline() throws {
+    /// **The window opens unsatisfied.** No free interval at the start of the
+    /// day: from 08:00 the gate is closed until water is acknowledged
+    /// (NORTHSTAR §18).
+    func testWindowOpensUnsatisfied() throws {
+        var ledger = Ledger()
+        ledger.expectAppend(.hydrationConfigured(patrickHydration()), at: d(22, 7))
+
+        // 07:59 — before the window, dormant.
+        XCTAssertEqual(ledger.state.hydrationStatus(now: d(22, 7, 59)), .dormant)
+
+        // 08:00 — window opens closed, restrictions apply immediately.
+        XCTAssertEqual(ledger.state.hydrationStatus(now: d(22, 8)), .unsatisfied(since: d(22, 8)))
+        let access = ledger.state.accessState(now: d(22, 8))
+        XCTAssertTrue(access.isRestricted)
+        XCTAssertEqual(access.effectiveRestrictions, hydrationProfile)
+
+        // 08:07 — acknowledged; the rolling interval starts here.
+        ledger.expectAppend(.waterAcknowledged, at: d(22, 8, 7))
+        XCTAssertEqual(ledger.state.hydrationStatus(now: d(22, 8, 8)),
+                       .satisfied(expiresAt: d(22, 9, 7)))
+        XCTAssertTrue(ledger.state.accessState(now: d(22, 8, 8)).isFullAccess)
+
+        // 09:07 — expired, closed again.
+        XCTAssertEqual(ledger.state.hydrationStatus(now: d(22, 9, 7)), .unsatisfied(since: d(22, 9, 7)))
+    }
+
+    /// Yesterday's water does not open today: an acknowledgment before the
+    /// current window's open does not count.
+    func testYesterdaysAcknowledgmentDoesNotCarryOver() throws {
+        var ledger = Ledger()
+        ledger.expectAppend(.hydrationConfigured(patrickHydration()), at: d(22, 7))
+        ledger.expectAppend(.waterAcknowledged, at: d(22, 21, 55))
+
+        // Overnight: dormant.
+        XCTAssertEqual(ledger.state.hydrationStatus(now: d(23, 3)), .dormant)
+        XCTAssertTrue(ledger.state.accessState(now: d(23, 3)).isFullAccess)
+
+        // Next morning opens closed, even though water was drunk five minutes
+        // before last night's window shut.
+        XCTAssertEqual(ledger.state.hydrationStatus(now: d(23, 8)), .unsatisfied(since: d(23, 8)))
+    }
+
+    func testRollingTimerAcrossTheDay() throws {
         var ledger = Ledger()
         ledger.expectAppend(.hydrationConfigured(patrickHydration()), at: d(22, 7))
         ledger.expectAppend(.waterAcknowledged, at: d(22, 8))
 
-        XCTAssertEqual(ledger.state.hydrationStatus(now: d(22, 8, 30)),
-                       .satisfied(expiresAt: d(22, 9)))
-        XCTAssertEqual(ledger.state.hydrationStatus(now: d(22, 9)),
-                       .unsatisfied(expiredAt: d(22, 9)))
-        XCTAssertFalse(ledger.state.accessState(now: d(22, 9, 5)).isFull)
+        XCTAssertEqual(ledger.state.hydrationStatus(now: d(22, 8, 30)), .satisfied(expiresAt: d(22, 9)))
+        XCTAssertEqual(ledger.state.hydrationStatus(now: d(22, 9)), .unsatisfied(since: d(22, 9)))
 
         ledger.expectAppend(.waterAcknowledged, at: d(22, 9, 17))
         XCTAssertEqual(ledger.state.hydrationStatus(now: d(22, 9, 18)),
                        .satisfied(expiresAt: d(22, 10, 17)))
-        XCTAssertTrue(ledger.state.accessState(now: d(22, 9, 18)).isFull)
     }
 
-    // Active hours: dormant overnight, and the morning starts satisfied with a
-    // fresh interval rather than locked (NORTHSTAR §18, Active hours).
-    func testActiveHoursMorningStartsSatisfied() throws {
-        var ledger = Ledger()
-        ledger.expectAppend(.hydrationConfigured(patrickHydration()), at: d(22, 7))
-        ledger.expectAppend(.waterAcknowledged, at: d(22, 21, 30))
-
-        // 03:00 — dormant, no 3 AM nagging.
-        XCTAssertEqual(ledger.state.hydrationStatus(now: d(23, 3)), .dormant)
-        XCTAssertTrue(ledger.state.accessState(now: d(23, 3)).isFull)
-
-        // Window opens 08:00 with a fresh interval: satisfied until 09:00.
-        XCTAssertEqual(ledger.state.hydrationStatus(now: d(23, 8, 30)),
-                       .satisfied(expiresAt: d(23, 9)))
-        XCTAssertEqual(ledger.state.hydrationStatus(now: d(23, 9, 1)),
-                       .unsatisfied(expiredAt: d(23, 9)))
-    }
-
-    // An expired gate goes dormant (satisfied) when the window closes.
+    /// An expired gate goes dormant when the window closes; the day's debt does
+    /// not carry over (only exercise carries debt).
     func testUnsatisfiedGateReleasesAtWindowClose() throws {
         var ledger = Ledger()
         ledger.expectAppend(.hydrationConfigured(patrickHydration()), at: d(22, 7))
-        // Never acknowledged: expires 09:00, unsatisfied all day.
-        XCTAssertEqual(ledger.state.hydrationStatus(now: d(22, 21, 59)),
-                       .unsatisfied(expiredAt: d(22, 9)))
+        XCTAssertEqual(ledger.state.hydrationStatus(now: d(22, 21, 59)), .unsatisfied(since: d(22, 8)))
         XCTAssertEqual(ledger.state.hydrationStatus(now: d(22, 22)), .dormant)
-        // Its next transition is the window close.
         XCTAssertEqual(ledger.state.nextTransition(after: d(22, 21)), d(22, 22))
     }
 
-    // Easier config changes are rejected while the gate is unsatisfied.
+    /// Dormant → the next window opening closes the gate, so that is the next
+    /// transition worth scheduling.
+    func testNextTransitionFromDormantIsTheWindowOpening() throws {
+        var ledger = Ledger()
+        ledger.expectAppend(.hydrationConfigured(patrickHydration()), at: d(22, 7))
+        ledger.expectAppend(.waterAcknowledged, at: d(22, 20))
+        XCTAssertEqual(ledger.state.nextTransition(after: d(22, 23)), d(23, 8))
+    }
+
     func testEasierConfigRequiresSatisfiedGate() throws {
         var ledger = Ledger()
         ledger.expectAppend(.hydrationConfigured(patrickHydration(interval: 3600)), at: d(22, 7))
 
-        // 09:30, never acknowledged since window open at 08:00 → unsatisfied.
+        // 09:30, never acknowledged today → unsatisfied.
         expectThrows(.hydrationEasierWhileUnsatisfied) {
             try ledger.append(.hydrationConfigured(patrickHydration(interval: 7200)), at: d(22, 9, 30))
         }
@@ -68,6 +92,19 @@ final class HydrationTests: XCTestCase {
         ledger.expectAppend(.waterAcknowledged, at: d(22, 9, 40))
         ledger.expectAppend(.hydrationConfigured(patrickHydration(interval: 7200)), at: d(22, 9, 41))
         XCTAssertEqual(ledger.state.hydration?.interval, 7200)
+    }
+
+    /// Loosening the hydration Gate's restriction profile is an easier change too.
+    func testLooseningHydrationRestrictionsNeedsSatisfiedGate() throws {
+        var ledger = Ledger()
+        ledger.expectAppend(.hydrationConfigured(patrickHydration()), at: d(22, 7))
+        expectThrows(.hydrationEasierWhileUnsatisfied) {
+            try ledger.append(.hydrationConfigured(
+                patrickHydration(restrictions: RestrictionProfile(["instagram"]))), at: d(22, 9))
+        }
+        ledger.expectAppend(.waterAcknowledged, at: d(22, 9, 10))
+        ledger.expectAppend(.hydrationConfigured(
+            patrickHydration(restrictions: RestrictionProfile(["instagram"]))), at: d(22, 9, 11))
     }
 
     func testInvalidConfigRejected() {
@@ -84,18 +121,12 @@ final class HydrationTests: XCTestCase {
         }
     }
 
-    func testNextTransitionAndWarnings() throws {
+    func testWarningsAreScheduledWhileSatisfied() throws {
         var ledger = Ledger()
-        ledger.expectAppend(
-            .hydrationConfigured(patrickHydration(warningLead: 600)), at: d(22, 7))
+        ledger.expectAppend(.hydrationConfigured(patrickHydration(warningLead: 600)), at: d(22, 7))
         ledger.expectAppend(.waterAcknowledged, at: d(22, 10))
 
-        // Satisfied: next transition is expiry at 11:00, warning at 10:50.
         XCTAssertEqual(ledger.state.nextTransition(after: d(22, 10, 5)), d(22, 11))
-        let warnings = ledger.state.upcomingWarnings(now: d(22, 10, 5))
-        XCTAssertEqual(warnings.map(\.date), [d(22, 10, 50)])
-
-        // Dormant overnight: next transition is tomorrow's open + interval.
-        XCTAssertEqual(ledger.state.nextTransition(after: d(22, 23)), d(23, 9))
+        XCTAssertEqual(ledger.state.upcomingWarnings(now: d(22, 10, 5)).map(\.date), [d(22, 10, 50)])
     }
 }

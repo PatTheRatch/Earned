@@ -3,26 +3,44 @@ import Foundation
 /// Why access is currently restricted. The system must always be able to
 /// explain exactly which Gates prevent access (NORTHSTAR §19, §39.10).
 public struct LockReason: Equatable, Sendable {
-    public enum Source: Equatable, Sendable {
-        case hydration
-        case commitment(UUID)
-    }
-    public var source: Source
+    public var gate: GateID
     /// Default developer-provided copy; the app may render its own.
     public var headline: String
     public var progress: CommitmentProgress?
+    /// What this Gate alone takes away.
+    public var restrictions: RestrictionProfile
 }
 
-public enum AccessState: Equatable, Sendable {
-    case full
-    case restricted([LockReason])
+/// What is allowed right now.
+///
+/// Access is not one global binary. Each unsatisfied Gate contributes its own
+/// restriction profile, and what is actually in force is their **union**
+/// (NORTHSTAR §5, §6): an unmet Hydration Gate can strip the phone back to bare
+/// communication while an unmet Exercise Gate leaves maps and music alone, and
+/// when both are closed the stricter result follows automatically.
+public struct AccessState: Equatable, Sendable {
+    /// Every Gate currently preventing full access, in the order the user should
+    /// read them: hydration first, then commitments by deadline.
+    public var lockReasons: [LockReason]
+    /// The union of the restriction profiles of every unsatisfied Gate.
+    public var effectiveRestrictions: RestrictionProfile
+
+    public var isFullAccess: Bool { lockReasons.isEmpty }
+    public var isRestricted: Bool { !lockReasons.isEmpty }
+
+    public static let fullAccess = AccessState(lockReasons: [], effectiveRestrictions: .none)
+
+    /// Whether one specific thing is currently blocked.
+    public func restricts(_ token: RestrictionToken) -> Bool {
+        effectiveRestrictions.tokens.contains(token)
+    }
 }
 
 /// A scheduled pre-enforcement warning (NORTHSTAR §20). Informational only —
 /// warnings never create grace periods.
 public struct GateWarning: Equatable, Sendable {
     public var date: Date
-    public var source: LockReason.Source
+    public var gate: GateID
     public var headline: String
 }
 
@@ -41,8 +59,8 @@ extension EarnedState {
         return hydration.status(lastAcknowledgment: lastWaterAcknowledgment, now: now)
     }
 
-    /// Unresolved commitments whose deadline has passed. Any of these makes the
-    /// Exercise Gate unsatisfied; pending commitments do not (NORTHSTAR §19).
+    /// Unresolved commitments whose deadline has passed. Any of these leaves its
+    /// Gate unsatisfied; pending commitments do not (NORTHSTAR §19).
     public func overdueCommitments(now: Date) -> [CommitmentRecord] {
         commitments.values
             .filter { $0.isOverdue(now: now) }
@@ -63,7 +81,9 @@ extension EarnedState {
         min(1, overdueCommitments(now: now).count)
     }
 
-    /// Accumulated progress toward a commitment (NORTHSTAR §14).
+    /// Accumulated progress toward a commitment (NORTHSTAR §14). Only workouts
+    /// inside the commitment's eligible period and matching its activity filter
+    /// count.
     public func progress(for commitmentID: UUID) -> CommitmentProgress? {
         guard let record = commitments[commitmentID] else { return nil }
         let eligible = workouts.filter { $0.isEligible(for: record.commitment) }
@@ -73,18 +93,36 @@ extension EarnedState {
     // MARK: - Access
 
     /// Full Access = every currently active Gate is satisfied (NORTHSTAR §5).
+    /// Restrictions in force = union over the unsatisfied ones (§6).
     public func accessState(now: Date) -> AccessState {
         var reasons: [LockReason] = []
+
         if case .unsatisfied = hydrationStatus(now: now) {
-            reasons.append(LockReason(source: .hydration, headline: "Drink some water", progress: nil))
+            reasons.append(LockReason(gate: .hydration,
+                                      headline: "Drink some water",
+                                      progress: nil,
+                                      restrictions: hydration?.restrictions ?? .none))
         }
         for record in overdueCommitments(now: now) {
-            reasons.append(LockReason(
-                source: .commitment(record.commitment.id),
-                headline: record.commitment.title,
-                progress: progress(for: record.commitment.id)))
+            reasons.append(LockReason(gate: .commitment(record.commitment.id),
+                                      headline: record.commitment.title,
+                                      progress: progress(for: record.commitment.id),
+                                      restrictions: record.commitment.restrictions))
         }
-        return reasons.isEmpty ? .full : .restricted(reasons)
+
+        return AccessState(lockReasons: reasons,
+                           effectiveRestrictions: RestrictionProfile.union(reasons.map(\.restrictions)))
+    }
+
+    /// The restriction profile a Gate would impose, whether or not it is
+    /// currently closed — for previewing "what this costs me" in the UI.
+    public func restrictions(of gate: GateID) -> RestrictionProfile {
+        switch gate {
+        case .hydration:
+            return hydration?.restrictions ?? .none
+        case .commitment(let id):
+            return commitments[id]?.commitment.restrictions ?? .none
+        }
     }
 
     /// The next moment the access state could change without any new event:
@@ -107,20 +145,36 @@ extension EarnedState {
            case .satisfied(let expiresAt) = hydrationStatus(now: now) {
             let date = expiresAt.addingTimeInterval(-lead)
             if date > now {
-                warnings.append(GateWarning(date: date, source: .hydration, headline: "Hydration Gate closes soon"))
+                warnings.append(GateWarning(date: date, gate: .hydration,
+                                            headline: "Hydration Gate closes soon"))
             }
         }
         for record in pendingCommitments(now: now) {
             guard let lead = record.commitment.warningLead else { continue }
             let date = record.commitment.deadline.addingTimeInterval(-lead)
             if date > now {
-                warnings.append(GateWarning(
-                    date: date,
-                    source: .commitment(record.commitment.id),
-                    headline: "\(record.commitment.title) due soon"))
+                warnings.append(GateWarning(date: date,
+                                            gate: .commitment(record.commitment.id),
+                                            headline: "\(record.commitment.title) due soon"))
             }
         }
         return warnings.sorted { $0.date < $1.date }
+    }
+
+    // MARK: - Plans
+
+    /// Live plans, newest first.
+    public func activePlans() -> [PlanRecord] {
+        plans.values
+            .filter { !$0.isCancelled }
+            .sorted { $0.plan.createdAt > $1.plan.createdAt }
+    }
+
+    /// Every commitment generated by one plan, in deadline order.
+    public func occurrences(ofPlan planID: UUID) -> [CommitmentRecord] {
+        commitments.values
+            .filter { $0.commitment.planID == planID }
+            .sorted { $0.commitment.deadline < $1.commitment.deadline }
     }
 
     // MARK: - Overrides
@@ -132,104 +186,32 @@ extension EarnedState {
         return overrideRequests.values.first { $0.commitmentID == commitmentID && !$0.isResolved }
     }
 
-    /// Solo friction owed for a solo override starting at `startedAt`, escalated
-    /// by solo overrides granted within the escalation's recent window
+    /// The friction a solo override starting at `startedAt` must overcome,
+    /// escalated by solo overrides granted within the escalation's recent window
     /// (NORTHSTAR §25).
-    func requiredSoloFriction(startedAt: Date, escalation: SoloEscalation) -> TimeInterval {
+    func requiredSoloFriction(startedAt: Date, escalation: SoloEscalation) -> FrictionRequirement {
         let windowStart = startedAt.addingTimeInterval(-escalation.recentWindow)
         let recentSolos = overrideRequests.values.filter {
             $0.grantedKind == .solo
                 && $0.grantedAt.map { granted in granted > windowStart && granted <= startedAt } == true
         }
-        return escalation.friction(recentSoloCount: recentSolos.count)
+        return escalation.requirement(recentSoloCount: recentSolos.count)
     }
 
-    /// Friction a solo override on this request would currently require —
-    /// exposed so the app can show it before the user starts.
-    public func soloFriction(forRequest requestID: UUID, ifStartedAt date: Date) -> TimeInterval? {
+    /// What a solo override on this request would cost — exposed so the app can
+    /// show the price before the user starts.
+    public func soloFriction(forRequest requestID: UUID, ifStartedAt date: Date) -> FrictionRequirement? {
         guard let request = overrideRequests[requestID],
               let record = commitments[request.commitmentID] else { return nil }
-        return requiredSoloFriction(startedAt: request.soloStartedAt ?? date,
+        if let frozen = request.soloRequirement { return frozen }
+        return requiredSoloFriction(startedAt: date,
                                     escalation: record.commitment.overridePolicy.soloEscalation)
     }
 
-    // MARK: - Free Overrides (NORTHSTAR §22)
+    // MARK: - Rewards
 
-    /// Free Overrides currently stored. Earned by consecutive on-time
-    /// completions of reward-eligible commitments; capped, with earning at the
-    /// cap forfeited; reduced by spends. Computed by replaying commitment
-    /// outcomes and spends in time order.
-    public func freeOverrideBalance(now: Date) -> Int {
-        enum Outcome { case success, miss, spend }
-        var timeline: [(Date, Outcome)] = freeOverrideSpends.map { ($0, .spend) }
-
-        for record in commitments.values where record.commitment.rewardEligible {
-            let deadline = record.commitment.deadline
-            switch record.resolution {
-            case .completed(let at):
-                timeline.append(at <= deadline ? (at, .success) : (deadline, .miss))
-            case .overridden(_, let at):
-                // An overridden commitment was not completed; the streak breaks
-                // when the obligation was cleared (or at the deadline if that
-                // came first).
-                timeline.append((min(at, deadline), .miss))
-            case .cancelled:
-                continue
-            case nil:
-                if now > deadline { timeline.append((deadline, .miss)) }
-            }
-        }
-
-        timeline.sort { $0.0 < $1.0 }
-        var streak = 0
-        var balance = 0
-        for (_, outcome) in timeline {
-            switch outcome {
-            case .success:
-                streak += 1
-                if streak >= rewardPolicy.streakThreshold {
-                    if balance < rewardPolicy.maxStored { balance += 1 }
-                    streak = 0
-                }
-            case .miss:
-                streak = 0
-            case .spend:
-                balance -= 1
-            }
-        }
-        return max(0, balance)
-    }
-
-    /// Current streak of consecutive on-time completions (for UI).
-    public func completionStreak(now: Date) -> Int {
-        enum Outcome { case success, miss }
-        var timeline: [(Date, Outcome)] = []
-        for record in commitments.values where record.commitment.rewardEligible {
-            let deadline = record.commitment.deadline
-            switch record.resolution {
-            case .completed(let at):
-                timeline.append(at <= deadline ? (at, .success) : (deadline, .miss))
-            case .overridden(_, let at):
-                timeline.append((min(at, deadline), .miss))
-            case .cancelled:
-                continue
-            case nil:
-                if now > deadline { timeline.append((deadline, .miss)) }
-            }
-        }
-        timeline.sort { $0.0 < $1.0 }
-        var streak = 0
-        for (_, outcome) in timeline {
-            switch outcome {
-            case .success:
-                streak += 1
-                if streak >= rewardPolicy.streakThreshold { streak = 0 }
-            case .miss:
-                streak = 0
-            }
-        }
-        return streak
-    }
+    /// Progress toward the next Free Override, for display.
+    public func completionStreak(now: Date) -> Int { rewardStreak(at: now) }
 
     // MARK: - Reliability (NORTHSTAR §24)
 

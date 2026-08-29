@@ -12,6 +12,7 @@ struct SettingsView: View {
                 hydrationSection
                 rewardsSection
                 restrictedSection
+                plansSection
                 testingSection
                 aboutSection
             }
@@ -97,28 +98,56 @@ struct SettingsView: View {
 
     private var restrictedSection: some View {
         Section {
-            if store.state.restrictedApps.isEmpty {
-                Text("Nothing listed yet").foregroundStyle(.secondary)
+            NavigationLink {
+                GateRestrictionsView(gate: .hydration, title: "Hydration Gate")
+            } label: {
+                LabeledContent("Hydration Gate",
+                               value: "\(store.state.restrictions(of: .hydration).count) blocked")
             }
-            ForEach(store.state.restrictedApps.sorted(), id: \.self) { app in
-                Text(app)
+            NavigationLink {
+                DefaultRestrictionsView()
+            } label: {
+                LabeledContent("New commitments",
+                               value: "\(store.state.defaultCommitmentRestrictions.count) blocked")
             }
-            .onDelete { offsets in
-                let sorted = store.state.restrictedApps.sorted()
-                let removed = Set(offsets.map { sorted[$0] })
-                store.changeRestrictedApps(added: [], removed: removed)
-            }
-            NavigationLink("Add placeholders") { AddRestrictedView() }
+            LabeledContent("Blocked right now", value: "\(store.effectiveRestrictions.count)")
         } header: {
-            Text("Earned Access")
+            Text("Restrictions")
         } footer: {
-            Text("Real app shielding needs Apple's Screen Time permissions, which arrive with the "
-                 + "next build. These placeholders exercise the rules: adding is always allowed, "
-                 + "removing needs full access and no hardened commitment outstanding.")
+            Text("Each Gate takes away its own things. What's actually blocked at any moment is "
+                 + "the union across every Gate that's currently unsatisfied — so an unmet "
+                 + "Hydration Gate can be far more severe than an unmet workout. Each "
+                 + "commitment's own profile lives on that commitment.\n\nReal app shielding "
+                 + "needs Apple's Screen Time permissions, which arrive with the next build; "
+                 + "these placeholders exercise the rules.")
         }
     }
 
     // MARK: - Testing
+
+    private var plansSection: some View {
+        Section {
+            if store.activePlans.isEmpty {
+                Text("No repeating plans").foregroundStyle(.secondary)
+            }
+            ForEach(store.activePlans, id: \.plan.id) { record in
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(record.plan.title).font(.subheadline.weight(.medium))
+                    Text("\(Format.weekdays(record.plan.weekdays)) · "
+                         + "\(store.state.occurrences(ofPlan: record.plan.id).count) commitments")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .onDelete { offsets in
+                for index in offsets { store.cancelPlan(store.activePlans[index].plan.id) }
+            }
+        } header: {
+            Text("Repeating plans")
+        } footer: {
+            Text("Cancelling a plan withdraws the commitments still inside their correction "
+                 + "window. Anything already hardened is a contract in its own right and stays.")
+        }
+    }
 
     private var testingSection: some View {
         Section {
@@ -140,23 +169,40 @@ struct SettingsView: View {
     }
 }
 
-/// Placeholder app names, standing in for FamilyControls tokens.
-private struct AddRestrictedView: View {
+/// Placeholder tokens, standing in for FamilyControls tokens. Editing one Gate's
+/// own profile.
+struct GateRestrictionsView: View {
     @EnvironmentObject private var store: EarnedStore
+    let gate: GateID
+    let title: String
     @State private var name = ""
 
-    private static let suggestions = ["Instagram", "YouTube", "Safari", "Chrome",
-                                      "ChatGPT", "Balatro", "Deliveroo", "TikTok"]
+    static let suggestions = ["Instagram", "YouTube", "Safari", "Chrome",
+                              "ChatGPT", "Balatro", "Deliveroo", "TikTok",
+                              "Email", "Spotify", "Maps"]
+
+    private var profile: RestrictionProfile { store.state.restrictions(of: gate) }
 
     var body: some View {
         List {
+            Section("Blocked while this Gate is unsatisfied") {
+                if profile.isEmpty { Text("Nothing").foregroundStyle(.secondary) }
+                ForEach(profile.sortedTokens, id: \.self) { token in
+                    Text(token.rawValue)
+                }
+                .onDelete { offsets in
+                    let sorted = profile.sortedTokens
+                    let removed = Set(offsets.map { sorted[$0] })
+                    store.setRestrictions(profile.removing(removed), of: gate)
+                }
+            }
             Section {
                 HStack {
                     TextField("App name", text: $name)
                     Button("Add") {
                         let trimmed = name.trimmingCharacters(in: .whitespaces)
                         guard !trimmed.isEmpty else { return }
-                        store.changeRestrictedApps(added: [trimmed], removed: [])
+                        store.setRestrictions(profile.adding([RestrictionToken(trimmed)]), of: gate)
                         name = ""
                     }
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -165,14 +211,60 @@ private struct AddRestrictedView: View {
             Section("Suggestions") {
                 ForEach(Self.suggestions, id: \.self) { suggestion in
                     Button(suggestion) {
-                        store.changeRestrictedApps(added: [suggestion], removed: [])
+                        store.setRestrictions(profile.adding([RestrictionToken(suggestion)]), of: gate)
                     }
-                    .disabled(store.state.restrictedApps.contains(suggestion))
+                    .disabled(profile.tokens.contains(RestrictionToken(suggestion)))
                 }
             }
         }
         .paperList()
-        .navigationTitle("Add")
+        .navigationTitle(title)
+        .rejectionAlert()
+    }
+}
+
+/// The profile new commitments inherit. Not a Gate itself, so it can be edited
+/// freely.
+struct DefaultRestrictionsView: View {
+    @EnvironmentObject private var store: EarnedStore
+    @State private var name = ""
+
+    private var profile: RestrictionProfile { store.state.defaultCommitmentRestrictions }
+
+    var body: some View {
+        List {
+            Section("Applied to new commitments") {
+                if profile.isEmpty { Text("Nothing").foregroundStyle(.secondary) }
+                ForEach(profile.sortedTokens, id: \.self) { Text($0.rawValue) }
+                    .onDelete { offsets in
+                        let sorted = profile.sortedTokens
+                        store.setDefaultRestrictions(
+                            profile.removing(Set(offsets.map { sorted[$0] })))
+                    }
+            }
+            Section {
+                HStack {
+                    TextField("App name", text: $name)
+                    Button("Add") {
+                        let trimmed = name.trimmingCharacters(in: .whitespaces)
+                        guard !trimmed.isEmpty else { return }
+                        store.setDefaultRestrictions(profile.adding([RestrictionToken(trimmed)]))
+                        name = ""
+                    }
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            Section("Suggestions") {
+                ForEach(GateRestrictionsView.suggestions, id: \.self) { suggestion in
+                    Button(suggestion) {
+                        store.setDefaultRestrictions(profile.adding([RestrictionToken(suggestion)]))
+                    }
+                    .disabled(profile.tokens.contains(RestrictionToken(suggestion)))
+                }
+            }
+        }
+        .paperList()
+        .navigationTitle("New commitments")
         .rejectionAlert()
     }
 }
@@ -190,11 +282,19 @@ private struct LogWorkoutView: View {
     @State private var kilometers = 5.0
     @State private var includeDistance = false
     @State private var endedMinutesAgo = 0.0
+    @State private var activity: ActivityType = .running
     @State private var logged: [Workout] = []
 
     var body: some View {
         NavigationStack {
             List {
+                Section("Activity") {
+                    Picker("Activity", selection: $activity) {
+                        ForEach(ActivityType.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                }
                 Section("Duration") {
                     Text("\(Int(minutes)) minutes")
                     Slider(value: $minutes, in: 5...180, step: 5)
@@ -247,7 +347,7 @@ private struct LogWorkoutView: View {
 
     private func record() {
         let end = Date().addingTimeInterval(-endedMinutesAgo * 60)
-        let workout = Workout(activityType: "manual",
+        let workout = Workout(activity: activity,
                               start: end.addingTimeInterval(-minutes * 60),
                               end: end,
                               distanceMeters: includeDistance ? kilometers * 1000 : nil)

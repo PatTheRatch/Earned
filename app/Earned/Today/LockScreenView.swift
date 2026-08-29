@@ -10,11 +10,10 @@ struct LockScreenView: View {
 
     var body: some View {
         Group {
-            switch store.access {
-            case .full:
+            if store.access.isFullAccess {
                 earned
-            case .restricted(let reasons):
-                locked(reasons)
+            } else {
+                locked(store.access.lockReasons)
             }
         }
     }
@@ -98,7 +97,7 @@ struct LockScreenView: View {
     }
 
     private func headline(for reason: LockReason) -> String {
-        switch reason.source {
+        switch reason.gate {
         case .hydration: return "Drink some water"
         case .commitment: return reason.headline
         }
@@ -163,22 +162,16 @@ struct OverrideMenu: View {
                 Text("Solo override available \(Format.relative(soloAt, from: store.now))")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.muted)
-            } else if let startedAt = request.soloStartedAt {
-                let friction = store.state.soloFriction(forRequest: request.id,
-                                                        ifStartedAt: startedAt) ?? 0
-                let completeAt = startedAt.addingTimeInterval(friction)
-                if store.now < completeAt {
-                    Text("Solo override in progress — \(Format.relative(completeAt, from: store.now))")
+            } else if request.soloStartedAt != nil {
+                SoloFrictionRow(request: request)
+            } else {
+                if let requirement = store.state.soloFriction(forRequest: request.id,
+                                                              ifStartedAt: store.now) {
+                    Text("Costs \(requirement.effortUnits) taps of held attention, "
+                         + "over at least \(Format.duration(requirement.minimumElapsed)).")
                         .font(.system(size: 12))
                         .foregroundStyle(Theme.muted)
-                } else {
-                    Button("COMPLETE SOLO OVERRIDE") {
-                        store.append(.soloOverrideCompleted(requestID: request.id))
-                    }
-                    .font(.system(size: 12, weight: .bold))
-                    .tint(Theme.ink)
                 }
-            } else {
                 Button("START SOLO OVERRIDE") {
                     store.append(.soloOverrideStarted(requestID: request.id))
                 }
@@ -190,6 +183,57 @@ struct OverrideMenu: View {
                  + "solo route is the only one that ends in an unlock.")
                 .font(.system(size: 11))
                 .foregroundStyle(Theme.muted.opacity(0.7))
+        }
+    }
+}
+
+
+/// The active-friction challenge, in its simplest honest form: the user has to
+/// actually produce effort, one deliberate act at a time, and the elapsed floor
+/// still applies.
+///
+/// **This is a test implementation.** The final friction mechanic is an open
+/// product-design surface (docs/earnedkit-semantics.md) — what matters here is
+/// that the domain now requires measurable effort, so the UX can be replaced
+/// without touching the rules.
+struct SoloFrictionRow: View {
+    @EnvironmentObject private var store: EarnedStore
+    let request: OverrideRequest
+
+    var body: some View {
+        let requirement = request.soloRequirement ?? FrictionRequirement(effortUnits: 0, minimumElapsed: 0)
+        let remaining = request.soloUnitsRemaining ?? 0
+        let completableAt = (request.soloStartedAt ?? store.now)
+            .addingTimeInterval(requirement.minimumElapsed)
+        let timeLeft = completableAt.timeIntervalSince(store.now)
+
+        VStack(alignment: .leading, spacing: 6) {
+            Text("\(request.soloEffortUnits) / \(requirement.effortUnits) effort")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(Theme.ink)
+            if timeLeft > 0 {
+                Text("Earliest finish \(Format.relative(completableAt, from: store.now)).")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.muted)
+            }
+
+            if remaining > 0 {
+                Button("KEEP GOING") {
+                    store.recordFrictionProgress(requestID: request.id)
+                }
+                .font(.system(size: 12, weight: .bold))
+                .tint(Theme.ink)
+            } else if timeLeft > 0 {
+                Text("Effort done. The clock is not.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.muted)
+            } else {
+                Button("COMPLETE SOLO OVERRIDE") {
+                    store.append(.soloOverrideCompleted(requestID: request.id))
+                }
+                .font(.system(size: 12, weight: .bold))
+                .tint(Theme.signal)
+            }
         }
     }
 }

@@ -23,6 +23,41 @@ struct CommitmentDetailView: View {
     @State private var loaded = false
 
     private enum RequirementKind: Hashable { case any, duration, distance }
+    @State private var activity: ActivityFilterChoice = .any
+    private enum ActivityFilterChoice: Hashable, CaseIterable {
+        case any, running, walking, cycling, strength
+        var filter: ActivityFilter {
+            switch self {
+            case .any: return .any
+            case .running: return .only(.running)
+            case .walking: return .only(.walking)
+            case .cycling: return .only(.cycling)
+            case .strength: return .only(.strength)
+            }
+        }
+        var label: String {
+            switch self {
+            case .any: return "Any workout"
+            case .running: return "Running"
+            case .walking: return "Walking"
+            case .cycling: return "Cycling"
+            case .strength: return "Strength"
+            }
+        }
+        init(_ filter: ActivityFilter) {
+            switch filter {
+            case .any: self = .any
+            case .types(let set):
+                switch set.first {
+                case .running: self = .running
+                case .walking: self = .walking
+                case .cycling: self = .cycling
+                case .strength: self = .strength
+                default: self = .any
+                }
+            }
+        }
+    }
 
     private var record: CommitmentRecord? { store.state.commitments[commitmentID] }
 
@@ -59,6 +94,8 @@ struct CommitmentDetailView: View {
                 if let progress, progress.required > 0 {
                     LabeledContent("Progress", value: Format.progress(progress))
                 }
+                LabeledContent("Counts from",
+                               value: Format.deadline(commitment.eligibleFrom, from: store.now))
                 LabeledContent(hardened ? "Hardened" : "Hardens") {
                     Text(hardened ? "Yes — only harder edits allowed"
                                   : Format.relative(commitment.hardensAt, from: store.now))
@@ -110,7 +147,7 @@ struct CommitmentDetailView: View {
                 Text("Rewards")
             }
 
-            restrictedAppsSection
+            restrictionsSection(for: record)
 
             if record.resolution == nil {
                 Section("Ways out") {
@@ -131,6 +168,15 @@ struct CommitmentDetailView: View {
 
     @ViewBuilder
     private func requirementEditor(current: Requirement, hardened: Bool) -> some View {
+        if hardened {
+            LabeledContent("Counts", value: current.activity.displayName)
+        } else {
+            Picker("Counts", selection: Binding(
+                get: { activity },
+                set: { activity = $0; saveRequirement() })) {
+                ForEach(ActivityFilterChoice.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+        }
         switch kind {
         case .any:
             if hardened {
@@ -171,35 +217,39 @@ struct CommitmentDetailView: View {
     }
 
     private func minDuration(_ current: Requirement) -> Double {
-        if case .totalDuration(let seconds) = current { return max(5, seconds / 60) }
+        if case .totalDuration(let seconds) = current.metric { return max(5, seconds / 60) }
         return 5
     }
 
     private func minDistance(_ current: Requirement) -> Double {
-        if case .totalDistance(let meters) = current { return max(0.5, meters / 1000) }
+        if case .totalDistance(let meters) = current.metric { return max(0.5, meters / 1000) }
         return 0.5
     }
 
     private var requirementValue: Requirement {
         switch kind {
-        case .any: return .anyWorkout
-        case .duration: return .totalDuration(minutes * 60)
-        case .distance: return .totalDistance(kilometers * 1000)
+        case .any: return Requirement(activity: activity.filter, metric: .anyQualifyingWorkout)
+        case .duration: return Requirement(activity: activity.filter, metric: .totalDuration(minutes * 60))
+        case .distance: return Requirement(activity: activity.filter, metric: .totalDistance(kilometers * 1000))
         }
     }
 
     @ViewBuilder
-    private var restrictedAppsSection: some View {
+    private func restrictionsSection(for record: CommitmentRecord) -> some View {
         Section {
-            if store.state.restrictedApps.isEmpty {
-                Text("Nothing restricted yet").foregroundStyle(.secondary)
+            if record.commitment.restrictions.isEmpty {
+                Text("Nothing").foregroundStyle(.secondary)
             } else {
-                ForEach(store.state.restrictedApps.sorted(), id: \.self) { Text($0) }
+                ForEach(record.commitment.restrictions.sortedTokens, id: \.self) {
+                    Text($0.rawValue)
+                }
             }
         } header: {
-            Text("What's gated")
+            Text("What this Gate takes")
         } footer: {
-            Text("Every active Gate shares one restricted set — manage it in Settings.")
+            Text("This Gate's own profile. While it is unsatisfied these are blocked, on top of "
+                 + "whatever any other closed Gate blocks. Adding is always allowed; removing "
+                 + "needs full access and nothing hardened outstanding.")
         }
     }
 
@@ -227,8 +277,9 @@ struct CommitmentDetailView: View {
         deadline = commitment.deadline
         approvals = commitment.overridePolicy.approvalsRequired
         accountabilityMinutes = commitment.overridePolicy.accountabilityWindow / 60
-        switch commitment.requirement {
-        case .anyWorkout:
+        activity = ActivityFilterChoice(commitment.requirement.activity)
+        switch commitment.requirement.metric {
+        case .anyQualifyingWorkout:
             kind = .any
         case .totalDuration(let seconds):
             kind = .duration

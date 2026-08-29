@@ -23,9 +23,22 @@ public enum EarnedError: Error, Equatable, CustomStringConvertible {
     // Workouts
     case invalidWorkout(String)
 
-    // Restricted set
-    /// Removals require Full Access and no hardened, unresolved commitment.
-    case restrictedRemovalNotAllowed(String)
+    // Restrictions
+    /// Loosening a Gate's restriction profile requires Full Access and no
+    /// hardened, unresolved commitment.
+    case restrictionsLooseningNotAllowed(String)
+
+    // Rewards
+    /// Making the reward policy easier requires Full Access and no hardened,
+    /// unresolved commitment — otherwise a locked user could manufacture an
+    /// escape route by lowering the streak threshold.
+    case rewardPolicyEasingNotAllowed(String)
+    case invalidRewardPolicy(String)
+
+    // Plans
+    case planNotFound(UUID)
+    case planAlreadyCancelled(UUID)
+    case invalidPlan(String)
 
     // Overrides
     case insufficientFreeOverrides
@@ -36,7 +49,10 @@ public enum EarnedError: Error, Equatable, CustomStringConvertible {
     case soloOverrideNotYetAvailable(availableAt: Date)
     case soloOverrideAlreadyStarted(UUID)
     case soloOverrideNotStarted(UUID)
-    case soloOverrideFrictionIncomplete(completableAt: Date)
+    /// The active-friction challenge is not finished: effort and/or the minimum
+    /// elapsed floor are still outstanding.
+    case soloOverrideFrictionIncomplete(unitsRemaining: Int, completableAt: Date)
+    case invalidFrictionProgress(String)
 
     public var description: String {
         switch self {
@@ -58,8 +74,18 @@ public enum EarnedError: Error, Equatable, CustomStringConvertible {
             return "Commitment \(id) has hardened and can no longer be cancelled."
         case .invalidWorkout(let reason):
             return "Invalid workout: \(reason)"
-        case .restrictedRemovalNotAllowed(let reason):
-            return "Restricted apps cannot be removed: \(reason)"
+        case .restrictionsLooseningNotAllowed(let reason):
+            return "Restrictions cannot be loosened: \(reason)"
+        case .rewardPolicyEasingNotAllowed(let reason):
+            return "Reward policy cannot be made easier: \(reason)"
+        case .invalidRewardPolicy(let reason):
+            return "Invalid reward policy: \(reason)"
+        case .planNotFound(let id):
+            return "No plan with id \(id)."
+        case .planAlreadyCancelled(let id):
+            return "Plan \(id) is already cancelled."
+        case .invalidPlan(let reason):
+            return "Invalid plan: \(reason)"
         case .insufficientFreeOverrides:
             return "No Free Override available."
         case .overrideRequestNotFound(let id):
@@ -76,8 +102,11 @@ public enum EarnedError: Error, Equatable, CustomStringConvertible {
             return "Solo override already started for request \(id)."
         case .soloOverrideNotStarted(let id):
             return "Solo override has not been started for request \(id)."
-        case .soloOverrideFrictionIncomplete(let completableAt):
-            return "Solo override friction not yet complete; completable at \(completableAt)."
+        case .soloOverrideFrictionIncomplete(let unitsRemaining, let completableAt):
+            return "Solo override friction not complete: \(unitsRemaining) effort remaining, "
+                + "and not before \(completableAt)."
+        case .invalidFrictionProgress(let reason):
+            return "Invalid friction progress: \(reason)"
         }
     }
 }

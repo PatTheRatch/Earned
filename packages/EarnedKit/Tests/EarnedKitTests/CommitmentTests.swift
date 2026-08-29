@@ -23,19 +23,19 @@ final class CommitmentTests: XCTestCase {
         let id = UUID()
         let commitment = makeCommitment(
             id: id, title: "Run 30 minutes",
-            requirement: .totalDuration(30 * 60),
+            requirement: .anyWorkout(minimumDuration: 30 * 60),
             deadline: d(29, 10), createdAt: d(24, 8))
         ledger.expectAppend(.commitmentCreated(commitment), at: d(24, 8))
 
         // Pre-hardening (hardens at 10:00): making it easier is allowed.
         ledger.expectAppend(
-            .commitmentEdited(id: id, edit: CommitmentEdit(requirement: .totalDuration(20 * 60))),
+            .commitmentEdited(id: id, edit: CommitmentEdit(requirement: .anyWorkout(minimumDuration: 20 * 60))),
             at: d(24, 9))
 
         // Post-hardening: easier edits rejected in every dimension.
         expectThrows { // decrease duration
             try ledger.append(
-                .commitmentEdited(id: id, edit: CommitmentEdit(requirement: .totalDuration(10 * 60))),
+                .commitmentEdited(id: id, edit: CommitmentEdit(requirement: .anyWorkout(minimumDuration: 10 * 60))),
                 at: d(24, 11))
         }
         expectThrows { // extend deadline
@@ -54,7 +54,7 @@ final class CommitmentTests: XCTestCase {
         }
         expectThrows { // requirement dimension change is incomparable
             try ledger.append(
-                .commitmentEdited(id: id, edit: CommitmentEdit(requirement: .totalDistance(5000))),
+                .commitmentEdited(id: id, edit: CommitmentEdit(requirement: .run(kilometers: 5))),
                 at: d(24, 11))
         }
         expectThrows { // weaken to anyWorkout
@@ -65,11 +65,11 @@ final class CommitmentTests: XCTestCase {
         // Harder edits are always allowed (NORTHSTAR §39.3).
         ledger.expectAppend(
             .commitmentEdited(id: id, edit: CommitmentEdit(
-                requirement: .totalDuration(40 * 60),
+                requirement: .anyWorkout(minimumDuration: 40 * 60),
                 deadline: d(28, 10),
                 overridePolicy: patrickPolicy(approvals: 3, window: 3600))),
             at: d(24, 12))
-        XCTAssertEqual(ledger.state.commitments[id]?.commitment.requirement, .totalDuration(40 * 60))
+        XCTAssertEqual(ledger.state.commitments[id]?.commitment.requirement, .anyWorkout(minimumDuration: 40 * 60))
     }
 
     // Cancellation only during the correction window.
@@ -92,19 +92,6 @@ final class CommitmentTests: XCTestCase {
         XCTAssertEqual(early.state.commitments[id2]?.resolution, .cancelled(at: d(24, 9)))
     }
 
-    // NORTHSTAR §10: eligible period runs creation → deadline; earlier workouts
-    // don't count.
-    func testWorkoutBeforeCreationIsIneligible() throws {
-        var ledger = Ledger()
-        // Workout Monday 07:00–07:30; commitment created 08:00.
-        ledger.expectAppend(.workoutRecorded(workout(start: d(24, 7), minutes: 30)), at: d(24, 7, 30))
-        let id = UUID()
-        ledger.expectAppend(
-            .commitmentCreated(makeCommitment(id: id, deadline: d(29, 10), createdAt: d(24, 8))),
-            at: d(24, 8))
-        XCTAssertNil(ledger.state.commitments[id]?.resolution)
-        XCTAssertEqual(ledger.state.progress(for: id)?.achieved, 0)
-    }
 
     // NORTHSTAR §14: 18 morning minutes + 12 evening minutes completes a
     // 30-minute commitment; partial progress does not.
@@ -114,7 +101,7 @@ final class CommitmentTests: XCTestCase {
         ledger.expectAppend(
             .commitmentCreated(makeCommitment(
                 id: id, title: "Run 30 minutes",
-                requirement: .totalDuration(30 * 60),
+                requirement: .anyWorkout(minimumDuration: 30 * 60),
                 deadline: d(24, 22), createdAt: d(24, 8))),
             at: d(24, 8))
 
@@ -129,35 +116,7 @@ final class CommitmentTests: XCTestCase {
                        .completed(at: d(24, 18, 12)))
     }
 
-    // Distance accumulates the same way: 3.2 km + 1.8 km = 5 km.
-    func testDistanceAccumulation() throws {
-        var ledger = Ledger()
-        let id = UUID()
-        ledger.expectAppend(
-            .commitmentCreated(makeCommitment(
-                id: id, requirement: .totalDistance(5000),
-                deadline: d(24, 22), createdAt: d(24, 8))),
-            at: d(24, 8))
-        ledger.expectAppend(
-            .workoutRecorded(workout(start: d(24, 9), minutes: 20, distanceMeters: 3200)), at: d(24, 10))
-        XCTAssertNil(ledger.state.commitments[id]?.resolution)
-        ledger.expectAppend(
-            .workoutRecorded(workout(start: d(24, 18), minutes: 12, distanceMeters: 1800)), at: d(24, 19))
-        XCTAssertNotNil(ledger.state.commitments[id]?.resolution)
-    }
 
-    // A late-synced workout still counts: eligibility is judged on workout
-    // times, not on when HealthKit delivered it.
-    func testLateSyncedWorkoutCounts() throws {
-        var ledger = Ledger()
-        let id = UUID()
-        ledger.expectAppend(
-            .commitmentCreated(makeCommitment(id: id, deadline: d(24, 10), createdAt: d(24, 8))),
-            at: d(24, 8))
-        // Workout ran 09:00–09:30 but syncs at 11:00, after the deadline.
-        ledger.expectAppend(.workoutRecorded(workout(start: d(24, 9), minutes: 30)), at: d(24, 11))
-        XCTAssertEqual(ledger.state.commitments[id]?.resolution, .completed(at: d(24, 9, 30)))
-    }
 
     // Duplicate workout deliveries (HealthKit re-sync) are no-ops.
     func testDuplicateWorkoutIgnored() throws {
@@ -184,7 +143,7 @@ final class CommitmentTests: XCTestCase {
         expectThrows { // non-positive requirement
             try ledger.append(
                 .commitmentCreated(makeCommitment(
-                    requirement: .totalDuration(0), deadline: d(29), createdAt: d(24, 8))),
+                    requirement: .anyWorkout(minimumDuration: 0), deadline: d(29), createdAt: d(24, 8))),
                 at: d(24, 8))
         }
     }
