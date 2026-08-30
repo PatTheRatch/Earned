@@ -12,3 +12,6 @@ The two root documents outrank everything here: [NORTHSTAR.md](../NORTHSTAR.md) 
   palette, type, and the voice-restraint rules.
 - [`earnedkit-semantics.md`](earnedkit-semantics.md) — the rules the engine had to decide
   that the north star leaves open.
+- [`accountability-architecture.md`](accountability-architecture.md) — the design and threat
+  model for networked Accountability Overrides. **Proposed, not built** — the open decisions
+  in its last sections are unanswered.
