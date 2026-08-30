@@ -202,6 +202,34 @@ Nothing is silently reinterpreted:
   schema version and write a migration.
 - A document from a *newer* schema is refused rather than half-read.
 
+## Enforcement
+
+EarnedKit still knows nothing about apps — a `RestrictionToken` is an opaque
+string, and the whole Screen Time adapter lives in the app layer.
+
+- **Tokens are stored as `kind:base64`** (`app:`, `cat:`, `web:`), so one
+  profile carries applications, categories and web domains and still round-trips
+  into Apple's picker. The payload is an encoded FamilyControls token, opaque to
+  Earned as well as to the ledger.
+- **Earned never learns which apps are blocked.** The picker runs in a system
+  process and returns tokens carrying no name or bundle id. Every screen counts
+  restrictions rather than naming them, because naming them is impossible
+  (NORTHSTAR §34).
+- **Placeholder tokens typed before app picking existed are kept, not deleted.**
+  They shield nothing — they never did — but they record what the user said they
+  wanted blocked, and quietly dropping that would be the app discarding a
+  decision the user made. They are shown as `NOT BLOCKING` with an invitation to
+  re-pick, and can be deleted by hand.
+- **Enforcement fails closed.** A shield written to `ManagedSettingsStore`
+  persists until something changes it, so if Earned is never opened again the
+  restriction stays. For a commitment app that is the right direction to fail:
+  locked out slightly too long, never let off early.
+- **[open] A Gate that closes while Earned isn't running is not shielded until
+  the app next opens.** The shield is applied by the app, and a deadline passing
+  at 10:00 with the app closed has nothing to act on it. A `DeviceActivityMonitor`
+  extension is the fix and is the next piece of work; until then this is a real
+  hole in enforcement, and it is documented rather than papered over.
+
 ## Clocks
 
 - **An event is recorded no earlier than the ledger's newest entry.** Real

@@ -98,8 +98,9 @@ Getting the phone into that list, first time only:
 2. **Enable Developer Mode on the phone**: Settings → Privacy & Security → Developer Mode →
    on, then restart the phone. This option only appears after the phone has been connected to
    Xcode once, so do step 1 first.
-3. **Sign in to Xcode**: Xcode menu → Settings… → Accounts → **+** → Apple ID. A free account
-   is fine.
+3. **Sign in to Xcode**: Xcode menu → Settings… → Accounts → **+** → Apple ID. This must be
+   the account enrolled in the Apple Developer Program — the project now requests the Family
+   Controls entitlement, which a free account cannot provision.
 4. **Set the signing team**: in Xcode, select the blue `Earned` project in the left sidebar →
    the `Earned` target → **Signing & Capabilities** → tick *Automatically manage signing* and
    pick your name under **Team**. If it complains the bundle identifier is unavailable, change
@@ -108,13 +109,12 @@ Getting the phone into that list, first time only:
 5. **Run** (▶︎ or ⌘R). The first launch fails with "Untrusted Developer" — on the phone go to
    Settings → General → VPN & Device Management → tap your Apple ID → **Trust**, then run again.
 
-With a free account the app stops launching after **7 days** and you re-run it from Xcode to
-refresh. Enrolling in the Apple Developer Program ($99/yr) removes that, and is required
-anyway before enforcement (step 3) can reach the phone.
+A paid membership signs builds for a year. (On a free account builds expired after 7 days —
+and can no longer sign this target at all, since Family Controls needs a paid team.)
 
-Want to see it without any of this? Pick any simulator in that same destination menu — it runs
-immediately, no signing, no phone. Everything in this build works there except that it's not
-on your actual phone.
+Want to see it without a phone? Pick any simulator in that destination menu. Everything works
+there **except the shield** — Screen Time authorization fails on the simulator, so Earned will
+show its Gates and report that enforcement is off.
 
 ## What's here now
 
@@ -125,23 +125,37 @@ on your actual phone.
 | Lock screen | The receipt: exactly which Gates are closed and what's left |
 | New Commitment | One decision per screen, ending in a hardening deadline |
 | History | Streak, debt, 30-day reliability, every commitment and its outcome |
-| Settings | Hydration config, reward policy, restricted-app placeholders, manual workout logging |
+| Settings | Hydration config, reward policy, app/website picking, plans, manual workout logging |
 
-## What's deliberately missing
+## Enforcement
 
-This build has **no enforcement**. It tracks Gates and tells you exactly what *would* be
-locked, but nothing is shielded yet, because that needs Apple's Screen Time entitlements:
+Real shielding is on. Settings → Restrictions → grant Screen Time access, then pick apps and
+websites per Gate in Apple's own picker. When a Gate is unsatisfied, the union of every closed
+Gate's picks is shielded by `ManagedSettingsStore`.
 
-- **FamilyControls / ManagedSettings / DeviceActivity** — app selection and real shielding
-  (roadmap step 3). Requires the Family Controls capability and, for TestFlight, Apple's
-  approval of the distribution entitlement.
-- **HealthKit** — workout verification (step 4). Until then, Settings → Testing logs a
-  workout by hand so the full loop can be exercised.
-- **Accountability partners** — the approve/deny links need the Supabase backend (step 5).
-  Free and Solo overrides work today.
+The picker runs in a separate process and returns **opaque tokens**: Earned can shield an app
+without ever learning which app it is. That is the Screen Time privacy guarantee (NORTHSTAR
+§34), and it is why these screens count restrictions rather than naming them.
 
-Keeping those capabilities out of the project means this target builds and runs on a free
-account with no entitlement paperwork. They arrive with the steps that need them.
+**One real gap.** The shield is applied by the app, so a Gate that closes while Earned isn't
+running won't be shielded until the app next opens. A `DeviceActivityMonitor` extension fixes
+this and is the next step. Note the failure direction: a shield already applied *stays*
+applied, so the gap can leave you locked slightly too long — never let off early.
+
+**Before TestFlight or the App Store**, request **Family Controls (Distribution)** in the
+developer portal — per bundle id, and separately for each Screen Time extension. Apple reviews
+it by hand; allow a few days to a few weeks. Family Controls (Development), which is all this
+build needs, is self-serve.
+
+## What's still missing
+
+- **A custom shield screen.** Blocked apps currently show Apple's default shield. The
+  `NICE TRY.` surface reserved in `docs/design-language.md` needs a `ShieldConfiguration`
+  extension.
+- **HealthKit** — workout verification. Until then, Settings → Testing logs a workout by hand
+  so the full loop can be exercised.
+- **Accountability partners** — the approve/deny links need the Supabase backend. Free and
+  Solo overrides work today.
 
 ## Where state lives
 

@@ -22,13 +22,16 @@ trusted. Re-verify against the code when it drifts.
 | All six screens, poster identity, persistence | **Real** | Ledger saved as versioned JSON, replayed and re-validated on launch |
 | Deadline warnings | **Real** | Local notifications; no entitlement needed. Informational only — no snooze |
 | Workout verification | *Stub* | Logged by hand in Settings; HealthKit is step 4 |
-| Restriction tokens | *Stub* | Typed-in names, not real `ApplicationToken`s; the rules around them are real |
-| Enforcement — anything actually being blocked | **Missing** | Needs FamilyControls entitlement + paid account; step 3 |
+| Restriction tokens | **Real** | Apple's picker; opaque tokens Earned itself cannot read |
+| Enforcement — apps actually blocked | **Real** | `ManagedSettingsStore` shields the union of closed Gates |
+| Enforcement while the app is closed | **Missing** | A Gate closing with Earned not running waits for next launch; needs `DeviceActivityMonitor` |
+| Custom shield screen (`NICE TRY.`) | **Missing** | Blocked apps show Apple's default shield; needs a `ShieldConfiguration` extension |
 | Accountability partners | **Missing** | State machine exists; no way to send or collect approvals; step 5 |
 
-**One-sentence version:** the contract machinery is real and now models the right product,
-the identity is real, and the whole loop can be driven by hand — but nothing is enforced
-yet, so today the app *tells you* you're locked rather than locking anything.
+**One-sentence version:** the contract machinery is real, the identity is real, and Earned
+now actually takes apps away when a Gate is closed — the remaining holes are that a Gate
+closing while the app isn't running waits for the next launch, and workouts are still logged
+by hand.
 
 ---
 
@@ -42,14 +45,14 @@ xcodegen generate --spec app/project.yml --project app
 open app/Earned.xcodeproj
 ```
 
-Pick the iPhone in Xcode's toolbar destination menu and run. The project deliberately
-declares **no** Screen Time or HealthKit capabilities, which is why it installs on a free
-Apple account with no entitlement paperwork.
+Pick the iPhone in Xcode's toolbar destination menu and run. The project requests the
+**Family Controls** entitlement, so the Apple ID signing it must be enrolled in the Apple
+Developer Program — a free account can't provision it. Family Controls (Development) is
+self-serve once enrolled; shipping needs the Distribution entitlement, reviewed by hand.
 
-> Source: `app/project.yml`, `app/README.md`
+> Source: `app/project.yml`, `app/Earned/Earned.entitlements`, `app/README.md`
 
-Two consequences already in play: builds signed with a free account stop launching after
-**7 days**, and every `git pull` needs that `xcodegen generate` or Xcode won't see new files.
+Every `git pull` needs that `xcodegen generate` or Xcode won't see new files.
 
 ---
 
@@ -77,7 +80,7 @@ tests instead of shipping.
 | **DO WHAT MATTERS FIRST.** | The pitch: you decide the deal while thinking clearly, Earned remembers it later. |
 | **GATES** | Every active Gate must be satisfied for full access. Calls, messages, maps, music never go behind one. |
 | **HYDRATION** | The only screen that collects input. Two sliders. |
-| **WHAT GETS RESTRICTED** | Each Gate takes away its own things; whatever is unsatisfied, you lose the sum of it. Admits app-picking arrives with the next build. |
+| **WHAT GETS RESTRICTED** | Each Gate takes away its own things; whatever is unsatisfied, you lose the sum of it. Points at Settings to grant Screen Time and pick apps. |
 | **THE DEAL** | Correction window, harder-only edits, missing a deadline doesn't clear it. |
 
 Only the hydration screen writes anything. Defaults are a **60-minute** interval
@@ -87,9 +90,10 @@ Only the hydration screen writes anything. Defaults are a **60-minute** interval
 
 Tapping **ACTIVATE EARNED** appends one `hydrationConfigured` event and flips the flag.
 
-**What doesn't happen:** onboarding never asks for a first commitment, and never asks which
-apps to restrict. NORTHSTAR §28 lists both — a deliberate gap to close once app-picking is
-real.
+**What doesn't happen:** onboarding never asks for a first commitment, never asks which apps
+to restrict, and never requests Screen Time — all three happen later in Settings. NORTHSTAR
+§28 puts them in the onboarding journey, so this is still a gap; now that app picking is real
+it is a gap worth closing.
 
 ---
 
@@ -413,25 +417,26 @@ Against the north star's MVP list (§35):
 | Hydration gate — rolling timer, self-attested, hard restriction | Logic done, restriction missing |
 | Exercise — deadline, verification, persistent debt | Logic done, verification stubbed |
 | Correction window, hardened commitments, harder-only edits | Done |
-| Per-Gate restriction profiles | Logic done; tokens are strings until Screen Time lands |
+| Per-Gate restriction profiles | Done, with real Screen Time tokens |
 | Recurring commitments | Done |
-| User-selected restricted apps + shielding | Not started (step 3) |
+| User-selected restricted apps + shielding | Done (app-driven; background transitions pending) |
 | Guided onboarding, Today, lock explanation, history | Done |
 | Per-Gate warnings before a deadline (§20) | Done |
 | Apple Health workout verification | Not started (step 4) |
 
-**Every remaining hard problem is on the far side of the Apple Developer Program.** Family
-Controls won't provision on a free account at all, so enforcement — the actual product —
-can't be tested until enrollment. Everything built so far was deliberately chosen to be
-buildable without it.
+**The Developer Program enrollment landed, and enforcement went in with it.** Earned now
+takes apps away rather than describing what it would take away. What remains:
 
-Two candidates for what's next:
+1. **`DeviceActivityMonitor` extension.** The one real hole in enforcement: a Gate that
+   closes while Earned isn't running isn't shielded until the app next opens. This also
+   moves the ledger to a shared App Group container so the extension can read gate state —
+   `Store/LedgerStorage.swift` exists to make that a one-file change.
+2. **`ShieldConfiguration` extension.** Blocked apps currently show Apple's default shield.
+   The `NICE TRY.` surface has been reserved in `docs/design-language.md` since the identity
+   pass for exactly this moment — the one place the loud voice is earned, because the user
+   just reached for a restricted app.
+3. **HealthKit verification.** Removes the last stub in the daily loop. `ActivityType`
+   already exists for `HKWorkoutActivityType` to map onto, and the paid account now covers it.
 
-1. **Enforcement.** The one that makes it a product rather than a tracker. `RestrictionToken`
-   is already shaped to hold a real `ApplicationToken`, so this is adapter work plus
-   entitlement paperwork. Blocked on the $99 enrollment.
-2. **HealthKit verification.** Removes the last stub in the daily loop. `ActivityType`
-   already exists for `HKWorkoutActivityType` to map onto. Also needs the paid account.
-
-The backend (accountability partners) is fully buildable from here without an Apple
-account, but it unblocks the rung nobody can use alone anyway.
+The backend (accountability partners) is still fully buildable, but it unblocks the rung
+nobody can use alone anyway.

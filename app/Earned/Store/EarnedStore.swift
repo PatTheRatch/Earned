@@ -25,8 +25,14 @@ final class EarnedStore: ObservableObject {
     private static let onboardedKey = "earned.hasOnboarded"
     private let storage: LedgerStorage
     private let notifications: NotificationScheduler
+    private let screenTime: ScreenTimeController
     private var ticker: AnyCancellable?
     private var authorizationObserver: AnyCancellable?
+    private var shieldObserver: AnyCancellable?
+
+    /// Whether Earned can actually block anything. Surfaced so the app never
+    /// claims a Gate is enforcing when Screen Time has not been granted.
+    @Published private(set) var shielding: ScreenTimeController.Authorization = .notDetermined
 
     /// Whether warnings the user configured can actually be delivered. Surfaced
     /// so the app never presents a warning toggle as working when it isn't.
@@ -36,8 +42,10 @@ final class EarnedStore: ObservableObject {
 
     init(storage: LedgerStorage = .documents()) {
         let notifications = NotificationScheduler()
+        let screenTime = ScreenTimeController()
         self.storage = storage
         self.notifications = notifications
+        self.screenTime = screenTime
         self.hasOnboarded = UserDefaults.standard.bool(forKey: Self.onboardedKey)
         switch storage.load() {
         case .loaded(let ledger):
@@ -54,7 +62,21 @@ final class EarnedStore: ObservableObject {
             .autoconnect()
             .sink { [weak self] date in
                 // Timer.publish(on: .main) always delivers on the main thread.
-                MainActor.assumeIsolated { self?.now = date }
+                MainActor.assumeIsolated {
+                    self?.now = date
+                    // A Gate can close with nobody touching the phone — a
+                    // deadline simply passing — so the shield follows the
+                    // clock, not just user actions. Applying is a no-op when
+                    // nothing changed.
+                    self?.syncShield()
+                }
+            }
+        shieldObserver = screenTime.$authorization
+            .sink { [weak self] status in
+                MainActor.assumeIsolated {
+                    self?.shielding = status
+                    self?.syncShield()
+                }
             }
         authorizationObserver = notifications.$authorization
             .sink { [weak self] status in
@@ -62,7 +84,39 @@ final class EarnedStore: ObservableObject {
                 // on the main thread — same contract as the ticker above.
                 MainActor.assumeIsolated { self?.warningDelivery = status }
             }
+        refreshShielding()
         Task { await self.refreshWarnings() }
+    }
+
+    // MARK: - Enforcement
+
+    /// Puts the currently-unsatisfied Gates' restrictions into force.
+    ///
+    /// EarnedKit already computed the answer — `effectiveRestrictions` is the
+    /// union across every closed Gate — so this only hands it to the system.
+    private func syncShield() {
+        guard shielding.canShield else { return }
+        screenTime.apply(access.effectiveRestrictions)
+    }
+
+    /// Re-reads Screen Time permission, which can be revoked in iOS Settings
+    /// while Earned isn't running, and re-applies whatever should be in force.
+    func refreshShielding() {
+        screenTime.refreshAuthorization()
+        if shielding.canShield {
+            syncShield()
+        } else {
+            // Holding restrictions the user can no longer manage would be a trap.
+            screenTime.clear()
+        }
+    }
+
+    /// Asks for Screen Time permission. Called from onboarding and Settings —
+    /// never silently, since this is the permission that lets Earned actually
+    /// take something away.
+    func requestShieldingAuthorization() async {
+        await screenTime.requestAuthorization()
+        refreshShielding()
     }
 
     // MARK: - Warnings
@@ -149,6 +203,9 @@ final class EarnedStore: ObservableObject {
         // a workout that resolves one, water that restarts the rolling timer.
         let warnings = plannedWarnings
         Task { await notifications.reschedule(warnings) }
+        // Drinking water or finishing a run should lift the shield now, not on
+        // the next tick.
+        syncShield()
         return true
     }
 

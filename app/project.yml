@@ -15,6 +15,9 @@ targets:
     platform: iOS
     sources:
       - path: Earned
+        # Referenced by CODE_SIGN_ENTITLEMENTS, not bundled as a resource.
+        excludes:
+          - "Earned.entitlements"
     dependencies:
       - package: EarnedKit
         product: EarnedKit
@@ -25,6 +28,16 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+    # Screen Time. Family Controls (Development) is self-serve once enrolled in
+    # the Apple Developer Program — no approval needed to build and run on your
+    # own device. Shipping to TestFlight or the App Store additionally needs
+    # Family Controls (Distribution), which Apple reviews by hand, per bundle
+    # id and separately for each Screen Time extension. See app/README.md.
+    #
+    # Checked in rather than generated from `properties`, so a change to what
+    # Earned is allowed to do shows up in a diff.
+    entitlements:
+      path: Earned/Earned.entitlements
     settings:
       base:
         # Must be globally unique across all of Apple's developer accounts.

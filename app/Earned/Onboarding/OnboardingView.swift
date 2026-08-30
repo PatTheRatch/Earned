@@ -85,9 +85,10 @@ struct OnboardingView: View {
             Screen(title: "What gets restricted",
                    message: "Every Gate takes away its own things. An unmet workout can leave maps "
                        + "and music alone; unmet water can strip the phone back to calls and "
-                       + "messages. Whatever is unsatisfied, you lose the sum of it.\n\nChoosing "
-                       + "the actual apps needs Apple's Screen Time permissions, which arrive in "
-                       + "the next build. Until then Earned tracks your Gates and tells you "
+                       + "messages. Whatever is unsatisfied, you lose the sum of it.\n\nYou pick "
+                       + "the apps in Apple's own picker, so Earned can block them without ever "
+                       + "learning which ones they are. Grant Screen Time access in Settings when "
+                       + "you're ready — until you do, Earned tracks your Gates and tells you "
                        + "exactly what would be locked.")
 
         case .activate:

@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import FamilyControls
 import EarnedKit
 
 /// Gate configuration and system controls (NORTHSTAR §30).
@@ -147,15 +148,27 @@ struct SettingsView: View {
                                value: "\(store.state.defaultCommitmentRestrictions.count) blocked")
             }
             LabeledContent("Blocked right now", value: "\(store.effectiveRestrictions.count)")
+            switch store.shielding {
+            case .approved:
+                LabeledContent("Enforcement", value: "On")
+            case .notDetermined:
+                Button("Grant Screen Time access") {
+                    Task { await store.requestShieldingAuthorization() }
+                }
+            case .denied:
+                Text("Screen Time is off — nothing is actually being blocked.")
+                    .foregroundStyle(Theme.signal)
+                Button("Open iOS Settings") { openSystemSettings() }
+            }
         } header: {
             Text("Restrictions")
         } footer: {
             Text("Each Gate takes away its own things. What's actually blocked at any moment is "
                  + "the union across every Gate that's currently unsatisfied — so an unmet "
                  + "Hydration Gate can be far more severe than an unmet workout. Each "
-                 + "commitment's own profile lives on that commitment.\n\nReal app shielding "
-                 + "needs Apple's Screen Time permissions, which arrive with the next build; "
-                 + "these placeholders exercise the rules.")
+                 + "commitment's own profile lives on that commitment.\n\nWithout Screen Time "
+                 + "access Earned still tracks every Gate and tells you what would be locked — "
+                 + "it just can't take anything away.")
         }
     }
 
@@ -210,103 +223,130 @@ struct SettingsView: View {
     }
 }
 
-/// Placeholder tokens, standing in for FamilyControls tokens. Editing one Gate's
-/// own profile.
+/// Editing one Gate's own restriction profile, using Apple's system picker.
+///
+/// The picker runs in a separate process and hands back opaque tokens: Earned
+/// learns *that* something is blocked, never *what*. That is the Screen Time
+/// privacy guarantee, and it is why this screen can only ever say "3 apps"
+/// rather than naming them (NORTHSTAR §34).
 struct GateRestrictionsView: View {
     @EnvironmentObject private var store: EarnedStore
     let gate: GateID
     let title: String
-    @State private var name = ""
-
-    static let suggestions = ["Instagram", "YouTube", "Safari", "Chrome",
-                              "ChatGPT", "Balatro", "Deliveroo", "TikTok",
-                              "Email", "Spotify", "Maps"]
+    @State private var picking = false
+    @State private var selection = FamilyActivitySelection()
 
     private var profile: RestrictionProfile { store.state.restrictions(of: gate) }
 
     var body: some View {
+        RestrictionEditor(
+            title: title,
+            heading: "Blocked while this Gate is unsatisfied",
+            profile: profile,
+            picking: $picking,
+            selection: $selection,
+            onCommit: { store.setRestrictions($0, of: gate) })
+    }
+}
+
+/// The profile new commitments inherit. Not a Gate itself, so it can be edited
+/// freely — changing it restricts nothing currently in force.
+struct DefaultRestrictionsView: View {
+    @EnvironmentObject private var store: EarnedStore
+    @State private var picking = false
+    @State private var selection = FamilyActivitySelection()
+
+    private var profile: RestrictionProfile { store.state.defaultCommitmentRestrictions }
+
+    var body: some View {
+        RestrictionEditor(
+            title: "New commitments",
+            heading: "Applied to new commitments",
+            profile: profile,
+            picking: $picking,
+            selection: $selection,
+            onCommit: { store.setDefaultRestrictions($0) })
+    }
+}
+
+/// Shared editor for a restriction profile.
+private struct RestrictionEditor: View {
+    @EnvironmentObject private var store: EarnedStore
+    let title: String
+    let heading: String
+    let profile: RestrictionProfile
+    @Binding var picking: Bool
+    @Binding var selection: FamilyActivitySelection
+    let onCommit: (RestrictionProfile) -> Void
+
+    private var legacy: [RestrictionToken] { RestrictionBridge.legacyPlaceholders(in: profile) }
+    private var shieldable: Int { RestrictionBridge.shieldableCount(in: profile) }
+
+    var body: some View {
         List {
-            Section("Blocked while this Gate is unsatisfied") {
-                if profile.isEmpty { Text("Nothing").foregroundStyle(.secondary) }
-                ForEach(profile.sortedTokens, id: \.self) { token in
-                    Text(token.rawValue)
-                }
-                .onDelete { offsets in
-                    let sorted = profile.sortedTokens
-                    let removed = Set(offsets.map { sorted[$0] })
-                    store.setRestrictions(profile.removing(removed), of: gate)
-                }
-            }
             Section {
-                HStack {
-                    TextField("App name", text: $name)
-                    Button("Add") {
-                        let trimmed = name.trimmingCharacters(in: .whitespaces)
-                        guard !trimmed.isEmpty else { return }
-                        store.setRestrictions(profile.adding([RestrictionToken(trimmed)]), of: gate)
-                        name = ""
+                if store.shielding.canShield {
+                    Button("Choose apps and websites") { beginPicking() }
+                } else {
+                    Text("Screen Time permission is needed before Earned can block anything.")
+                        .foregroundStyle(Theme.signal)
+                    Button("Grant Screen Time access") {
+                        Task { await store.requestShieldingAuthorization() }
                     }
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
+            } header: {
+                Text(heading)
+            } footer: {
+                Text(shieldable == 0
+                     ? "Nothing is blocked yet."
+                     : "\(shieldable) blocked. Apple's picker keeps the choices private — "
+                       + "Earned can shield them without ever learning which apps they are.")
             }
-            Section("Suggestions") {
-                ForEach(Self.suggestions, id: \.self) { suggestion in
-                    Button(suggestion) {
-                        store.setRestrictions(profile.adding([RestrictionToken(suggestion)]), of: gate)
+
+            if !legacy.isEmpty {
+                Section {
+                    ForEach(legacy, id: \.self) { token in
+                        HStack {
+                            Text(token.rawValue).foregroundStyle(Theme.muted)
+                            Spacer()
+                            Text("NOT BLOCKING")
+                                .font(.system(size: 10, weight: .bold))
+                                .tracking(1.5)
+                                .foregroundStyle(Theme.signal)
+                        }
                     }
-                    .disabled(profile.tokens.contains(RestrictionToken(suggestion)))
+                    .onDelete { offsets in
+                        onCommit(profile.removing(Set(offsets.map { legacy[$0] })))
+                    }
+                } header: {
+                    Text("Typed before app picking existed")
+                } footer: {
+                    Text("These were placeholders and never blocked anything. They are kept "
+                         + "because they record what you said you wanted blocked — pick the "
+                         + "real apps above, then delete these.")
                 }
             }
         }
         .paperList()
         .navigationTitle(title)
         .rejectionAlert()
-    }
-}
-
-/// The profile new commitments inherit. Not a Gate itself, so it can be edited
-/// freely.
-struct DefaultRestrictionsView: View {
-    @EnvironmentObject private var store: EarnedStore
-    @State private var name = ""
-
-    private var profile: RestrictionProfile { store.state.defaultCommitmentRestrictions }
-
-    var body: some View {
-        List {
-            Section("Applied to new commitments") {
-                if profile.isEmpty { Text("Nothing").foregroundStyle(.secondary) }
-                ForEach(profile.sortedTokens, id: \.self) { Text($0.rawValue) }
-                    .onDelete { offsets in
-                        let sorted = profile.sortedTokens
-                        store.setDefaultRestrictions(
-                            profile.removing(Set(offsets.map { sorted[$0] })))
-                    }
-            }
-            Section {
-                HStack {
-                    TextField("App name", text: $name)
-                    Button("Add") {
-                        let trimmed = name.trimmingCharacters(in: .whitespaces)
-                        guard !trimmed.isEmpty else { return }
-                        store.setDefaultRestrictions(profile.adding([RestrictionToken(trimmed)]))
-                        name = ""
-                    }
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-            }
-            Section("Suggestions") {
-                ForEach(GateRestrictionsView.suggestions, id: \.self) { suggestion in
-                    Button(suggestion) {
-                        store.setDefaultRestrictions(profile.adding([RestrictionToken(suggestion)]))
-                    }
-                    .disabled(profile.tokens.contains(RestrictionToken(suggestion)))
-                }
-            }
+        .familyActivityPicker(isPresented: $picking, selection: $selection)
+        .onChange(of: picking) { wasPicking, isPicking in
+            // Commit when the picker closes, not on every tap inside it.
+            if wasPicking && !isPicking { commit(selection) }
         }
-        .paperList()
-        .navigationTitle("New commitments")
-        .rejectionAlert()
+    }
+
+    private func beginPicking() {
+        selection = RestrictionBridge.selection(from: profile)
+        picking = true
+    }
+
+    /// Keeps any legacy placeholders, so picking real apps doesn't silently
+    /// delete the record of what the user originally asked for.
+    private func commit(_ new: FamilyActivitySelection) {
+        let picked = RestrictionBridge.profile(from: new)
+        onCommit(RestrictionProfile(picked.tokens.union(legacy)))
     }
 }
 
