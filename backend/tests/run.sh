@@ -49,4 +49,7 @@ done
 echo "==> key rotation drill (real Ed25519, real signatures, the served bytes)"
 backend/tests/keyset_drill.sh
 
+echo "==> vote concurrency drill (five real sessions, one starting gun)"
+backend/tests/vote_concurrency.sh
+
 echo "==> all backend tests passed"

@@ -4,6 +4,15 @@ set time zone 'UTC';
 
 begin;
 
+-- Leftovers from a previous run's drills — vote_concurrency.sh commits an
+-- account with partners and a resolved request — would skew the unqualified
+-- counts below. This transaction rolls back, so deleting here is invisible
+-- outside it. Requests go first: recipient rows reference partners without a
+-- cascade, so a bare account delete would race its own cascade paths.
+delete from public.override_request;
+delete from public.account;
+delete from public.message_outbox;
+
 select test_sign_in('11111111-1111-1111-1111-111111111111');
 select public.ensure_account('apple-sub-patrick', 'Patrick');
 select test_sign_in('22222222-2222-2222-2222-222222222222');

@@ -4,6 +4,15 @@ set time zone 'UTC';
 
 begin;
 
+-- Leftovers from a previous run's drills — vote_concurrency.sh commits an
+-- account with partners and a resolved request — would skew the unqualified
+-- counts below. This transaction rolls back, so deleting here is invisible
+-- outside it. Requests go first: recipient rows reference partners without a
+-- cascade, so a bare account delete would race its own cascade paths.
+delete from public.override_request;
+delete from public.account;
+delete from public.message_outbox;
+
 -- `now()` is frozen for the whole transaction, and an envelope is marked late
 -- the moment it is registered at or after its own hardening time (S13). So a
 -- contract that was registered honestly and has *since* hardened cannot exist
@@ -374,10 +383,11 @@ select test_assert(
   'its recipient went with it, so a stale link cannot still read as pending');
 select test_sign_in('11111111-1111-1111-1111-111111111111');
 
--- MARK: - The vote endpoint is not quietly absent
+-- MARK: - The vote endpoint (once a loud stub, now real — 0010, tested in 90_voting.sql)
 
-select test_raises($$select public.cast_override_vote('anything', 'approve')$$,
-                   'the vote endpoint refuses loudly rather than doing nothing (step 7)');
+select test_assert(
+  public.cast_override_vote('anything', 'approve') = '{"page": "invalid"}'::jsonb,
+  'the vote endpoint answers a token that is not ours with the invalid page');
 
 -- MARK: - Row level security
 

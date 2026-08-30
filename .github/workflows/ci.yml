@@ -52,6 +52,19 @@ jobs:
       - name: Migrate and test
         run: backend/tests/run.sh
 
+  partner-page:
+    name: Partner page renderer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Typecheck the edge function
+        run: deno check backend/functions/approval/index.ts
+      - name: Test the renderer
+        run: deno test backend/functions/approval/
+
   app-build:
     name: iOS app builds
     runs-on: macos-15

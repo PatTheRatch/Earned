@@ -7,11 +7,11 @@ The design and threat model is
 Every product decision in it is settled except account deletion (§21.2), which waits on
 privacy/legal review — nothing here should be built against a guessed answer to that one.
 
-## What exists (Milestones A–D)
+## What exists (Milestones A–E)
 
 Accounts, the Contract Envelope, partners with real consent, the grant-signing key
-infrastructure, and override requests with their frozen snapshot and delivery. No votes and
-no grants — those are steps 7 and 8, and none of their code is here.
+infrastructure, override requests with their frozen snapshot and delivery, and voting with
+the partner page. No grants — that is step 8, and none of its code is here.
 
 | | |
 |---|---|
@@ -24,6 +24,8 @@ no grants — those are steps 7 and 8, and none of their code is here.
 | `migrations/0007` | Roster eligibility (invariant 22), the corrected pre-hardening edit rule, and `envelope_status` |
 | `migrations/0008` | Grant signing keys, the rotation state machine, and root-signed key set documents (§10) |
 | `migrations/0009` | `override_request` and its snapshot, recipients and audit log; `create_override_request`, `override_request_status`, expiry, and a vote endpoint that refuses (§§4.5, 6, 7, 13, 16) |
+| `migrations/0010` | `cast_override_vote` for real, `approval_page`, and the receipt purge (§§6.2, 8, 15, 17) |
+| `functions/approval/` | The partner page: a server-rendered edge function over those two functions (§18) |
 
 Migrations are appended, never rewritten — 0005–0007 alter what 0001–0004 created rather
 than editing it, because an applied migration and its file have to keep matching.
@@ -155,6 +157,55 @@ a row nobody got round to.
 written first — N simultaneous votes on a threshold-2 request producing exactly one
 transition to `granted`. A vote endpoint that silently did nothing would be the worse
 failure, so the stub is loud.
+
+### Voting and the partner page (build order step 7)
+
+The concurrency test was written before the endpoint, as §22 orders, and it earned its
+keep on day one: the first implementation locked recipient-and-request in one `FOR UPDATE`
+join, straight from §8's sketch, and five simultaneous voters deadlocked it — the winner
+holds the request row and reaches for the losers' recipient rows to supersede them, while
+each loser holds its own recipient row and waits for the request. The lock order is now a
+stated rule: **the request row first, recipient rows only under it**, everywhere — voters,
+creation's lazy expiry, and the sweeper alike. [`tests/vote_concurrency.sh`](tests/vote_concurrency.sh)
+runs five real sessions behind an advisory-lock starting gun in CI on every push and
+demands exactly one `granted` transition, exactly two recorded votes, and three
+`superseded` rows.
+
+The semantics ([`tests/90_voting.sql`](tests/90_voting.sql)): first vote is final and a
+second tap changes nothing, not even the audit log · a denial is recorded, consumes no
+approval slot, and resolves nothing — all-denials stays open until expiry, because Solo is
+already ticking (S5) · a vote after resolution is refused and **not recorded**, and its
+page says the tap did not change the outcome (§12) · a partner revoked after their token
+was minted still has a valid vote (S16) · forged, truncated and foreign tokens are
+indistinguishable · past the receipt window every link goes permanently generic, the purge
+removes the snapshot, and receipts reduce to status-only (S15, §15).
+
+Every token state answers with a page, not an error (§6.2): `request`, `receipt`,
+`resolved`, `withdrawn`, `expired`, and the deliberately identical faces of `invalid` and
+`gone`. The page itself is [`functions/approval/`](functions/approval/) — server-rendered,
+no Supabase credential in any browser, no JavaScript on the page at all, votes cast by
+form post. All the rules live in SQL under the test suite; all the words live in
+`render.ts` under its own tests (escaping hostile text, the §7 two-halves labelling, no
+tally anywhere).
+
+Deploying it:
+
+```sh
+supabase functions deploy approval --no-verify-jwt
+```
+
+`--no-verify-jwt` is required and correct here: partners are strangers without accounts
+(S4), and the 256-bit token in the URL is the entire credential. The function reads
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from the environment Supabase injects.
+Point `consent_base_url`'s `/a/<token>` links at it (a redirect or rewrite from your
+domain to `https://<ref>.functions.supabase.co/approval/<token>`). Per-IP rate limiting on
+`/a/*` (§16) belongs to whatever fronts the function — Supabase does not provide it —
+and is tracked as a launch-gate concern, not solved here.
+
+Two functions now want a schedule: `expire_override_requests()` and
+`purge_override_receipts()`. Neither is load-bearing — expiry and the receipt window are
+recomputed wherever they are read — so a daily `pg_cron` call keeps stored state tidy
+rather than keeping the system correct.
 
 ## Running the tests
 
