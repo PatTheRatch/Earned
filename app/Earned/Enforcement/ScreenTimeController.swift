@@ -42,14 +42,20 @@ final class ScreenTimeController: ObservableObject {
         case .notDetermined: return .notDetermined
         case .denied: return .denied
         case .approved: return .approved
-        // Recent iOS grants Screen Time *with* usage-data access, and on some
-        // versions that is the only "yes" the user can give. It is an approval,
-        // and treating it as anything else silently breaks every shield.
-        case .approvedWithDataAccess: return .approved
         @unknown default:
-            // A future status we don't recognise. Assume it is not permission
-            // to restrict — the shield should never be applied on a guess.
-            return .denied
+            // Newer SDKs add approval *variants*: iOS 26 has
+            // `approvedWithDataAccess`, and on some versions that is the only
+            // "yes" a user can give. Naming it here would break the build on
+            // older SDKs — CI runs Xcode 16.4, which has never heard of it —
+            // so match on the name instead. Any status that calls itself an
+            // approval is one; anything else is not permission to restrict,
+            // and the shield is never applied on a guess.
+            //
+            // Xcode on a newer SDK warns this switch isn't exhaustive. That
+            // warning is expected. Do NOT "fix" it by adding the case until
+            // CI's Xcode has caught up — that is exactly what broke the build.
+            return String(describing: status).localizedCaseInsensitiveContains("approved")
+                ? .approved : .denied
         }
     }
 
