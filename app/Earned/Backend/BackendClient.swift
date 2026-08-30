@@ -169,6 +169,26 @@ actor BackendClient {
 
     private static func timestamp(_ date: Date) -> String { formatter.string(from: date) }
 
+    /// The most useful sentence in a refusal, wherever this project's three
+    /// services happen to have put it.
+    ///
+    /// PostgREST puts a raised exception's message in `message`. Those are
+    /// written to be read by a person — "this contract has hardened; its
+    /// accountability terms are frozen" — so pass them through rather than
+    /// inventing a worse one.
+    ///
+    /// Supabase Auth answers with `msg`, and it is the one that matters at the
+    /// very first step a user takes: "Unacceptable audience in id_token" names
+    /// a misconfigured provider exactly, where "the server refused the request
+    /// (400)" sends you looking at the app instead.
+    private static func failureMessage(_ json: [String: Any], status: Int) -> String {
+        json["message"] as? String
+            ?? json["msg"] as? String
+            ?? json["error_description"] as? String
+            ?? json["error"] as? String
+            ?? "The server refused the request (\(status))."
+    }
+
     private func rpc(_ name: String, _ params: [String: Any]) async throws -> [String: Any] {
         guard accessToken != nil else { throw Failure.notSignedIn }
         return try await post(path: "/rest/v1/rpc/\(name)", body: params, authorized: true)
@@ -194,8 +214,7 @@ actor BackendClient {
         guard (200..<300).contains(status) else {
             let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
             throw Failure.refused(status: status,
-                                  message: json["message"] as? String
-                                      ?? "The server refused the request (\(status)).")
+                                  message: Self.failureMessage(json, status: status))
         }
         return (try? JSONSerialization.jsonObject(with: data)) as? [T] ?? []
     }
@@ -226,14 +245,8 @@ actor BackendClient {
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
         guard (200..<300).contains(status) else {
-            // PostgREST puts a raised exception's message in `message`. Those
-            // messages are written to be read by a person — "this contract has
-            // hardened; its accountability terms are frozen" — so pass them
-            // through rather than inventing a worse one.
-            let message = json["message"] as? String
-                ?? json["error_description"] as? String
-                ?? "The server refused the request (\(status))."
-            throw Failure.refused(status: status, message: message)
+            throw Failure.refused(status: status,
+                                  message: Self.failureMessage(json, status: status))
         }
         return json
     }
