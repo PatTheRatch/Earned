@@ -17,7 +17,7 @@ trusted. Re-verify against the code when it drifts.
 
 | Area | Status | Notes |
 |---|---|---|
-| Gate engine — hydration, exercise, hardening, debt, overrides | **Real** | EarnedKit, 87 tests on Linux + macOS |
+| Gate engine — hydration, exercise, hardening, debt, overrides | **Real** | EarnedKit, 84 tests on Linux + macOS |
 | Per-Gate restrictions, eligibility windows, recurring plans | **Real** | Added in the correction pass |
 | All six screens, poster identity, persistence | **Real** | Ledger saved as versioned JSON, replayed and re-validated on launch |
 | Deadline warnings | **Real** | Local notifications; no entitlement needed. Informational only — no snooze |
