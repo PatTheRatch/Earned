@@ -13,5 +13,6 @@ The two root documents outrank everything here: [NORTHSTAR.md](../NORTHSTAR.md) 
 - [`earnedkit-semantics.md`](earnedkit-semantics.md) — the rules the engine had to decide
   that the north star leaves open.
 - [`accountability-architecture.md`](accountability-architecture.md) — the design and threat
-  model for networked Accountability Overrides. **Proposed, not built** — the open decisions
-  in its last sections are unanswered.
+  model for networked Accountability Overrides, including the Contract Envelope that makes
+  the server authoritative for a hardened commitment's accountability terms. **Proposed, not
+  built** — six decisions in §21.2 are still open, and §20 lists the launch gates.
