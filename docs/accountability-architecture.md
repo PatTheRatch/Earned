@@ -1,6 +1,6 @@
 # Accountability Overrides — Architecture and Threat Model
 
-v0.2 · August 2026 · **Design for review. Nothing here is built.**
+v0.3 · August 2026 · **Design for review. Nothing here is built.**
 
 This is the design to red-team before any of it is written. It covers the Accountability
 Override (NORTHSTAR §23–24) as a networked feature: what the backend owns, how approval
@@ -16,6 +16,24 @@ through our architecture**. Every design choice below is measured against two qu
 
 Decisions that are genuinely product calls are collected in [§21](#21-decisions) — settled
 ones and open ones kept apart, so nothing quietly becomes a default by being written down.
+
+## What changed in v0.3
+
+Patrick made the calls on every open decision from v0.2 except one. All are now recorded as
+settled (§21.1) rather than proposed:
+
+| # | Decision | Settled as |
+|---|---|---|
+| **S11** (was D7) | Request expiry | **24 hours**, not the proposed 48 — a tighter window was chosen deliberately over giving a slow partner more time |
+| **S12** (was D9) | Default approvals threshold | **Default 2; a user may choose 1 before hardening, behind an explicit warning. Never silently mandatory** |
+| **S13** (was D11) | Late envelope (hardened before the server saw it) | **Accountability route closed for that commitment; Solo remains** |
+| **S14** (was D12) | Verified-partner tier | **The `kind` column is built now; not required at MVP** |
+| **S15** (was D13) | Receipt window | **30 days**, then the link goes generic and the snapshot purges |
+| **S16** (new) | A partner suppressed or revoked after a token was minted but before they voted | **Their vote still counts.** They were legitimately asked before withdrawing; suppression governs future contact, not a vote already in their hand |
+
+**D10 (account deletion) stays open, deliberately.** Patrick chose not to have a placeholder
+manufactured for it — it is a privacy/legal question, not a product preference, and nothing
+in this document should be built against a guessed answer to it.
 
 ## What changed in v0.2
 
@@ -153,7 +171,7 @@ Mitigations worth building, none of which is a fix:
   (an SMS/email address that consented) and, later, `earned_user` (a partner with their own
   authenticated Earned account). A future policy could require at least one verified partner
   in a roster, or weight them differently. Building the distinction now costs one column;
-  retrofitting it costs a migration and a product conversation. See **D12**.
+  retrofitting it costs a migration and a product conversation. Settled as **S14**: build it now, require nothing at MVP.
 - **Normalisation deliberately does not merge aliases.** `me+1@x` and `me+2@x` stay distinct
   addresses (§14), because merging them would wrongly suppress legitimate contacts. This is
   a conscious trade that leaves the alias vector open.
@@ -334,7 +352,7 @@ reconnect. If it arrives **after** the commitment's computed `hardens_at`, the s
 distinguish an honest offline creation from a contract fabricated with hindsight — a user
 could sit offline through the correction window and then register terms chosen to be easy.
 
-Recommended answer, flagged as **D11** because it has a real UX cost:
+Settled as **S13**, though it has a real UX cost:
 
 > A late envelope is **accepted and stored, but permanently marked `late`, and the
 > accountability route is unavailable for that commitment.** Solo remains available on the
@@ -575,7 +593,7 @@ link" would be both rude and suspicious-looking.
 Keeping the hash resolvable means a leaked resolved link keeps rendering the snapshot. That
 is bounded:
 
-- `override_request.receipt_expires_at` — default 30 days after resolution (**D13**).
+- `override_request.receipt_expires_at` — 30 days after resolution (**S15**).
 - After it passes, the token resolves to a generic *"This link is no longer available"* with
   no snapshot, and the snapshot row is purged on the same schedule (§15).
 - Cancellation, mooting and account deletion all collapse the receipt window immediately.
@@ -832,7 +850,7 @@ locked because it is.
 
 | Situation | Behaviour |
 |---|---|
-| Offline at commitment creation | Commitment is created locally. Envelope queues. If it lands after hardening, the accountability route is closed for that commitment (§4.7, **D11**) |
+| Offline at commitment creation | Commitment is created locally. Envelope queues. If it lands after hardening, the accountability route is closed for that commitment (§4.7, **S13**) |
 | Offline when requesting | Request cannot be created. Say so plainly; the Solo route is unaffected |
 | Offline while a request is open | Request stays visibly pending. Nothing changes locally |
 | Grant happens while offline | Applied on next successful sync. The user stays restricted until then |
@@ -974,7 +992,7 @@ part of what needs legal sign-off (**D10**).
 
 ## 15. Retention and deletion
 
-- **Snapshots** purge with the receipt window (§6.3), default 30 days after resolution.
+- **Snapshots** purge with the receipt window (§6.3), 30 days after resolution (**S15**).
 - **Recipient rows** keep `status`, `vote` and `voted_at` for the same period, then reduce to
   a status-only row; `token_hash` goes when the row does.
 - **Audit rows** keep hashed addresses under a rotating salt, no message bodies, and are the
@@ -1035,7 +1053,7 @@ affect anything outside that one request.
 
 If the threshold is 1, one leaked link is one override. That is inherent to the mechanism —
 the same is true of the SMS itself — and it is why the default is 2 and why choosing 1
-carries an explicit warning (**D9**).
+carries an explicit warning (**S12**).
 
 ---
 
@@ -1152,17 +1170,18 @@ Decided by review, and recorded so they are not silently re-opened.
 | **S8** | The local Solo Override remains fully available through any backend outage |
 | **S9** | Reliability figures are labelled self-reported until server-authoritative resolution exists |
 | **S10** | Threshold resolution is atomic; RLS is default-deny; the partner page sees the minimum necessary |
+| **S11** | An open request expires after **24 hours**. Solo remains available throughout. (Chosen over the proposed 48 — a tighter window against leaked-link exposure, accepted at the cost of a partner who is asleep or offline overnight) |
+| **S12** | Default approvals threshold is **2**. A user may deliberately choose **1**, but only before the commitment hardens and only behind an explicit warning that one valid approval link becomes sufficient. Never silently mandatory; frozen at hardening and can only rise |
+| **S13** | A Contract Envelope that reaches the server **after** its commitment has already hardened is accepted and stored but marked `late`; the **accountability route is unavailable** for that commitment. Solo remains available on the local clock. Fails safe — offline can close an escape route, never open one |
+| **S14** | The `unverified_contact` / `earned_user` partner-tier distinction (§2.2) is **built into the schema now**; no verified partner is required at MVP |
+| **S15** | The receipt window is **30 days** after resolution: a resolved request's link keeps rendering the snapshot for that long, then goes permanently generic and the snapshot purges |
+| **S16** | A partner **suppressed or revoked after their token was minted but before they voted** still has a valid vote if they use it. They were legitimately asked before withdrawing; suppression governs future contact, not a decision already placed in their hands. (This is why §8's vote transaction checks recipient `status`, never live partner consent state, at the moment of voting) |
 
-### 21.2 Open — these need you
+### 21.2 Open — this needs you
 
-| # | Decision | Proposed | Why it matters |
-|---|---|---|---|
-| **D7** | How long does a request stay open? | **48 hours**, then `expired`. Solo remains available throughout | Long enough for a sleeping partner, short enough that a stale link is not a standing key |
-| **D9** | Default approvals threshold | **Default 2**, strongly recommended. A user may deliberately choose **1 before the commitment hardens**, behind an explicit warning: *"one approval link is enough to let you out — anyone holding it can grant this."* Never silently mandatory; after hardening the threshold is frozen and can only rise | A mandate would be us overriding a deliberate adult choice; a silent default of 1 would be us hiding a real weakening |
-| **D10** | Account deletion and outstanding obligations | **Requires privacy/legal review before implementation.** No engineering answer is proposed. The two questions must be kept apart: deletion of personal data (a right) versus the product semantics of abandoning a live commitment (a product choice). Anti-circumvention must not override privacy obligations. Suppression retention (§14.4) is part of the same review | UK/EU launch makes this an Article 17 question, not an architecture preference |
-| **D11** | A commitment whose envelope arrives after it hardened | **Accountability route unavailable; Solo remains.** Fails safe — being offline can never open an escape route | Otherwise, going offline through the correction window is a general bypass of server-authoritative terms. Real UX cost on planes and subways |
-| **D12** | Verified-partner tier | **Build the `kind` distinction now; do not require a verified partner at MVP** | One column now versus a migration and a product conversation later. Requiring one at MVP would block the "no app needed" property that makes this feature adoptable (**S4**) |
-| **D13** | Receipt window | **30 days** after resolution, then the link goes generic and the snapshot purges | Balances a partner's right to see what they approved against indefinite snapshot exposure from a leaked link |
+| # | Decision | Status |
+|---|---|---|
+| **D10** | Account deletion and outstanding obligations | **Deliberately left open.** Patrick chose not to have a placeholder manufactured for this — it is a privacy/legal question (UK/EU GDPR Article 17 and the deletion right, weighed against the product's anti-circumvention intent), not a product preference, and nothing here should be built against a guessed answer. Deletion of personal data and the product semantics of abandoning a live commitment must be decided as two separate questions once real legal review has happened. Suppression retention (§14.4) is part of the same review |
 
 Worth confirming rather than assuming: **partner approvals stay valid after the Solo window
 opens.** The window unlocks Solo as an *additional* route; it does not close the

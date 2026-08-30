@@ -15,4 +15,5 @@ The two root documents outrank everything here: [NORTHSTAR.md](../NORTHSTAR.md) 
 - [`accountability-architecture.md`](accountability-architecture.md) — the design and threat
   model for networked Accountability Overrides, including the Contract Envelope that makes
   the server authoritative for a hardened commitment's accountability terms. **Proposed, not
-  built** — six decisions in §21.2 are still open, and §20 lists the launch gates.
+  built** — every product decision is settled except account deletion (§21.2), which waits on
+  privacy/legal review, and §20 lists the launch gates.

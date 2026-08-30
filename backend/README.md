@@ -3,9 +3,10 @@
 Supabase project: database schema/migrations and edge functions.
 
 The design and threat model for the first feature — accountability approvals — is
-[`docs/accountability-architecture.md`](../docs/accountability-architecture.md) (v0.2). It is
-proposed, not accepted: six product decisions in it are still open, one of them waiting on
-legal review, and nothing here should be built until they are answered.
+[`docs/accountability-architecture.md`](../docs/accountability-architecture.md) (v0.3). It is
+proposed, not accepted: every product decision in it is settled except account deletion
+(§21.2), which waits on privacy/legal review, and nothing here should be built against a
+guessed answer to that one.
 
 Read §4 first. The server holds a **Contract Envelope** for every commitment — the
 accountability terms only, frozen when the commitment hardens — because the approval
