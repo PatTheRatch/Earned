@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Apply the migrations to a throwaway Postgres and run every test against them.
+#
+# Requires DATABASE_URL. Migrations run in order; each test file runs in its own
+# transaction and rolls back, so ordering between them never matters.
+set -euo pipefail
+
+cd "$(dirname "$0")/../.."
+: "${DATABASE_URL:?set DATABASE_URL to a throwaway Postgres}"
+
+psql() { command psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --no-psqlrc "$@"; }
+
+# Supabase provisions the anon/authenticated/service_role roles and auth.uid()
+# before any migration runs, so the scaffolding that stands in for them has to
+# come first here too. Migrations grant to those roles and would fail without.
+echo "==> test scaffolding (stands in for what Supabase provides)"
+psql -q -f backend/tests/00_bootstrap.sql
+
+echo "==> migrations"
+for file in backend/migrations/*.sql; do
+  echo "    $file"
+  psql -q -f "$file"
+done
+
+echo "==> hardening parity (generated from fixtures/hardening-cases.json)"
+generated="$(mktemp -t hardening-XXXXXX.sql)"
+trap 'rm -f "$generated"' EXIT
+python3 backend/tests/generate_hardening_sql.py > "$generated"
+psql -q -f "$generated"
+
+for file in backend/tests/[0-9][0-9]_*.sql; do
+  case "$file" in *00_bootstrap.sql) continue ;; esac
+  echo "==> $file"
+  psql -q -f "$file"
+done
+
+echo "==> all backend tests passed"

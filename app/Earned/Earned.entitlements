@@ -4,5 +4,14 @@
 <dict>
 	<key>com.apple.developer.family-controls</key>
 	<true/>
+	<!-- Sign in with Apple. Needed before a Contract Envelope can exist, because
+	     an envelope hangs off an account. Adding this entitlement means the App
+	     ID needs the matching capability enabled in Xcode's Signing &
+	     Capabilities, exactly as Family Controls did — until then a device
+	     build fails to sign. See app/README.md. -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
 </dict>
 </plist>

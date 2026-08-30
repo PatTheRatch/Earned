@@ -10,6 +10,7 @@ import EarnedKit
 /// not this screen.
 struct CommitmentDetailView: View {
     @EnvironmentObject private var store: EarnedStore
+    @EnvironmentObject private var account: AccountStore
     @Environment(\.dismiss) private var dismiss
     let commitmentID: UUID
 
@@ -109,6 +110,7 @@ struct CommitmentDetailView: View {
                     Text(hardened ? "Yes — only harder edits allowed"
                                   : Format.relative(commitment.hardensAt, from: store.now))
                 }
+                RegistrationRow(registration: account.registration(of: commitment))
             }
 
             Section {

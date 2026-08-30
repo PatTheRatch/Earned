@@ -1,0 +1,111 @@
+{
+  "note": [
+    "Shared hardening fixtures. The single source of truth for when a commitment's",
+    "correction window closes, consumed by BOTH implementations of the rule:",
+    "EarnedKit's Commitment.hardensAt (Swift) and the backend's",
+    "public.earned_hardens_at (SQL). Neither may drift from the other, because the",
+    "server decides independently whether an override request is against a hardened",
+    "contract and must reach the same answer the device does.",
+    "",
+    "hardensAt = createdAt + min(correctionWindow, max(0, deadline - createdAt) * 0.125)",
+    "",
+    "Times are UTC ISO-8601. correctionWindow is seconds. Expected values were",
+    "computed by a third implementation, so a shared bug in Swift and SQL still fails.",
+    "The DST cases exist to catch calendar-day interval arithmetic in Postgres:",
+    "three days must mean 72 hours of absolute time, whatever the session timezone."
+  ],
+  "hardeningFraction": 0.125,
+  "cases": [
+    {
+      "name": "clamp binds: a two-hour fuse hardens after fifteen minutes",
+      "createdAt": "2026-08-24T08:00:00Z",
+      "deadline": "2026-08-24T10:00:00Z",
+      "correctionWindow": 7200,
+      "expectedHardensAt": "2026-08-24T08:15:00Z"
+    },
+    {
+      "name": "clamp binds: fourteen hours out, still short of the configured window",
+      "createdAt": "2026-08-24T08:00:00Z",
+      "deadline": "2026-08-24T22:00:00Z",
+      "correctionWindow": 7200,
+      "expectedHardensAt": "2026-08-24T09:45:00Z"
+    },
+    {
+      "name": "exact tie: sixteen hours out makes clamp and configured window equal",
+      "createdAt": "2026-08-24T08:00:00Z",
+      "deadline": "2026-08-25T00:00:00Z",
+      "correctionWindow": 7200,
+      "expectedHardensAt": "2026-08-24T10:00:00Z"
+    },
+    {
+      "name": "configured window binds: a plan occurrence four weeks out",
+      "createdAt": "2026-08-24T08:00:00Z",
+      "deadline": "2026-09-21T10:00:00Z",
+      "correctionWindow": 7200,
+      "expectedHardensAt": "2026-08-24T10:00:00Z"
+    },
+    {
+      "name": "zero correction window hardens instantly",
+      "createdAt": "2026-08-24T08:00:00Z",
+      "deadline": "2026-08-24T10:00:00Z",
+      "correctionWindow": 0,
+      "expectedHardensAt": "2026-08-24T08:00:00Z"
+    },
+    {
+      "name": "deadline equal to creation leaves no window",
+      "createdAt": "2026-08-24T08:00:00Z",
+      "deadline": "2026-08-24T08:00:00Z",
+      "correctionWindow": 7200,
+      "expectedHardensAt": "2026-08-24T08:00:00Z"
+    },
+    {
+      "name": "deadline before creation is clamped at zero, never negative",
+      "createdAt": "2026-08-24T08:00:00Z",
+      "deadline": "2026-08-24T07:00:00Z",
+      "correctionWindow": 7200,
+      "expectedHardensAt": "2026-08-24T08:00:00Z"
+    },
+    {
+      "name": "fractional creation instant is carried through exactly",
+      "createdAt": "2026-08-24T08:00:00.5Z",
+      "deadline": "2026-08-24T10:00:00.5Z",
+      "correctionWindow": 7200,
+      "expectedHardensAt": "2026-08-24T08:15:00.5Z"
+    },
+    {
+      "name": "clamp lands on a fractional second",
+      "createdAt": "2026-08-24T08:00:00Z",
+      "deadline": "2026-08-24T10:00:04Z",
+      "correctionWindow": 7200,
+      "expectedHardensAt": "2026-08-24T08:15:00.5Z"
+    },
+    {
+      "name": "an eight-second fuse hardens after one second",
+      "createdAt": "2026-08-24T08:00:00Z",
+      "deadline": "2026-08-24T08:00:08Z",
+      "correctionWindow": 7200,
+      "expectedHardensAt": "2026-08-24T08:00:01Z"
+    },
+    {
+      "name": "DST fall-back: three days is 72 hours, not three calendar days",
+      "createdAt": "2026-10-30T00:00:00Z",
+      "deadline": "2026-12-01T00:00:00Z",
+      "correctionWindow": 259200,
+      "expectedHardensAt": "2026-11-02T00:00:00Z"
+    },
+    {
+      "name": "DST spring-forward: three days is 72 hours, not three calendar days",
+      "createdAt": "2026-03-06T00:00:00Z",
+      "deadline": "2026-04-06T00:00:00Z",
+      "correctionWindow": 259200,
+      "expectedHardensAt": "2026-03-09T00:00:00Z"
+    },
+    {
+      "name": "year boundary",
+      "createdAt": "2026-12-31T23:00:00Z",
+      "deadline": "2027-01-02T07:00:00Z",
+      "correctionWindow": 7200,
+      "expectedHardensAt": "2027-01-01T01:00:00Z"
+    }
+  ]
+}

@@ -23,6 +23,27 @@ jobs:
       - name: Run tests
         run: swift test --package-path packages/EarnedKit
 
+  backend:
+    name: Backend schema + RLS
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+        ports: ["5432:5432"]
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install psql
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+      - name: Migrate and test
+        run: backend/tests/run.sh
+
   app-build:
     name: iOS app builds
     runs-on: macos-15

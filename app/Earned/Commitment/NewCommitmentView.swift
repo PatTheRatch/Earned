@@ -4,6 +4,7 @@ import EarnedKit
 /// Deliberate without being bureaucratic: one decision per screen (NORTHSTAR §9).
 struct NewCommitmentView: View {
     @EnvironmentObject private var store: EarnedStore
+    @EnvironmentObject private var account: AccountStore
     @Environment(\.dismiss) private var dismiss
 
     private enum Step: Int, CaseIterable {
@@ -382,7 +383,7 @@ struct NewCommitmentView: View {
                                                accountabilityWindow: accountabilityMinutes * 60),
                 rewardEligible: rewardEligible,
                 warningLead: warnBefore ? 30 * 60 : nil)
-            if created { dismiss() }
+            if created { registerEnvelopes(); dismiss() }
             return
         }
         let created = store.createCommitment(
@@ -394,7 +395,18 @@ struct NewCommitmentView: View {
                                            accountabilityWindow: accountabilityMinutes * 60),
             rewardEligible: rewardEligible,
             warningLead: warnBefore ? 30 * 60 : nil)
-        if created { dismiss() }
+        if created { registerEnvelopes(); dismiss() }
+    }
+
+    /// Registers the new commitment's terms with the server immediately.
+    ///
+    /// Now rather than at the next launch, because the window closes: an
+    /// envelope that does not arrive before the commitment hardens loses the
+    /// accountability route for good (S13), and a short-fuse commitment can
+    /// harden within minutes. A no-op when there is no backend or nobody is
+    /// signed in — the commitment itself is already saved either way.
+    private func registerEnvelopes() {
+        Task { await account.syncEnvelopes(for: store.allCommitments, now: store.now) }
     }
 }
 

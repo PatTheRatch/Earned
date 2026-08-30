@@ -11,6 +11,7 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
+                AccountSection()
                 hydrationSection
                 warningsSection
                 rewardsSection

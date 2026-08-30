@@ -3,12 +3,14 @@ import SwiftUI
 @main
 struct EarnedApp: App {
     @StateObject private var store = EarnedStore()
+    @StateObject private var account = AccountStore()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(store)
+                .environmentObject(account)
         }
         .onChange(of: scenePhase) { _, phase in
             // Notification permission can be revoked in iOS Settings while
@@ -16,6 +18,11 @@ struct EarnedApp: App {
             // foreground rather than trusting what we saw at launch.
             guard phase == .active else { return }
             Task { await store.refreshWarnings() }
+            // Anything created offline is still owed an envelope. Registering
+            // late costs the accountability route for that commitment (S13),
+            // so the retry happens at the first opportunity, not the next
+            // time the user happens to open a detail screen.
+            Task { await account.syncEnvelopes(for: store.allCommitments, now: store.now) }
         }
     }
 }

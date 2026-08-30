@@ -8,6 +8,7 @@ import EarnedKit
 /// the twelve of them read as the one decision that made them.
 struct PlanDetailView: View {
     @EnvironmentObject private var store: EarnedStore
+    @EnvironmentObject private var account: AccountStore
     @Environment(\.dismiss) private var dismiss
     let planID: UUID
 
@@ -67,7 +68,12 @@ struct PlanDetailView: View {
                 .confirmationDialog("Cancel this plan?",
                                     isPresented: $confirmingCancel, titleVisibility: .visible) {
                     Button("Cancel the plan", role: .destructive) {
-                        if store.cancelPlan(planID) { dismiss() }
+                        guard store.cancelPlan(planID) else { return }
+                        // The server withdraws exactly the occurrences the
+                        // ledger did, deciding it from the envelope fields
+                        // itself rather than being told which ones (§4.6).
+                        Task { await account.withdrawPlan(planID) }
+                        dismiss()
                     }
                     Button("Keep it", role: .cancel) {}
                 } message: {
