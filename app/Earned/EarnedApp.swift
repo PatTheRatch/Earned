@@ -22,7 +22,12 @@ struct EarnedApp: App {
             // late costs the accountability route for that commitment (S13),
             // so the retry happens at the first opportunity, not the next
             // time the user happens to open a detail screen.
-            Task { await account.syncEnvelopes(for: store.allCommitments, now: store.now) }
+            // A partner can accept or decline while Earned isn't running, and
+            // that changes which commitments have a working way out.
+            Task {
+                await account.refreshPartners()
+                await account.syncEnvelopes(for: store.allCommitments, now: store.now)
+            }
         }
     }
 }

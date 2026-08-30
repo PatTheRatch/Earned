@@ -7,17 +7,48 @@ The design and threat model is
 Every product decision in it is settled except account deletion (§21.2), which waits on
 privacy/legal review — nothing here should be built against a guessed answer to that one.
 
-## What exists (Milestone A)
+## What exists (Milestones A and B)
 
-Accounts and the Contract Envelope. No approval flow, no partner consent, no messaging, no
-tokens, no votes — those are later milestones and none of their code is here.
+Accounts, the Contract Envelope, and partners with real consent. No override requests, no
+approval tokens, no votes, no grants — those are later milestones and none of their code is
+here.
 
 | | |
 |---|---|
-| `migrations/0001` | `account`, and the `partner` skeleton (contact ciphertext + keyed blind index, consent columns, the `unverified_contact` / `earned_user` tier from S14) |
+| `migrations/0001` | `account`, and the `partner` skeleton |
 | `migrations/0002` | `contract_envelope`, `contract_envelope_partner`, and `earned_hardens_at` |
-| `migrations/0003` | `register_contract_envelope` and `withdraw_plan_envelopes` — the only write paths |
+| `migrations/0003` | `register_contract_envelope` and `withdraw_plan_envelopes` |
 | `migrations/0004` | RLS: default deny, SELECT-your-own, and no write policy anywhere |
+| `migrations/0005` | Contact normalisation, encryption and keyed blind indexing; partner `status`; global suppression; invitations; the outbox |
+| `migrations/0006` | `nominate_partner`, `resend_partner_invitation`, `respond_to_invitation`, `revoke_partner` |
+| `migrations/0007` | Roster eligibility (invariant 22), the corrected pre-hardening edit rule, and `envelope_status` |
+
+Migrations are appended, never rewritten — 0005–0007 alter what 0001–0004 created rather
+than editing it, because an applied migration and its file have to keep matching.
+
+### Consent, and why the server sends the message
+
+A contact address reaches the server exactly once, at nomination. It is normalised there
+(E.164, or a lowercased address), encrypted there, and blind-indexed there with a keyed
+HMAC — and it is never returned. The app works in display names and ids from then on.
+
+The invitation is composed and queued by the server, and **the consent token never touches
+the requester's device**. An app that could see the token could accept on its partner's
+behalf, which would make the entire mechanism theatre. Same property, and the same reason,
+as the approval links in a later milestone.
+
+A refusal is **global**. "No thanks" writes a suppression row keyed on the blind index, and
+every future nomination of that contact is refused before a message is composed — including
+one from a different Earned account. The person refusing is not our user and did not agree
+to be asked again next week by someone else.
+
+### Roster eligibility (invariant 22)
+
+`register_contract_envelope` refuses a roster containing anyone who has not consented, and
+refuses a threshold larger than the roster. Hardening "2 of Mom, Dave and Chris" while Dave
+has never answered would build a contract whose way out was dead from birth. An empty roster
+is exempt from the threshold check and simply means no accountability route — which is every
+commitment until someone is nominated, and the receipt says so.
 
 ### The part that matters
 
@@ -46,7 +77,7 @@ DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres backend/tests/
 ```
 
 `00_bootstrap.sql` stands in for what Supabase provides in production — the `anon`,
-`authenticated` and `service_role` roles, and `auth.uid()`. It reproduces Supabase's own
+`authenticated` and `service_role` roles, `auth.uid()`, and the contact-crypto secrets. It reproduces Supabase's own
 definition of `auth.uid()` rather than a simpler one, because a shim that read the account
 some easier way would let these tests pass while production failed. Nothing in it ships.
 
@@ -89,8 +120,18 @@ Sign in with Apple also needs enabling twice: once as an Xcode capability on the
 (same one-time step Family Controls needed), and once as a provider in the Supabase
 dashboard under Authentication → Providers → Apple.
 
+## Key custody — a launch gate, not a detail
+
+`private.secret()` reads Supabase Vault when it is present and falls back to a database
+setting otherwise, so the suite runs on a plain Postgres. **The fallback must never be
+production.** A pepper stored in the database's own configuration is dumped alongside the
+rows it exists to protect, which defeats the only thing it is for: making a leaked table of
+phone numbers resistant to offline brute force. Set `contact_pepper`, `contact_key` and
+`consent_base_url` in Vault before any real contact is stored.
+
 ## Not here yet
 
-Partner consent and global suppression, override requests, approval tokens and the partner
-page, grant signing and key rotation. See §22 of the architecture doc for the order, and
+Override requests, approval tokens and the partner page, grant signing and key rotation.
+Also not here: an actual SMS or email sender. `message_outbox` is where invitations queue,
+and nothing drains it yet. See §22 of the architecture doc for the order, and
 §20 for what must be true before any of it reaches a beta user.

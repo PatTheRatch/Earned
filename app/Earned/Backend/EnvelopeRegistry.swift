@@ -29,6 +29,10 @@ struct RegistrationRecord: Codable, Equatable, Sendable {
     /// The terms the server acknowledged, so a later edit shows as unsynced
     /// rather than silently diverging.
     var termsSignature: String
+    /// The roster this commitment was registered with. Persisted because a
+    /// later sync that did not know it would re-register the commitment with an
+    /// empty roster and silently strip its accountability route.
+    var partnerIDs: [UUID]
     var version: Int
     var hardensAt: Date?
     var accountabilityAvailable: Bool
@@ -37,16 +41,37 @@ struct RegistrationRecord: Codable, Equatable, Sendable {
     var failure: String?
 }
 
+extension RegistrationRecord {
+    /// `partnerIDs` arrived after Milestone A shipped this file, so a registry
+    /// written by the earlier build decodes with an empty roster — which is
+    /// what it had. Same rule as the ledger: read what was written, don't
+    /// refuse it.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        status = try container.decode(Status.self, forKey: .status)
+        termsSignature = try container.decode(String.self, forKey: .termsSignature)
+        partnerIDs = try container.decodeIfPresent([UUID].self, forKey: .partnerIDs) ?? []
+        version = try container.decode(Int.self, forKey: .version)
+        hardensAt = try container.decodeIfPresent(Date.self, forKey: .hardensAt)
+        accountabilityAvailable = try container.decode(Bool.self, forKey: .accountabilityAvailable)
+        partnerCount = try container.decode(Int.self, forKey: .partnerCount)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        failure = try container.decodeIfPresent(String.self, forKey: .failure)
+    }
+}
+
 /// A small JSON file next to the ledger. Never merged into it.
 struct EnvelopeRegistry: Codable, Equatable, Sendable {
     private(set) var records: [UUID: RegistrationRecord] = [:]
 
     subscript(commitmentID: UUID) -> RegistrationRecord? { records[commitmentID] }
 
-    mutating func record(_ receipt: EnvelopeReceipt, terms: String, at date: Date) {
+    mutating func record(_ receipt: EnvelopeReceipt, terms: String,
+                         partnerIDs: [UUID], at date: Date) {
         records[receipt.commitmentID] = RegistrationRecord(
             status: receipt.isLate ? .late : .registered,
             termsSignature: terms,
+            partnerIDs: partnerIDs,
             version: receipt.version,
             hardensAt: receipt.hardensAt,
             accountabilityAvailable: receipt.accountabilityAvailable,
@@ -60,7 +85,7 @@ struct EnvelopeRegistry: Codable, Equatable, Sendable {
         // A failure never downgrades a `late` verdict the server already gave:
         // being unable to reach the server does not un-say what it said.
         var record = records[commitmentID] ?? RegistrationRecord(
-            status: .failed, termsSignature: terms, version: 0, hardensAt: nil,
+            status: .failed, termsSignature: terms, partnerIDs: [], version: 0, hardensAt: nil,
             accountabilityAvailable: false, partnerCount: 0, updatedAt: date, failure: reason)
         if record.status != .late { record.status = .failed }
         record.failure = reason

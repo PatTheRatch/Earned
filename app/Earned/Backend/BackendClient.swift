@@ -104,6 +104,57 @@ actor BackendClient {
         try await rpc("withdraw_plan_envelopes", ["p_plan_id": planID.uuidString])
     }
 
+    /// A contract's standing *now*, not when it was registered.
+    ///
+    /// Needed because a roster member can revoke afterwards: the threshold
+    /// stands and the route quietly goes unavailable, and an app still showing
+    /// the answer it got at registration would be claiming a way out that no
+    /// longer exists.
+    func envelopeStatus(commitmentID: UUID) async throws -> EnvelopeReceipt? {
+        let json = try await rpc("envelope_status", ["p_commitment_id": commitmentID.uuidString])
+        guard json["registered"] as? Bool == true else { return nil }
+        return try EnvelopeReceipt(json: json)
+    }
+
+    // MARK: - Partners
+
+    /// Sends a contact address to the server exactly once. Everything after
+    /// this — normalising it, encrypting it, deriving its blind index, deciding
+    /// whether it is suppressed, and composing the invitation — happens there.
+    /// The consent token is never returned here, because an app that could see
+    /// it could consent on its partner's behalf.
+    func nominatePartner(displayName: String,
+                         channel: Partner.Channel,
+                         contact: String) async throws -> UUID {
+        let json = try await rpc("nominate_partner", [
+            "p_display_name": displayName,
+            "p_channel": channel.rawValue,
+            "p_contact": contact,
+        ])
+        guard let idString = json["id"] as? String, let id = UUID(uuidString: idString) else {
+            throw Failure.refused(status: 200, message: "The server did not confirm the partner.")
+        }
+        return id
+    }
+
+    func resendInvitation(partnerID: UUID) async throws {
+        _ = try await rpc("resend_partner_invitation", ["p_partner_id": partnerID.uuidString])
+    }
+
+    func revokePartner(partnerID: UUID) async throws {
+        _ = try await rpc("revoke_partner", ["p_partner_id": partnerID.uuidString])
+    }
+
+    /// Reads the partner list from the table directly — the one place the app
+    /// has any table access at all, and it is SELECT-only on its own rows.
+    func loadPartners() async throws -> [Partner] {
+        guard accessToken != nil else { throw Failure.notSignedIn }
+        let query = "/rest/v1/partner?select=id,display_name,channel,status,consent_asked_at,"
+            + "consented_at,consent_resent_at&order=created_at.asc"
+        let rows: [[String: Any]] = try await get(path: query)
+        return rows.compactMap(Partner.init(row:))
+    }
+
     // MARK: - Plumbing
 
     /// ISO-8601 with fractional seconds. The server parses microseconds and the
@@ -121,6 +172,32 @@ actor BackendClient {
     private func rpc(_ name: String, _ params: [String: Any]) async throws -> [String: Any] {
         guard accessToken != nil else { throw Failure.notSignedIn }
         return try await post(path: "/rest/v1/rpc/\(name)", body: params, authorized: true)
+    }
+
+    private func get<T>(path: String) async throws -> [T] {
+        guard let url = URL(string: path, relativeTo: config.url) else {
+            throw Failure.transport("Bad backend path.")
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 20
+        request.setValue(config.anonKey, forHTTPHeaderField: "apikey")
+        if let accessToken {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+        let data: Data, response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            throw Failure.transport(error.localizedDescription)
+        }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+            throw Failure.refused(status: status,
+                                  message: json["message"] as? String
+                                      ?? "The server refused the request (\(status)).")
+        }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [T] ?? []
     }
 
     private func post(path: String, body: Any, authorized: Bool) async throws -> [String: Any] {

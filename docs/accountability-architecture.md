@@ -1,6 +1,6 @@
 # Accountability Overrides — Architecture and Threat Model
 
-v0.3 · August 2026 · **Design for review. Nothing here is built.**
+v0.4 · August 2026 · **Milestones A and B are built. Later milestones are not.**
 
 This is the design to red-team before any of it is written. It covers the Accountability
 Override (NORTHSTAR §23–24) as a networked feature: what the backend owns, how approval
@@ -16,6 +16,17 @@ through our architecture**. Every design choice below is measured against two qu
 
 Decisions that are genuinely product calls are collected in [§21](#21-decisions) — settled
 ones and open ones kept apart, so nothing quietly becomes a default by being written down.
+
+## What changed in v0.4
+
+Written while building Milestones A and B. Two corrections and one new invariant.
+
+| | |
+|---|---|
+| **Correction: §4.4's harder-only edits were wrong before hardening** | v0.2–v0.3 said the server accepts an envelope update only if every field is at least as hard, at all times. But EarnedKit permits *any* edit inside the correction window — that is what the window is for. A user fixing "10 miles" to "10 km" two minutes after committing would have had the edit accepted by the ledger and refused by the server, stranding the commitment unregistered. The restriction also defended nothing: an unhardened commitment can simply be cancelled and remade. Monotonicity now lives exactly where EarnedKit puts it — at the hardening instant, where the envelope freezes absolutely |
+| **New: invariant 22, a contract may not be born impossible** | A roster is drawn only from partners who have already consented, and a threshold may never exceed it. See §4.5 |
+| **New: `envelope_status`** | Registration returned a contract's standing at the moment of registration, and nothing re-read it. A roster member revoking afterwards would silently take the accountability route away while the app kept showing the answer it was given. There is now a read path, and the app uses it on every sync |
+| Partner model completed | Normalisation, encryption, keyed blind index, consent tokens, global suppression, nomination and resend limits — §14, now built rather than described |
 
 ## What changed in v0.3
 
@@ -288,24 +299,28 @@ Two exceptions, neither user-driven:
   may never be *added* to a frozen envelope, because adding a contact you control is the
   Sybil move of §2.2 in slow motion.
 
-### 4.4 How harder-only edits propagate before hardening
+### 4.4 Edits before hardening
 
-While `now < hardens_at`, the client may `PUT` a new envelope version. The server accepts it
-only if every enforceable field is at least as hard:
+**Corrected in v0.4.** Earlier revisions of this document said the server accepts an update
+only if every field is at least as hard. That was wrong, and building it proved it wrong.
 
-| Field | Harder means |
-|---|---|
-| `deadline` | earlier or equal |
-| `eligible_from` | later or equal |
-| `approvals_required` | greater or equal |
-| `accountability_window` | greater or equal |
-| `partner_ids` | superset or equal — you may add people to ask, never remove them |
-| `correction_window` | shorter or equal |
+EarnedKit permits *any* edit while `now < hardensAt` — the correction window exists precisely
+so a commitment made in haste can be fixed. A server that refused an easing edit the ledger
+had already accepted would strand the commitment: accepted locally, refused remotely, stuck
+as unregistered forever. And it defended nothing, because before hardening the user can
+cancel the commitment and make a new one.
 
-`version` must increment. Anything else is a `409`, and the app surfaces the same rejection
-copy it already uses for local easing attempts. Note this makes the server a *second*
-independent enforcer of monotonicity for these fields — a patched client that lets itself
-ease a contract locally will find the server still holding the original terms.
+So before hardening the envelope accepts any valid terms, subject only to:
+
+- `version` must increase (ordering and idempotency, not monotonicity)
+- `plan_id` may not change — that is structural, not a term
+- the roster rules of §4.5, which apply at every version
+
+**At `hardens_at` the envelope freezes absolutely.** No field changes, in either direction,
+ever again. That is where monotonicity lives, and it is where EarnedKit puts it too. The
+server remains a second independent enforcer of the Monotonic Commitment Principle — it is
+simply enforcing the same boundary the ledger does rather than a stricter one nobody asked
+for.
 
 ### 4.5 How the server verifies a request against it
 
@@ -320,6 +335,22 @@ It does **not** carry a threshold, a roster, a window, or a deadline. The server
 5. Takes `approvals_required`, `accountability_window` and the roster **from the envelope**.
 6. Filters the roster to partners who are consented, unsuppressed and not revoked. If fewer
    than `approvals_required` remain → refuse with a specific reason the app can explain.
+
+**Invariant 22, enforced at registration rather than at request time.** A roster may contain
+only partners whose status is `active` — consented, unsuppressed, unrevoked — and
+`approvals_required` may not exceed the roster's size. Hardening "2 of Mom, Dave and Chris"
+while Dave has never answered would create a contract whose accountability route was dead
+from birth, and the user would discover it at the exact moment they needed a way out.
+
+An **empty roster is exempt from the threshold half of the rule**, and is not the same
+failure. It is every commitment made before anyone has been nominated — a commitment with no
+accountability route, which the receipt reports plainly rather than pretending otherwise.
+The deception invariant 22 exists to prevent is a roster that *looks* sufficient and isn't.
+
+A partner who withdraws **after** the contract is registered is untouched by this: the
+threshold stands, the roster stays as agreed, and `accountability_available` goes false. That
+asymmetry is deliberate — Earned refuses to author a way out that never worked, and refuses
+to rewrite one that reality made harder.
 7. Freezes the snapshot (§7), mints one token per surviving partner, and sends.
 
 The client's influence over the outcome is now limited to the progress figures and the
@@ -1141,6 +1172,7 @@ This list is the gate, not a wish list.
 | ☐ | **RLS default-deny tested per table**, including the `anon` case |
 | ☐ | **Migrations in the repo and running in CI** |
 | ☐ | **Contact encryption plus keyed blind index**, with normalisation tests |
+| ☐ | **Contact keys held in the platform secret store, not database configuration.** The build reads Supabase Vault when present and falls back to a database setting so the suite runs on a plain Postgres. That fallback must never be production: a pepper stored in the database's own configuration is dumped alongside the rows it exists to protect, which defeats the only thing it is for |
 | ☐ | **Consent and global suppression** live, including cross-account suppression |
 | ☐ | **Abuse reporting and rate limits** on nomination, requests and messaging, with cost ceilings alarmed |
 | ☐ | **Concurrent vote tests** green |

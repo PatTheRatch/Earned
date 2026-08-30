@@ -28,6 +28,11 @@ final class AccountStore: ObservableObject {
     /// Set when a sync attempt failed, so the UI can say so once rather than
     /// per-commitment. Cleared by the next successful pass.
     @Published private(set) var syncFailure: String?
+    @Published private(set) var partners: [Partner] = []
+    /// The server's own words when it refuses a nomination — "Earned can't send
+    /// messages to this contact", "you have already invited this contact".
+    /// Shown as written rather than flattened into a generic failure.
+    @Published var partnerFailure: String?
 
     private let client: BackendClient?
     private let storage: EnvelopeRegistryStorage
@@ -109,6 +114,59 @@ final class AccountStore: ObservableObject {
         session = .signedOut
     }
 
+    // MARK: - Partners
+
+    /// Partners who may be counted on in a contract roster.
+    ///
+    /// Invariant 22: only a partner who has already consented is eligible. An
+    /// invitation nobody answered is not a person who will approve anything,
+    /// and a contract built on one is dead from birth.
+    var eligiblePartners: [Partner] { partners.filter { $0.state.isEligibleForRoster } }
+
+    /// Partners who have been asked and have not answered. Surfaced so the
+    /// reason a name is missing from the picker is visible rather than puzzling.
+    var awaitingConsent: [Partner] { partners.filter { $0.state == .invited } }
+
+    func refreshPartners() async {
+        guard let client, case .signedIn = session else { return }
+        do { partners = try await client.loadPartners() }
+        catch { partnerFailure = error.localizedDescription }
+    }
+
+    func nominatePartner(displayName: String, channel: Partner.Channel, contact: String) async {
+        guard let client, case .signedIn = session else { return }
+        partnerFailure = nil
+        do {
+            _ = try await client.nominatePartner(displayName: displayName,
+                                                 channel: channel, contact: contact)
+            await refreshPartners()
+        } catch {
+            partnerFailure = error.localizedDescription
+        }
+    }
+
+    func resendInvitation(to partner: Partner) async {
+        guard let client, case .signedIn = session else { return }
+        partnerFailure = nil
+        do {
+            try await client.resendInvitation(partnerID: partner.id)
+            await refreshPartners()
+        } catch { partnerFailure = error.localizedDescription }
+    }
+
+    /// Removing a partner. Never a refusal on their behalf: no suppression row
+    /// is written, because this person declined nothing. It also never lowers a
+    /// threshold already agreed — a contract that loses too many partners
+    /// becomes unavailable rather than easier (§4.3).
+    func revokePartner(_ partner: Partner) async {
+        guard let client, case .signedIn = session else { return }
+        partnerFailure = nil
+        do {
+            try await client.revokePartner(partnerID: partner.id)
+            await refreshPartners()
+        } catch { partnerFailure = error.localizedDescription }
+    }
+
     // MARK: - Envelope sync
 
     /// Registers every hardened-or-not commitment the server has not been told
@@ -117,21 +175,33 @@ final class AccountStore: ObservableObject {
     /// Idempotent and safe to call often — on creation, on foreground, after
     /// signing in. Anything already registered on the same terms is skipped
     /// without a request.
-    func syncEnvelopes(for commitments: [CommitmentRecord], now: Date) async {
+    func syncEnvelopes(for commitments: [CommitmentRecord],
+                       rosters: [UUID: [UUID]] = [:],
+                       now: Date) async {
         guard let client, case .signedIn = session else { return }
         var failure: String?
 
         for record in commitments where record.resolution == nil {
             let envelope = ContractEnvelope(record.commitment,
+                                            partnerIDs: rosters[record.commitment.id]
+                                                ?? registry[record.commitment.id]?.partnerIDs ?? [],
                                             version: nextVersion(for: record.commitment.id))
             if let existing = registry[record.commitment.id],
                existing.termsSignature == envelope.termsSignature,
                existing.status != .failed {
+                // Registered on these exact terms already. Its *standing* can
+                // still have changed since — a roster member may have revoked —
+                // so re-read rather than re-register.
+                if let receipt = try? await client.envelopeStatus(commitmentID: record.commitment.id) {
+                    registry.record(receipt, terms: envelope.termsSignature,
+                                    partnerIDs: envelope.partnerIDs, at: now)
+                }
                 continue
             }
             do {
                 let receipt = try await client.registerEnvelope(envelope)
-                registry.record(receipt, terms: envelope.termsSignature, at: now)
+                registry.record(receipt, terms: envelope.termsSignature,
+                                partnerIDs: envelope.partnerIDs, at: now)
             } catch {
                 // A frozen contract is not an error to retry forever: the
                 // server is telling us the terms it holds are final, which is

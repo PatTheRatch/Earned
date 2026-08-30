@@ -80,6 +80,9 @@ struct NewCommitmentView: View {
     @State private var preset: TimePreset = .morning
     @State private var customTime = Date()
     @State private var approvals = 2
+    /// Who this commitment's accountability route runs through. Only
+    /// partners who have already accepted can be picked (invariant 22).
+    @State private var roster: Set<UUID> = []
     @State private var accountabilityMinutes = 30.0
     @State private var correctionHours = 2.0
     @State private var warnBefore = true
@@ -106,6 +109,10 @@ struct NewCommitmentView: View {
                     Button("Cancel") { dismiss() }
                 }
             }
+            // Who is eligible can have changed since the app last looked — a
+            // partner may have accepted an hour ago — and the picker must not
+            // offer a stale answer.
+            .task { await account.refreshPartners() }
         }
     }
 
@@ -215,9 +222,15 @@ struct NewCommitmentView: View {
 
         case .escape:
             VStack(alignment: .leading, spacing: 18) {
+                rosterPicker
                 VStack(alignment: .leading, spacing: 6) {
-                    Stepper("Approvals required: \(approvals)", value: $approvals, in: 1...5)
-                    Text("How many accountability partners must agree before an override succeeds.")
+                    Stepper("Approvals required: \(approvals)",
+                            value: $approvals, in: 1...max(1, roster.count))
+                    Text(roster.isEmpty
+                         ? "No partners on this one, so the only way out will be the Solo "
+                           + "Override."
+                         : "How many of the \(roster.count) must agree before an override "
+                           + "succeeds.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 VStack(alignment: .leading, spacing: 6) {
@@ -368,6 +381,63 @@ struct NewCommitmentView: View {
         return hardenTimes.max() ?? store.now
     }
 
+    /// The roster, restricted to partners who have already consented.
+    ///
+    /// Someone still awaiting consent is listed but not selectable, and says
+    /// why. Hiding them entirely would be worse: the user would wonder where
+    /// Dave went. Offering them would let the user harden "2 of Mom and Dave"
+    /// while Dave has never answered — a contract with no working way out,
+    /// discovered at the worst possible moment (invariant 22).
+    @ViewBuilder
+    private var rosterPicker: some View {
+        let eligible = account.eligiblePartners
+        let waiting = account.awaitingConsent
+
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel(text: "Who can let you out")
+
+            if eligible.isEmpty && waiting.isEmpty {
+                Text("No accountability partners yet. You can still make this commitment — "
+                     + "the Solo Override will be the way out. Invite someone in Settings.")
+                    .font(.footnote).foregroundStyle(Theme.muted)
+            }
+
+            ForEach(eligible) { partner in
+                Button {
+                    if roster.contains(partner.id) { roster.remove(partner.id) }
+                    else { roster.insert(partner.id) }
+                    approvals = min(approvals, max(1, roster.count))
+                } label: {
+                    HStack {
+                        Image(systemName: roster.contains(partner.id)
+                              ? "checkmark.square.fill" : "square")
+                        Text(partner.displayName)
+                        Spacer()
+                    }
+                    .foregroundStyle(Theme.ink)
+                }
+                .buttonStyle(.plain)
+            }
+
+            ForEach(waiting) { partner in
+                HStack {
+                    Image(systemName: "square.dashed")
+                    Text(partner.displayName)
+                    Spacer()
+                    Text("Awaiting consent")
+                        .font(.system(size: 11, weight: .bold)).tracking(1.1)
+                }
+                .foregroundStyle(Theme.muted)
+            }
+
+            if !waiting.isEmpty {
+                Text("Someone who hasn't accepted yet can't be counted on. A threshold that "
+                     + "includes them would look like a way out and wouldn't be one.")
+                    .font(.footnote).foregroundStyle(Theme.muted)
+            }
+        }
+    }
+
     private func commit() {
         if repeats == .weekly {
             let start = Calendar.current.startOfDay(for: day)
@@ -383,7 +453,7 @@ struct NewCommitmentView: View {
                                                accountabilityWindow: accountabilityMinutes * 60),
                 rewardEligible: rewardEligible,
                 warningLead: warnBefore ? 30 * 60 : nil)
-            if created { registerEnvelopes(); dismiss() }
+            if created { registerEnvelopes(rosterFor: unregisteredIDs); dismiss() }
             return
         }
         let created = store.createCommitment(
@@ -395,7 +465,7 @@ struct NewCommitmentView: View {
                                            accountabilityWindow: accountabilityMinutes * 60),
             rewardEligible: rewardEligible,
             warningLead: warnBefore ? 30 * 60 : nil)
-        if created { registerEnvelopes(); dismiss() }
+        if created { registerEnvelopes(rosterFor: unregisteredIDs); dismiss() }
     }
 
     /// Registers the new commitment's terms with the server immediately.
@@ -405,8 +475,22 @@ struct NewCommitmentView: View {
     /// accountability route for good (S13), and a short-fuse commitment can
     /// harden within minutes. A no-op when there is no backend or nobody is
     /// signed in — the commitment itself is already saved either way.
-    private func registerEnvelopes() {
-        Task { await account.syncEnvelopes(for: store.allCommitments, now: store.now) }
+    private func registerEnvelopes(rosterFor ids: [UUID]) {
+        let chosen = Array(roster)
+        let rosters = Dictionary(uniqueKeysWithValues: ids.map { ($0, chosen) })
+        Task {
+            await account.syncEnvelopes(for: store.allCommitments,
+                                        rosters: rosters, now: store.now)
+        }
+    }
+
+    /// Commitments the ledger holds that the server has not been told about.
+    /// Newly created ones, in other words — including every occurrence a plan
+    /// just generated, which all share the roster chosen here.
+    private var unregisteredIDs: [UUID] {
+        store.allCommitments
+            .filter { $0.resolution == nil && account.registration(of: $0.commitment) == .pending }
+            .map(\.commitment.id)
     }
 }
 

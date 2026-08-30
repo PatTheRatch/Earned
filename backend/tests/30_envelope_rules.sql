@@ -20,11 +20,13 @@ select test_assert((select count(*) from public.account) = 2,
 select test_sign_in('11111111-1111-1111-1111-111111111111');
 
 -- A partner belonging to Patrick, and one belonging to the other account.
-insert into public.partner (account_id, display_name, channel, contact_ciphertext, contact_lookup)
-select a.id, 'Mom', 'sms', '\x00'::bytea, '\x01'::bytea
+insert into public.partner (account_id, display_name, channel, contact_ciphertext,
+                            contact_lookup, status, consented_at)
+select a.id, 'Mom', 'sms', '\x00'::bytea, '\x01'::bytea, 'active', now()
   from public.account a where a.apple_user_id = 'apple-sub-patrick';
-insert into public.partner (account_id, display_name, channel, contact_ciphertext, contact_lookup)
-select a.id, 'Stranger', 'sms', '\x00'::bytea, '\x02'::bytea
+insert into public.partner (account_id, display_name, channel, contact_ciphertext,
+                            contact_lookup, status, consented_at)
+select a.id, 'Stranger', 'sms', '\x00'::bytea, '\x02'::bytea, 'active', now()
   from public.account a where a.apple_user_id = 'apple-sub-other';
 
 -- MARK: registering an envelope
@@ -70,30 +72,6 @@ select test_raises($$
   select public.register_contract_envelope(
     p_commitment_id => 'aaaaaaaa-0000-0000-0000-000000000001', p_title => 'Run 30 minutes',
     p_created_at => now(), p_eligible_from => now(), p_deadline => now() + interval '4 hours',
-    p_correction_window => 7200, p_approvals_required => 1, p_accountability_window => 1800,
-    p_version => 2) $$,
-  'lowering the approval threshold is refused');
-
-select test_raises($$
-  select public.register_contract_envelope(
-    p_commitment_id => 'aaaaaaaa-0000-0000-0000-000000000001', p_title => 'Run 30 minutes',
-    p_created_at => now(), p_eligible_from => now(), p_deadline => now() + interval '9 hours',
-    p_correction_window => 7200, p_approvals_required => 2, p_accountability_window => 1800,
-    p_version => 2) $$,
-  'moving the deadline later is refused');
-
-select test_raises($$
-  select public.register_contract_envelope(
-    p_commitment_id => 'aaaaaaaa-0000-0000-0000-000000000001', p_title => 'Run 30 minutes',
-    p_created_at => now(), p_eligible_from => now(), p_deadline => now() + interval '4 hours',
-    p_correction_window => 7200, p_approvals_required => 2, p_accountability_window => 60,
-    p_version => 2) $$,
-  'shortening the accountability window is refused');
-
-select test_raises($$
-  select public.register_contract_envelope(
-    p_commitment_id => 'aaaaaaaa-0000-0000-0000-000000000001', p_title => 'Run 30 minutes',
-    p_created_at => now(), p_eligible_from => now(), p_deadline => now() + interval '4 hours',
     p_correction_window => 7200, p_approvals_required => 3, p_accountability_window => 1800,
     p_version => 1) $$,
   'a version that does not increase is refused, even for a harder edit');
@@ -119,19 +97,25 @@ select test_raises($$
     p_partner_ids => array(select id from public.partner where display_name = 'Stranger')) $$,
   'a roster naming another account''s partner is refused');
 
+-- One consented partner, one approval. Roster eligibility is exercised in
+-- 60_roster_eligibility; here it just has to be a legal contract.
 select public.register_contract_envelope(
   p_commitment_id => 'aaaaaaaa-0000-0000-0000-000000000003', p_title => 'With a partner',
   p_created_at => now(), p_eligible_from => now(), p_deadline => now() + interval '4 hours',
-  p_correction_window => 7200, p_approvals_required => 2, p_accountability_window => 1800,
+  p_correction_window => 7200, p_approvals_required => 1, p_accountability_window => 1800,
   p_partner_ids => array(select id from public.partner where display_name = 'Mom'));
 
-select test_raises($$
-  select public.register_contract_envelope(
-    p_commitment_id => 'aaaaaaaa-0000-0000-0000-000000000003', p_title => 'With a partner',
-    p_created_at => now(), p_eligible_from => now(), p_deadline => now() + interval '4 hours',
-    p_correction_window => 7200, p_approvals_required => 2, p_accountability_window => 1800,
-    p_partner_ids => '{}'::uuid[], p_version => 2) $$,
-  'removing a partner before hardening is refused');
+-- Before hardening a commitment can be corrected freely, exactly as EarnedKit
+-- allows inside the correction window. The server matches the ledger here.
+select public.register_contract_envelope(
+  p_commitment_id => 'aaaaaaaa-0000-0000-0000-000000000003', p_title => 'With a partner',
+  p_created_at => now(), p_eligible_from => now(), p_deadline => now() + interval '4 hours',
+  p_correction_window => 7200, p_approvals_required => 1, p_accountability_window => 1800,
+  p_partner_ids => '{}'::uuid[], p_version => 2);
+select test_assert(
+  (select approvals_required = 1 from public.contract_envelope
+    where commitment_id = 'aaaaaaaa-0000-0000-0000-000000000003'),
+  'an easing edit inside the correction window is accepted, as the ledger accepts it');
 
 -- MARK: the freeze, and the late marking
 

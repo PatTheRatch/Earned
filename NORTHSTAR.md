@@ -1311,6 +1311,7 @@ These rules should survive feature debates.
 19. **Consequences increase accountability, not hopelessness.** Earned preserves what was originally owed rather than multiplying obligations because the user failed.
 20. **A new identity must not be an easier way out than the Override system.**
 21. **Earned never claims to be inescapable.** Where the OS permits circumvention, the product says so plainly.
+22. **A contract may not be born impossible.** An accountability roster is drawn only from partners who have already consented, and a threshold may never exceed the roster it is a threshold of. A partner who withdraws *afterwards* is a different matter entirely: the deal was real when it hardened, the threshold stands, and the route becomes unavailable if too few remain. Earned refuses to author a way out that never worked; it does not rewrite one that reality made harder.
 
 ---
 

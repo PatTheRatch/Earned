@@ -31,6 +31,11 @@ struct AccountSection: View {
 
             case .signedIn(let name):
                 LabeledContent("Signed in", value: name)
+                NavigationLink {
+                    PartnersView()
+                } label: {
+                    LabeledContent("Accountability partners", value: partnerSummary)
+                }
                 registrationSummary
                 Button("Sign out", role: .destructive) { account.signOut() }
 
@@ -79,9 +84,22 @@ struct AccountSection: View {
         }
     }
 
+    /// Active first, because that is the number that decides whether a
+    /// commitment can have an accountability route at all.
+    private var partnerSummary: String {
+        let active = account.eligiblePartners.count
+        let waiting = account.awaitingConsent.count
+        if active == 0 && waiting == 0 { return "None yet" }
+        if waiting == 0 { return "\(active) active" }
+        return "\(active) active, \(waiting) waiting"
+    }
+
     private func handle(_ result: Result<ASAuthorization, Error>) {
         account.completeSignIn(result)
-        Task { await account.syncEnvelopes(for: store.allCommitments, now: store.now) }
+        Task {
+            await account.refreshPartners()
+            await account.syncEnvelopes(for: store.allCommitments, now: store.now)
+        }
     }
 }
 

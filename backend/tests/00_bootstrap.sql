@@ -74,3 +74,40 @@ begin
   raise exception 'FAILED: expected a refusal — %', p_what;
 end;
 $$;
+
+-- Contact-crypto keys and the consent link's base URL. Production reads these
+-- from Supabase Vault; the GUC fallback exists so the suite runs on a plain
+-- Postgres. See private.secret, and the launch gate about key custody.
+do $$
+declare
+  v_db text := current_database();
+begin
+  execute format('alter database %I set app.contact_pepper = %L', v_db,
+                 'test-pepper-not-a-real-secret');
+  execute format('alter database %I set app.contact_key = %L', v_db,
+                 'test-key-not-a-real-secret');
+  execute format('alter database %I set app.consent_base_url = %L', v_db,
+                 'https://earned.test');
+end
+$$;
+
+-- The consent token exists only inside the outbound message — that is the
+-- point of it. To exercise the consent flow the suite has to read it the way
+-- the consent page's edge function does: by being the server.
+-- plpgsql rather than sql, because this file runs *before* the migrations that
+-- create the tables it names, and a `language sql` body is parsed at creation.
+create or replace function test_token_for(p_display_name text) returns text
+language plpgsql as $$
+declare
+  v_token text;
+begin
+  select substring(o.body from 'https://earned\.test/c/([0-9a-f]+)')
+    into v_token
+    from public.message_outbox o
+    join public.partner p on p.contact_ciphertext = o.to_ciphertext
+   where p.display_name = p_display_name
+   order by o.created_at desc
+   limit 1;
+  return v_token;
+end;
+$$;
