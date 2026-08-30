@@ -17,7 +17,7 @@ trusted. Re-verify against the code when it drifts.
 
 | Area | Status | Notes |
 |---|---|---|
-| Gate engine — hydration, exercise, hardening, debt, overrides | **Real** | EarnedKit, 81 tests on Linux + macOS |
+| Gate engine — hydration, exercise, hardening, debt, overrides | **Real** | EarnedKit, 87 tests on Linux + macOS |
 | Per-Gate restrictions, eligibility windows, recurring plans | **Real** | Added in the correction pass |
 | All six screens, poster identity, persistence | **Real** | Ledger saved as versioned JSON, replayed and re-validated on launch |
 | Deadline warnings | **Real** | Local notifications; no entitlement needed. Informational only — no snooze |
@@ -62,6 +62,10 @@ commitment they made is in there.
 
 A ledger written by an older build is migrated on load rather than rejected: the file is a
 versioned document, and a v1 payload runs through `LedgerMigration` before replay.
+
+Golden fixtures — raw v1 and v2 JSON checked in as literals, never regenerated — pin both
+on-disk formats in CI, so a build that would quarantine your existing history fails its
+tests instead of shipping.
 
 > Source: `app/Earned/Store/EarnedStore.swift`, `app/Earned/Store/LedgerStorage.swift`,
 > `packages/EarnedKit/Sources/EarnedKit/Migration.swift`

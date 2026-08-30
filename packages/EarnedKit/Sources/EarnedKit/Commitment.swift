@@ -31,6 +31,32 @@ public struct SoloEscalation: Codable, Equatable, Sendable {
     }
 }
 
+// MARK: - Backward-compatible decoding
+
+extension SoloEscalation {
+    private enum CodingKeys: String, CodingKey { case recentWindow, steps }
+    private enum V1Keys: String, CodingKey { case frictionSteps }
+
+    /// Ledger v1 stored the escalation as bare wait durations
+    /// (`frictionSteps: [600, 1800, 3600]`). Those decode as **wait-only**
+    /// requirements — `effortUnits: 0` with the same elapsed floor — because
+    /// that is the contract the user actually agreed to: a v1 solo override
+    /// asked for a wait and nothing else, and migration must not quietly add
+    /// effort to a hardened commitment's escape route. Commitments created
+    /// under v2 carry full effort + floor steps.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        recentWindow = try container.decode(TimeInterval.self, forKey: .recentWindow)
+        if let steps = try container.decodeIfPresent([FrictionRequirement].self, forKey: .steps) {
+            self.steps = steps
+            return
+        }
+        let waits = try decoder.container(keyedBy: V1Keys.self)
+            .decode([TimeInterval].self, forKey: .frictionSteps)
+        steps = waits.map { FrictionRequirement(effortUnits: 0, minimumElapsed: $0) }
+    }
+}
+
 /// The escape rules attached to a commitment. These harden with it (NORTHSTAR §26).
 public struct OverridePolicy: Codable, Equatable, Sendable {
     /// Accountability approvals needed for an Accountability Override.

@@ -188,4 +188,28 @@ Nothing is silently reinterpreted:
 - **Historical solo completions are funded** by an inserted progress event: the
   v1 wait did satisfy v2's elapsed floor, so migration supplies only the effort
   the old flow never asked for.
+- **A v1 escalation's wait durations decode as wait-only requirements** —
+  `effortUnits: 0` with the same elapsed floors. That is the contract the user
+  actually agreed to when the commitment was made; adding effort to a hardened
+  commitment's escape route would be a silent rewrite in the harder direction,
+  which migration is no more entitled to than the easier one. Commitments
+  created under v2 carry full effort + floor steps.
+- **Golden fixtures guard the on-disk formats.** Raw v1 and v2 JSON is checked
+  in as literals (`GoldenLedgerTests`) and must decode, migrate and replay
+  forever. They are never regenerated from current types — a regenerated
+  fixture guards nothing. A failing golden test means the build broke its
+  ability to read a user's existing history: fix the decoder, or bump the
+  schema version and write a migration.
 - A document from a *newer* schema is refused rather than half-read.
+
+## Clocks
+
+- **An event is recorded no earlier than the ledger's newest entry.** Real
+  clocks go backwards — NTP corrections, manual changes — and the chronology
+  invariant would otherwise turn a legitimate tap into a baffling rejection.
+  The app clamps each event's timestamp to `max(wall clock, ledger frontier)`.
+- **This is not tamper resistance.** Gate state is computed against the wall
+  clock, so setting the phone's clock back could reopen a closed window.
+  Defending against deliberate clock manipulation is an enforcement-layer
+  problem (the shield lives outside the app's own clock) and is deliberately
+  not attempted here.

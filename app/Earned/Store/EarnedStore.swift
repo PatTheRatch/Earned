@@ -108,11 +108,25 @@ final class EarnedStore: ObservableObject {
 
     // MARK: - Writing
 
+    /// The wall clock, clamped never to precede the ledger's newest entry.
+    ///
+    /// Real clocks go backwards — an NTP correction after a fast clock, a
+    /// manual change — and the ledger's chronology invariant would then turn a
+    /// perfectly legitimate tap into a baffling rejection. Recording the event
+    /// at the ledger's frontier instead is honest: it happened no earlier than
+    /// the last thing that happened. (Deliberately *not* a defense against
+    /// clock tampering to dodge a deadline — gate state is computed against
+    /// the wall clock, and resisting that is an enforcement-layer problem.)
+    private var eventDate: Date {
+        max(Date(), ledger.entries.last?.date ?? .distantPast)
+    }
+
     /// Appends an event, persisting on success. Returns false and populates
     /// `rejection` when EarnedKit refuses it — a monotonicity violation, an
     /// override taken too early, a spend with no balance.
     @discardableResult
-    func append(_ event: Event, at date: Date = Date()) -> Bool {
+    func append(_ event: Event, at date: Date? = nil) -> Bool {
+        let date = date ?? eventDate
         var updated = ledger
         do {
             try updated.append(event, at: date)
@@ -159,7 +173,7 @@ final class EarnedStore: ObservableObject {
                           restrictions: RestrictionProfile? = nil,
                           rewardEligible: Bool,
                           warningLead: TimeInterval?) -> Bool {
-        let createdAt = Date()
+        let createdAt = eventDate
         let commitment = Commitment(title: title,
                                     requirement: requirement,
                                     deadline: deadline,
@@ -187,7 +201,7 @@ final class EarnedStore: ObservableObject {
                     restrictions: RestrictionProfile? = nil,
                     rewardEligible: Bool,
                     warningLead: TimeInterval?) -> Bool {
-        let createdAt = Date()
+        let createdAt = eventDate
         let plan = CommitmentPlan(title: title,
                                   requirement: requirement,
                                   weekdays: weekdays,
