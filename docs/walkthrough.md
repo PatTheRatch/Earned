@@ -17,7 +17,7 @@ trusted. Re-verify against the code when it drifts.
 
 | Area | Status | Notes |
 |---|---|---|
-| Gate engine — hydration, exercise, hardening, debt, overrides | **Real** | EarnedKit, 84 tests on Linux + macOS |
+| Gate engine — hydration, exercise, hardening, debt, overrides | **Real** | EarnedKit, 94 tests on Linux + macOS |
 | Per-Gate restrictions, eligibility windows, recurring plans | **Real** | Added in the correction pass |
 | All six screens, poster identity, persistence | **Real** | Ledger saved as versioned JSON, replayed and re-validated on launch |
 | Deadline warnings | **Real** | Local notifications; no entitlement needed. Informational only — no snooze |
@@ -25,14 +25,16 @@ trusted. Re-verify against the code when it drifts.
 | Restriction tokens | **Real** | Apple's picker; opaque tokens Earned itself cannot read |
 | Enforcement — apps actually blocked | **Real** | `ManagedSettingsStore` shields the union of closed Gates |
 | Enforcement while the app is closed | **Missing** | A Gate closing with Earned not running waits for next launch; needs `DeviceActivityMonitor` |
+| Enforcement integrity — noticing a revocation | **Partial** | Detected the next time Earned runs. iOS never tells a backgrounded app its authorization went away, so a revocation is invisible until launch |
+| Deleting and reinstalling erases what is owed | **Hole** | The ledger is a file in the app's container, so a reinstall wipes commitments, debt and bypass records. Cheaper than any Override; needs account-authoritative state |
 | Enforcement can be revoked | **By design, unfixable** | iOS Settings → Screen Time → Apps With Screen Time Access. No app can prevent this; a Screen Time passcode is the only friction |
 | Custom shield screen (`NICE TRY.`) | **Missing** | Blocked apps show Apple's default shield; needs a `ShieldConfiguration` extension |
 | Accountability partners | **Missing** | State machine exists; no way to send or collect approvals; step 5 |
 
 **One-sentence version:** the contract machinery is real, the identity is real, and Earned
 now actually takes apps away when a Gate is closed — the remaining holes are that a Gate
-closing while the app isn't running waits for the next launch, and workouts are still logged
-by hand.
+closing while the app isn't running waits for the next launch, workouts are still logged
+by hand, and deleting the app still erases everything it was holding you to.
 
 ---
 
