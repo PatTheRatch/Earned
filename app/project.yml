@@ -50,4 +50,5 @@ targets:
         # need Swift 6 strict concurrency. EarnedKit itself builds in Swift 6.
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: NO

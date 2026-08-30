@@ -79,3 +79,18 @@ a printed notice doesn't have a dark mode (revisit if it ever earns one).
 - **Lock surface**: red flood + STILL LOCKED. and the itemized deal; "You set this one."
 - **Commitment detail, overdue**: OVERDUE.
 - **Shield (step 3)**: NICE TRY. / THE DEAL STILL STANDS.
+
+## App icon
+
+The mark is **`E.`** — the poster lockup at its shortest. `Theme.StateWord`
+renders every state as the word plus a full stop in signal red, so the red dot
+already *is* the brand mark; the icon is that same lockup with the word cut to
+its first letter.
+
+The letterform is drawn as four rectangles rather than typeset. That keeps the
+square-cornered idiom, needs no font file, and stays crisp at 40px on a home
+screen — where a compressed display face would just turn to mush.
+
+Regenerate with `python3 tools/make-appicon.py`. The script is the source of
+truth; the PNG it writes is a build artefact that happens to be committed so
+Xcode can find it.
