@@ -7,11 +7,11 @@ The design and threat model is
 Every product decision in it is settled except account deletion (§21.2), which waits on
 privacy/legal review — nothing here should be built against a guessed answer to that one.
 
-## What exists (Milestones A, B and C)
+## What exists (Milestones A–D)
 
-Accounts, the Contract Envelope, partners with real consent, and the grant-signing key
-infrastructure. No override requests, no approval tokens, no votes, no grants — those are
-later milestones and none of their code is here.
+Accounts, the Contract Envelope, partners with real consent, the grant-signing key
+infrastructure, and override requests with their frozen snapshot and delivery. No votes and
+no grants — those are steps 7 and 8, and none of their code is here.
 
 | | |
 |---|---|
@@ -23,6 +23,7 @@ later milestones and none of their code is here.
 | `migrations/0006` | `nominate_partner`, `resend_partner_invitation`, `respond_to_invitation`, `revoke_partner` |
 | `migrations/0007` | Roster eligibility (invariant 22), the corrected pre-hardening edit rule, and `envelope_status` |
 | `migrations/0008` | Grant signing keys, the rotation state machine, and root-signed key set documents (§10) |
+| `migrations/0009` | `override_request` and its snapshot, recipients and audit log; `create_override_request`, `override_request_status`, expiry, and a vote endpoint that refuses (§§4.5, 6, 7, 13, 16) |
 
 Migrations are appended, never rewritten — 0005–0007 alter what 0001–0004 created rather
 than editing it, because an applied migration and its file have to keep matching.
@@ -106,6 +107,55 @@ revoke, and confirm a stale document cannot be republished. The launch-gate dril
 the production project (root key on an offline machine, clients on real devices) still has
 to be run by a person; the script is its rehearsal and its script.
 
+### Override requests (build order step 6)
+
+`create_override_request` is the trust boundary made concrete. It takes what the device
+observed — progress, the 30-day reliability triple, an optional reason — and **nothing that
+decides the outcome**. The threshold, the roster, the accountability window and the deadline
+are read from the envelope. There is no parameter to put them in, and a test asserts that
+against the catalogue rather than against a reading of the source.
+
+The §4.5 chain, each refusal with its own message because the app has to explain which wall
+it hit: no envelope (absence is never permission, §4.8) · not yet hardened (edit or cancel
+it instead, which is cheaper and more honest than asking three people) · registered late, so
+the accountability route never existed (S13) · already an open request · over the daily cap ·
+fewer eligible partners than the contract needs. That last one re-filters the roster at
+request time, because invariant 22 guaranteed consent at *registration* and a partner can
+withdraw afterwards — and when that happens the threshold does not quietly drop to match who
+is left.
+
+**The token never reaches the requester.** One 256-bit token per partner, base64url, minted
+server-side, stored only as `sha256`, and placed in the outbound message and nowhere else —
+the same discipline as the consent tokens in 0006, for the same reason (S1, S2). The
+response to the requesting device carries the request id and a count of who was asked.
+
+**The snapshot is frozen at creation** (§7) and split structurally into `contract` (the
+server's own, from the envelope) and `self_reported` (the device's, advisory). §7 requires
+the partner page to render the two halves distinguishably and label the second; a flat
+object with a comment marking the split would leave the page hardcoding which keys it may
+trust, and a future field would join the wrong half by accident. The known gap is unchanged
+and stated there: reliability is computed by the requester's own device, so a tampered
+ledger can flatter it — labelling it is the honest interim answer.
+
+The two free-text fields that reach a stranger — the requester's display name and the
+optional reason — are length-capped and URL-neutralised before they are stored (§13). The
+page rendering text and never auto-linking is the real defence; this is the layer that stops
+Earned lending its own credibility to a link it did not author.
+
+`override_request_status` deliberately withholds the running tally. §11 settles the wording
+for the offline case — "waiting to hear back", never "2 approvals received" — and the same
+restraint applies online: the decision arrives once, as a signed grant, in step 8.
+
+Requests expire after 24 hours (S11). `expire_override_requests()` is a sweeper for a
+scheduled job, but nothing depends on its having run: expiry is recomputed wherever it is
+read, and creation retires anything elapsed on its way past, so a user is never held behind
+a row nobody got round to.
+
+`cast_override_vote` exists and refuses. It is step 7, and §19 wants its concurrency tests
+written first — N simultaneous votes on a threshold-2 request producing exactly one
+transition to `granted`. A vote endpoint that silently did nothing would be the worse
+failure, so the stub is loud.
+
 ## Running the tests
 
 Any throwaway Postgres 16 will do; CI uses a service container.
@@ -155,7 +205,7 @@ without these, and `private.secret()` raises rather than falling back quietly in
 |---|---|
 | `contact_pepper` | HMAC key for the blind index. A long random string. **Changing it later invalidates every stored lookup**, so generate it once and keep it |
 | `contact_key` | Symmetric key for contact ciphertext |
-| `consent_base_url` | Origin of the consent page, e.g. `https://earned.app` — the invitation link is built from it |
+| `consent_base_url` | Origin of the consent and approval pages, e.g. `https://earned.app` — both the invitation link (`/c/<token>`) and the approval link (`/a/<token>`) are built from it |
 
 A fourth kind arrives with key rotation rather than setup: `grant_key_<kid>`, the private
 half of each grant signing key, created when that key is introduced (see the runbook in
@@ -199,7 +249,11 @@ any real contact is stored.
 
 ## Not here yet
 
-Override requests, approval tokens and the partner page, and the grants the keys of `0008`
-will eventually sign. Also not here: an actual SMS or email sender. `message_outbox` is
-where invitations queue, and nothing drains it yet. See §22 of the architecture doc for the
+The vote endpoint and the partner page (step 7), and the grants the keys of `0008` will
+eventually sign (step 8). Close/moot propagation and the courtesy message are step 9, which
+is why a requester cannot yet cancel an open request — completing the workout moots it
+locally, and telling the partners so is that step's job.
+
+Also not here: an actual SMS or email sender. `message_outbox` is where invitations and
+approval links queue, and nothing drains it yet. See §22 of the architecture doc for the
 order, and §20 for what must be true before any of it reaches a beta user.

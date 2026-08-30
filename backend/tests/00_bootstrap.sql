@@ -117,3 +117,25 @@ begin
   return v_token;
 end;
 $$;
+
+-- The approval token, exactly like the consent token, exists only inside the
+-- outbound message — that is the point of it (S1). To exercise the request
+-- flow the suite has to read it the way the partner page's edge function
+-- does: by being the server. Matched on the /a/ path so an approval message
+-- is never confused with the /c/ consent message to the same partner.
+create or replace function test_approval_token_for(p_display_name text) returns text
+language plpgsql as $$
+declare
+  v_token text;
+begin
+  select substring(o.body from 'https://earned\.test/a/([A-Za-z0-9_-]+)')
+    into v_token
+    from public.message_outbox o
+    join public.partner p on p.contact_ciphertext = o.to_ciphertext
+   where p.display_name = p_display_name
+     and o.body ~ 'https://earned\.test/a/'
+   order by o.created_at desc
+   limit 1;
+  return v_token;
+end;
+$$;
