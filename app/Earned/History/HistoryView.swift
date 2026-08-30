@@ -20,6 +20,10 @@ struct HistoryView: View {
                     LabeledContent("Completed on time", value: "\(stats.completed)")
                     LabeledContent("Missed deadlines", value: "\(stats.missedDeadlines)")
                     LabeledContent("Override requests", value: "\(stats.overrideRequests)")
+                    // Counted, and counted separately: an override resolved the
+                    // obligation, a bypass left it standing (NORTHSTAR §33).
+                    LabeledContent("Enforcement bypasses",
+                                   value: "\(stats.enforcementBypasses)")
                 }
 
                 if !store.activePlans.isEmpty {

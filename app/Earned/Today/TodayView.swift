@@ -23,7 +23,7 @@ struct TodayView: View {
                     .padding(.top, 2)
 
                     if store.shielding != .approved {
-                        EnforcementNotice(owing: store.isRestricted)
+                        EnforcementNotice(owing: !store.unenforceableGates.isEmpty)
                     }
 
                     VStack(alignment: .leading, spacing: 0) {
