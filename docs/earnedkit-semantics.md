@@ -264,7 +264,11 @@ string, and the whole Screen Time adapter lives in the app layer.
   Unlike an earned Free Override — whose value depends on a mutable reward
   policy and so must be frozen into history — whether a hardened obligation was
   outstanding at an instant is structural, and replays identically from prior
-  state. No re-derivation hazard, so no derived event is needed.
+  state. No re-derivation hazard, so no derived event is needed. The corollary
+  is that a bypass's identity must be derived too: it is its ordinal in the
+  append-only array, not a fresh `UUID`, because a randomly minted id would make
+  two replays of one ledger produce states that differ. Anything projected
+  rather than recorded has to be a pure function of history, identity included.
 - **`detectedAt`, never `revokedAt`.** iOS does not notify a backgrounded app
   that authorization was revoked (the `AuthorizationCenter` publisher stays
   silent), so the earliest knowable moment is the next time Earned runs. The

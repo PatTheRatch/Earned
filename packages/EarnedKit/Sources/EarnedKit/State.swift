@@ -220,6 +220,7 @@ public struct EarnedState: Codable, Equatable, Sendable {
             // Enforcement simply became unavailable, which is not a failure.
             guard !outstanding.isEmpty else { return }
             enforcementBypasses.append(EnforcementBypass(
+                id: enforcementBypasses.count,
                 detectedAt: date, outstandingCommitmentIDs: outstanding))
 
         case .enforcementRestored:

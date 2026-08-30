@@ -9,9 +9,17 @@ import XCTest
 final class EnforcementIntegrityTests: XCTestCase {
 
     /// A commitment created 08:00, due 10:00, hardened from 08:15.
-    private func overdueLedger(id: UUID = UUID()) -> Ledger {
+    ///
+    /// `rewardPolicy` is applied at 07:30 rather than later because easing the
+    /// policy is refused once a hardened commitment is outstanding — the
+    /// Monotonic Commitment Principle applies here too, and a test cannot walk
+    /// around it.
+    private func overdueLedger(id: UUID = UUID(), rewardPolicy: RewardPolicy? = nil) -> Ledger {
         var ledger = Ledger()
         ledger.expectAppend(.enforcementRestored, at: d(24, 7))
+        if let rewardPolicy {
+            ledger.expectAppend(.rewardPolicyConfigured(rewardPolicy), at: d(24, 7, 30))
+        }
         ledger.expectAppend(
             .commitmentCreated(makeCommitment(id: id, title: "Run 30 minutes",
                                               deadline: d(24, 10), createdAt: d(24, 8))),
@@ -46,9 +54,9 @@ final class EnforcementIntegrityTests: XCTestCase {
     }
 
     func testBypassNeitherAwardsNorSpendsAFreeOverride() throws {
-        var ledger = overdueLedger()
-        ledger.expectAppend(
-            .rewardPolicyConfigured(RewardPolicy(streakThreshold: 1, maxStored: 2)), at: d(24, 9))
+        // A threshold of 1 is the hostile case: if a bypass were mistakenly
+        // counted as a success, it would immediately mint a Free Override.
+        var ledger = overdueLedger(rewardPolicy: RewardPolicy(streakThreshold: 1, maxStored: 2))
         let grantsBefore = ledger.state.freeOverrideGrants
         let balanceBefore = ledger.state.freeOverrideBalance
 
@@ -195,5 +203,9 @@ final class EnforcementIntegrityTests: XCTestCase {
         let replayed = try Ledger(replaying: ledger.entries)
         XCTAssertEqual(replayed.state, ledger.state)
         XCTAssertEqual(replayed.state.enforcementBypasses.count, 1)
+        // Including its identity: a bypass is projected, not carried in an
+        // event, so a randomly minted id would make replay non-deterministic.
+        XCTAssertEqual(replayed.state.enforcementBypasses.map(\.id),
+                       ledger.state.enforcementBypasses.map(\.id))
     }
 }
