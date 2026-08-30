@@ -110,12 +110,44 @@ final class EarnedStore: ObservableObject {
     /// while Earned isn't running, and re-applies whatever should be in force.
     func refreshShielding() {
         screenTime.refreshAuthorization()
+        recordEnforcementTransition()
         if screenTime.authorization.canShield {
             syncShield()
         } else {
             // Holding restrictions the user can no longer manage would be a trap.
             screenTime.clear()
         }
+    }
+
+    /// Writes enforcement-integrity transitions into the ledger.
+    ///
+    /// This is the only place the app tells EarnedKit about OS authority, and
+    /// it is deliberately poll-driven: iOS does **not** notify a backgrounded
+    /// app that Screen Time authorization was revoked — `AuthorizationCenter`'s
+    /// publisher stays silent — so the earliest Earned can know is the next
+    /// time it runs. The event is named for detection, not revocation, because
+    /// the moment of the user's action is genuinely unknowable (NORTHSTAR §33).
+    ///
+    /// Only the *loss* of established authority is recorded. A user who has
+    /// never granted Screen Time has taken nothing away, so `unknown` is left
+    /// alone rather than written down as a loss.
+    private func recordEnforcementTransition() {
+        let canEnforce = screenTime.authorization.canShield
+        switch (state.enforcementStatus, canEnforce) {
+        case (.available, false):
+            append(.enforcementUnavailableDetected)
+        case (.unknown, true), (.unavailable, true):
+            append(.enforcementRestored)
+        default:
+            break
+        }
+    }
+
+    /// Unsatisfied Gates that Earned currently cannot act on. Non-empty only
+    /// when something is owed *and* enforcement is gone.
+    var unenforceableGates: [LockReason] {
+        guard !screenTime.authorization.canShield else { return [] }
+        return access.lockReasons
     }
 
     /// Asks for Screen Time permission. Called from onboarding and Settings —

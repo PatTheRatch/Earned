@@ -2,7 +2,7 @@
 
 **North Star Product Document**
 
-v0.4 · August 2026
+v0.5 · August 2026
 
 > Do what matters first. Earn the rest.
 
@@ -1024,23 +1024,119 @@ Earned should therefore avoid an architecture in which the iPhone is permanently
 
 ---
 
-## 33. Deletion and Circumvention
+## 33. Enforcement Integrity and Circumvention
 
-Desired product behavior:
+Earned is a **voluntary commitment device**. The user chooses the commitment and
+the consequence in advance, while thinking clearly.
 
-**An active commitment should not be escapable merely by deleting Earned, disabling enforcement, logging out, reinstalling, or switching enrolled devices.**
+Apple deliberately allows an adult to revoke a third-party app's Screen Time
+authorization, or to delete the app. **Earned does not claim to be technically
+inescapable, and must never imply otherwise.**
 
-Outstanding commitment state should conceptually belong to the account.
+### Two separate states
 
-Deleting and reinstalling should not erase debt.
+The product tracks two things that must never collapse into one binary:
 
-However, operating-system restrictions may limit Earned's ability to prevent every form of circumvention.
+| | |
+|---|---|
+| **Gate state** | satisfied / unsatisfied — decided by the ledger alone |
+| **Enforcement integrity** | available / unavailable — whether Earned currently holds OS authority to impose the consequence |
 
-The product should distinguish between:
+They combine, they do not merge:
 
-**Product intent** and **OS-enforceable reality.**
+- Gate unsatisfied + enforcement available → **restricted and enforced**
+- Gate unsatisfied + enforcement unavailable → **still owed, but Earned cannot currently enforce**
+- Gate satisfied → no restriction from that Gate, however enforcement stands
 
-Technical limitations must be documented explicitly rather than hidden behind fake guarantees.
+A workout is overdue. The Gate stays unsatisfied until the workout is completed
+or legitimately overridden. If the user revokes Screen Time authorization, the
+Gate **does not become satisfied**. The obligation remains in the ledger. What
+changed is only Earned's ability to impose the OS-level consequence.
+
+**The ledger remains the source of truth.**
+
+### Overrides and bypasses are different things
+
+An **Override** means the obligation was legitimately resolved through an
+allowed escape path — free, accountability, or solo.
+
+An **Enforcement Bypass** means Earned lost the ability to enforce the
+consequence while the obligation remained unresolved.
+
+These stay semantically distinct forever. A bypass must never:
+
+- mark a commitment complete
+- clear workout debt
+- consume a Free Override
+- silently forgive an obligation
+
+### Consequence of a detected bypass
+
+Where Earned can reliably determine that enforcement was removed while a
+hardened Gate was unsatisfied, it will:
+
+- record the bypass in history
+- preserve the original obligation exactly as it stood
+- break the relevant completion streak
+- count the bypass in behavioural trends
+
+It deliberately does **not** add further workout debt. Consequences should
+increase accountability, not create hopelessness. Earned preserves what was
+originally owed; it does not multiply obligations because the user failed. A
+self-reinforcing debt trap makes the product unusable and is not accountability.
+
+Bypass consequences should remain configurable, so stronger ones can be chosen
+later — notifying accountability partners, raising the next Solo Override
+escalation, or other user-selected costs.
+
+### Accountability bypass alerts (future)
+
+A user may opt in, **while in a non-compromised state**, to having accountability
+partners notified when Earned detects a bypass during an active obligation:
+
+> Patrick disabled Earned enforcement while a workout was overdue.
+
+The user must not be able to disable this consequence by means of the bypass
+itself.
+
+### Identity and account circumvention
+
+Creating a new account, logging out, reinstalling, or switching identity should
+eventually be an ineffective or meaningfully inconvenient way to erase active
+obligations.
+
+This is **not** a promise of one human = one account, and no invasive identity
+verification is intended. The requirement is narrower and sufficient:
+
+**A new identity must not be an easier way out than the Override system.**
+
+Account-authoritative state and device-local enforcement state both help.
+
+### Hardening your own escape routes
+
+Earned should teach users to make their own bypass deliberate rather than
+reflexive, and recommend — never require — an Apple Screen Time passcode the
+user cannot casually reach for: held by an accountability partner, stored
+somewhere inconvenient, or random and unmemorised.
+
+Earned must never collect, know, store, transmit or recover that passcode. Where
+Apple does not expose whether a passcode exists, Earned must not infer or invent
+that state.
+
+### Desired behaviour vs OS-enforceable reality
+
+These are recorded separately and honestly:
+
+| Desired | OS-enforceable today |
+|---|---|
+| An active commitment is not escapable by revoking enforcement | **No.** Revocation always succeeds; Earned can only notice afterwards |
+| Earned learns immediately that authorization was revoked | **No.** iOS does not notify a backgrounded app; the authorization publisher stays silent. Detection happens when Earned next runs |
+| Earned knows *when* revocation happened | **No.** Only when it was detected |
+| Earned knows revocation was deliberate | **No.** Intent is never provable; events are named for detection, not intent |
+| Deleting and reinstalling does not erase debt | **Not yet.** State is device-local; this needs account-authoritative state |
+
+Technical limitations are documented explicitly rather than hidden behind
+guarantees Earned cannot keep.
 
 ---
 
@@ -1210,6 +1306,11 @@ These rules should survive feature debates.
 14. **A workout counts only inside its commitment's own window.** No reaching forward into a day that has not arrived; late workouts still reach back to clear debt.
 15. **Escape must cost effort, not patience.** Waiting out a clock is not an override.
 16. **An earned reward stays earned.** Policy changes are never retroactive, in either direction.
+17. **Loss of enforcement authority never resolves an obligation.** Disabling Screen Time access, logging out, deleting, reinstalling or switching identity is never equivalent to completing or overriding a commitment.
+18. **A bypass is not an Override.** One left the obligation standing; the other resolved it. History must always be able to tell them apart.
+19. **Consequences increase accountability, not hopelessness.** Earned preserves what was originally owed rather than multiplying obligations because the user failed.
+20. **A new identity must not be an easier way out than the Override system.**
+21. **Earned never claims to be inescapable.** Where the OS permits circumvention, the product says so plainly.
 
 ---
 

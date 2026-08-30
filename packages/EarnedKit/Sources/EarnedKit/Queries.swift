@@ -49,6 +49,10 @@ public struct ReliabilityStats: Equatable, Sendable {
     public var completed: Int
     public var missedDeadlines: Int
     public var overrideRequests: Int
+    /// Occasions enforcement went away while something hardened was owed.
+    /// Counted separately from overrides because they are not the same thing:
+    /// an override resolved the obligation, a bypass left it standing.
+    public var enforcementBypasses: Int
 }
 
 extension EarnedState {
@@ -176,6 +180,27 @@ extension EarnedState {
         return warnings.sorted { $0.date < $1.date }
     }
 
+    // MARK: - Enforcement integrity
+
+    /// Whether Earned can currently impose the consequences its Gates imply.
+    ///
+    /// Deliberately **not** part of `AccessState`: what is owed and whether
+    /// Earned can act on it are separate questions, and a caller asking one
+    /// should never accidentally get the other (NORTHSTAR §33).
+    public var canEnforce: Bool { enforcementStatus.canEnforce }
+
+    /// Unsatisfied Gates that Earned cannot presently act on — what is owed but
+    /// not enforced. Empty when enforcement is healthy *or* nothing is owed.
+    public func unenforceableGates(now: Date) -> [LockReason] {
+        guard !enforcementStatus.canEnforce else { return [] }
+        return accessState(now: now).lockReasons
+    }
+
+    /// A bypass that has not been closed by enforcement returning.
+    public var ongoingEnforcementBypass: EnforcementBypass? {
+        enforcementBypasses.last { $0.isOngoing }
+    }
+
     // MARK: - Plans
 
     /// Live plans, newest first.
@@ -247,7 +272,11 @@ extension EarnedState {
             }
         }
         let requests = overrideRequests.values.filter { $0.requestedAt > windowStart }.count
-        return ReliabilityStats(completed: completed, missedDeadlines: missed, overrideRequests: requests)
+        let bypasses = enforcementBypasses.filter {
+            $0.detectedAt > windowStart && $0.detectedAt <= now
+        }.count
+        return ReliabilityStats(completed: completed, missedDeadlines: missed,
+                                overrideRequests: requests, enforcementBypasses: bypasses)
     }
 }
 

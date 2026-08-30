@@ -65,6 +65,24 @@ Rejected: **Firebase** (NoSQL modeling of contracts is clumsy; deeper lock-in), 
 
 For the single-user MVP, the phone's ledger is the working copy and the backend sees only what accountability requires. The domain model is account-shaped from day one, so promoting the server to authoritative (§33: deletion shouldn't erase debt) is an incremental step, not a migration.
 
+### Enforcement state is domain state, not app state
+
+Whether Earned holds OS authority to enforce is recorded **in the ledger**, not
+just in the app's memory. The app layer owns the Screen Time adapter and is the
+only thing that can observe authorization; it reports transitions as ordinary
+events (`enforcementUnavailableDetected`, `enforcementRestored`) and EarnedKit
+decides what they mean.
+
+That boundary is what lets the consequences be tested at all: EarnedKit builds
+on Linux with no FamilyControls, so bypass semantics — does it break a streak,
+does it clear debt, is it distinguishable from an Override — are exercised in
+CI without a device. The app supplies observation; the domain supplies meaning.
+
+Detection is poll-driven by necessity rather than choice: iOS does not notify a
+backgrounded app that Screen Time authorization was revoked, so the app reports
+what it sees when it next runs. See NORTHSTAR §33 for the full desired-vs-
+enforceable table.
+
 ### Ledger schema versioning
 
 The persisted ledger is a versioned document (`{version, entries}`), not a bare array — a

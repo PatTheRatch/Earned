@@ -42,6 +42,14 @@ public enum Event: Codable, Equatable, Sendable {
     case soloOverrideProgressRecorded(requestID: UUID, units: Int)
     case soloOverrideCompleted(requestID: UUID)
 
+    // Enforcement integrity. Reported by the app layer, which owns the Screen
+    // Time adapter; EarnedKit decides what it *means*. Deliberately named for
+    // detection rather than revocation: iOS never tells a backgrounded app that
+    // authorization went away, so the app can only report what it observes when
+    // it next runs (NORTHSTAR §33).
+    case enforcementUnavailableDetected
+    case enforcementRestored
+
     // MARK: Legacy
 
     /// Ledger v1's single global restricted-app set, as add/remove deltas.

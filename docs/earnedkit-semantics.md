@@ -233,24 +233,46 @@ string, and the whole Screen Time adapter lives in the app layer.
   persists until something changes it, so if Earned is never opened again the
   restriction stays. For a commitment app that is the right direction to fail:
   locked out slightly too long, never let off early.
-- **Enforcement is revocable and nothing can stop that.** iOS Settings →
-  Screen Time → *Apps With Screen Time Access* turns Earned's shield off in two
-  taps, and deleting the app does the same. No third-party app can prevent
-  either. NORTHSTAR §33 anticipates exactly this and requires the gap be stated
-  rather than papered over with a guarantee Earned cannot keep. Apple's own
-  Screen Time passcode ("Lock Screen Time Settings") is the only real friction,
-  and it is the user's to set.
-- **Revoking the shield does not clear what is owed.** The ledger is the source
-  of truth, not `ManagedSettingsStore`: commitments, deadlines and debt survive
-  untouched, and re-granting restores every restriction that was in force.
-  Earned can lose the ability to impose a consequence; it cannot lose the
-  record (§33: outstanding state belongs to the account).
-- **[open] Revocation is not itself recorded.** Every other exit leaves a trace
-  — an override is a ledger event and breaks the streak — but pulling the
-  permission is invisible to history. Whether that should be a recorded event,
-  whether it should break a streak like an override, and whether Today should
-  keep reading LOCKED. while a Gate is unsatisfied but unenforceable, are
-  product decisions and are not mine to invent.
+- **Gate state and enforcement integrity are two axes, never one.** A Gate is
+  satisfied or not according to the ledger; `EnforcementStatus` says only
+  whether Earned currently holds OS authority to act on it. `AccessState`
+  deliberately does **not** carry enforcement status — a caller asking what is
+  owed must never accidentally receive an answer about what can be enforced
+  (NORTHSTAR §33).
+- **Enforcement is revocable and nothing can stop that.** iOS Settings → Screen
+  Time → *Apps With Screen Time Access* turns Earned's shield off in two taps,
+  and deleting the app does the same. Apple's Screen Time passcode is the only
+  real friction and is the user's to set; Earned never sees or stores it, and
+  does not infer whether one exists.
+- **Revoking the shield does not clear what is owed.** Commitments, deadlines
+  and debt survive untouched, and re-granting restores every restriction that
+  was in force. Earned can lose the ability to impose a consequence; it cannot
+  lose the record.
+- **A bypass is recorded only on a real transition from established authority.**
+  `enforcementUnavailableDetected` while already unavailable is a no-op, because
+  the app polls on every launch and foreground and one revocation must not mint
+  a bypass per launch. Losing authority that was never `available` is likewise
+  not a bypass: a user who never granted Screen Time has taken nothing away.
+- **A bypass requires a hardened, unresolved obligation at detection.** Losing
+  enforcement with nothing outstanding is not a failure — there was nothing to
+  escape — so no bypass is recorded and no streak breaks.
+- **A bypass breaks the streak and nothing else.** It resolves no commitment,
+  clears no debt, and neither earns nor spends a Free Override. It deliberately
+  adds no further workout debt: consequences should increase accountability, not
+  build a debt trap that makes the product unusable (NORTHSTAR §33, invariant 19).
+- **Bypasses are projected during `applying`, not written as derived events.**
+  Unlike an earned Free Override — whose value depends on a mutable reward
+  policy and so must be frozen into history — whether a hardened obligation was
+  outstanding at an instant is structural, and replays identically from prior
+  state. No re-derivation hazard, so no derived event is needed.
+- **`detectedAt`, never `revokedAt`.** iOS does not notify a backgrounded app
+  that authorization was revoked (the `AuthorizationCenter` publisher stays
+  silent), so the earliest knowable moment is the next time Earned runs. The
+  event is named for detection because the time of the user's action, and their
+  intent, are both genuinely unprovable.
+- **[open] Enforcement restored closes every ongoing bypass at once.** With one
+  device and one authorization there can only be one open gap, but if Earned
+  ever tracks per-extension or per-device authority this needs revisiting.
 - **[open] A Gate that closes while Earned isn't running is not shielded until
   the app next opens.** The shield is applied by the app, and a deadline passing
   at 10:00 with the app closed has nothing to act on it. A `DeviceActivityMonitor`

@@ -22,6 +22,10 @@ struct TodayView: View {
                     .buttonStyle(.plain)
                     .padding(.top, 2)
 
+                    if store.shielding != .approved {
+                        EnforcementNotice(owing: store.isRestricted)
+                    }
+
                     VStack(alignment: .leading, spacing: 0) {
                         hydrationRow
                         ForEach(store.overdue, id: \.commitment.id) { record in
@@ -200,5 +204,34 @@ struct TodayView: View {
 
     private func timeLabel(_ date: Date) -> String {
         date.formatted(date: .omitted, time: .shortened)
+    }
+}
+
+/// Enforcement integrity, as a *secondary* technical state.
+///
+/// Deliberately never competes with the state word. What you owe is the
+/// contract and stays primary; whether Earned can currently act on it is a
+/// separate fact about the machinery. The two must not collapse into one
+/// LOCKED/UNLOCKED binary (NORTHSTAR §33) — so this says enforcement is off
+/// without ever implying the obligation went with it.
+private struct EnforcementNotice: View {
+    /// Whether a Gate is actually unsatisfied right now. Enforcement being off
+    /// while nothing is owed is a footnote; while something is owed it matters.
+    let owing: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("ENFORCEMENT OFF")
+                .font(.system(size: 11, weight: .bold))
+                .tracking(1.5)
+                .foregroundStyle(owing ? Theme.signal : Theme.muted)
+            Text(owing
+                 ? "Earned can't block anything right now. Still owed either way."
+                 : "Earned can't block anything right now.")
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.muted)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 10)
     }
 }

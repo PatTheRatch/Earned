@@ -7,7 +7,7 @@ struct OnboardingView: View {
     @EnvironmentObject private var store: EarnedStore
 
     private enum Page: Int, CaseIterable {
-        case idea, gates, hydration, restrictions, activate
+        case idea, gates, hydration, restrictions, hardening, activate
     }
 
     @State private var page: Page = .idea
@@ -90,6 +90,17 @@ struct OnboardingView: View {
                        + "learning which ones they are. Grant Screen Time access in Settings when "
                        + "you're ready — until you do, Earned tracks your Gates and tells you "
                        + "exactly what would be locked.")
+
+        case .hardening:
+            Screen(title: "Make Earned harder to escape",
+                   message: "Earned enforces your Gates using Screen Time — but iOS still lets "
+                       + "you revoke that permission, and no app can change that. Earned will "
+                       + "never pretend otherwise.\n\nFor real accountability, set a Screen "
+                       + "Time passcode you can't easily reach for: give it to someone who will "
+                       + "hold you to it, store it somewhere deliberately inconvenient, or use a "
+                       + "random code you don't memorise.\n\nEarned never sees, stores or "
+                       + "transmits that passcode — it's yours alone, and it can't be recovered "
+                       + "from here. This is a recommendation, not a requirement.")
 
         case .activate:
             Screen(title: "The deal",

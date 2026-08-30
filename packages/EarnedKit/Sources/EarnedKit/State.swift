@@ -40,6 +40,12 @@ public struct EarnedState: Codable, Equatable, Sendable {
     /// Free Overrides as immutable grants. Balance is the count of unspent ones;
     /// it is never recomputed from the current reward policy.
     public internal(set) var freeOverrideGrants: [FreeOverrideGrant] = []
+    /// Whether Earned currently holds OS authority to enforce. Tracked
+    /// separately from gate state and never conflated with it (NORTHSTAR §33).
+    public internal(set) var enforcementStatus: EnforcementStatus = .unknown
+    /// Every occasion enforcement went away while a hardened obligation was
+    /// outstanding. Preserved as history; resolves nothing.
+    public internal(set) var enforcementBypasses: [EnforcementBypass] = []
     public internal(set) var lastEventDate: Date?
 
     public init() {}
@@ -194,6 +200,33 @@ public struct EarnedState: Codable, Equatable, Sendable {
             // several obligations, the oldest debt is cleared first.
             for id in commitments.keys.sorted(by: { deadline(of: $0) < deadline(of: $1) }) {
                 resolveIfSatisfied(commitmentID: id)
+            }
+
+        case .enforcementUnavailableDetected:
+            // Only a real transition counts. The app polls on every launch and
+            // foreground, so without this guard a single revocation would mint
+            // a fresh bypass every time the user opened Earned.
+            guard enforcementStatus != .unavailable else { return }
+            // Losing authority you never had is not a bypass: a first-run user
+            // who has not granted Screen Time has taken nothing away.
+            let established = enforcementStatus == .available
+            enforcementStatus = .unavailable
+            guard established else { return }
+            let outstanding = commitments.values
+                .filter { $0.resolution == nil && $0.commitment.isHardened(at: date) }
+                .map(\.commitment.id)
+                .sorted { $0.uuidString < $1.uuidString }
+            // No hardened obligation outstanding means nothing was escaped.
+            // Enforcement simply became unavailable, which is not a failure.
+            guard !outstanding.isEmpty else { return }
+            enforcementBypasses.append(EnforcementBypass(
+                detectedAt: date, outstandingCommitmentIDs: outstanding))
+
+        case .enforcementRestored:
+            guard enforcementStatus != .available else { return }
+            enforcementStatus = .available
+            for index in enforcementBypasses.indices where enforcementBypasses[index].isOngoing {
+                enforcementBypasses[index].resolvedAt = date
             }
 
         case .freeOverrideEarned(let id, let source):
@@ -454,6 +487,14 @@ public struct EarnedState: Codable, Equatable, Sendable {
             case nil:
                 if date > deadline { timeline.append((deadline, .miss)) }
             }
+        }
+
+        // A detected bypass breaks the streak. It resolves nothing and clears
+        // no debt — it only records that the consequence stopped being
+        // enforceable while something hardened was owed, and a streak is a
+        // claim about honouring commitments (NORTHSTAR §33).
+        for bypass in enforcementBypasses {
+            timeline.append((bypass.detectedAt, .miss))
         }
 
         var streak = 0
