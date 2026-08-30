@@ -129,6 +129,32 @@ show its Gates and report that enforcement is off.
 
 ## Enforcement
 
+### One-time setup: register the Family Controls capability
+
+The entitlements file in this repo is only half of what Screen Time needs. The
+*provisioning profile* must also grant Family Controls, and that only happens
+once the capability is registered against the App ID. Until then the app claims
+an entitlement its profile doesn't authorize, and authorization fails with:
+
+```
+The connection to service named com.apple.FamilyControlsAgent was invalidated:
+Connection init failed at lookup with error 159 - Sandbox restriction.
+```
+
+Fix it once, in Xcode:
+
+1. Select the blue `Earned` project → the `Earned` target → **Signing & Capabilities**
+2. **+ Capability** → **Family Controls**
+3. Build and run again
+
+This is a one-time action per App ID, not per build. It registers the capability
+with the developer portal and regenerates the provisioning profile; re-running
+`xcodegen generate` afterwards does not undo it, because the capability lives on
+the App ID (server side) and the entitlement key lives in `Earned.entitlements`
+(in this repo).
+
+### What enforcement does
+
 Real shielding is on. Settings → Restrictions → grant Screen Time access, then pick apps and
 websites per Gate in Apple's own picker. When a Gate is unsatisfied, the union of every closed
 Gate's picks is shielded by `ManagedSettingsStore`.

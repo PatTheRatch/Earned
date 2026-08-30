@@ -51,4 +51,9 @@ targets:
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Set explicitly as well as via `entitlements:` above. Without
+        # this reaching the signed binary, the sandbox refuses the XPC
+        # lookup to com.apple.FamilyControlsAgent with "error 159 -
+        # Sandbox restriction" and authorization can never succeed.
+        CODE_SIGN_ENTITLEMENTS: Earned/Earned.entitlements
         GENERATE_INFOPLIST_FILE: NO
