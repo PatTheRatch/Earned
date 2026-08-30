@@ -24,8 +24,15 @@ jobs:
         run: swift test --package-path packages/EarnedKit
 
   backend:
-    name: Backend schema + RLS
+    name: Backend schema + RLS (${{ matrix.layout }} layout)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # `default` is a bare Postgres (pgcrypto in public); `supabase` is how
+        # the real project is laid out (pgcrypto in extensions). Both must
+        # pass, or a pinned search_path is quietly wrong in production.
+        layout: [default, supabase]
     services:
       postgres:
         image: postgres:16
@@ -37,6 +44,7 @@ jobs:
         ports: ["5432:5432"]
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+      EARNED_LAYOUT: ${{ matrix.layout }}
     steps:
       - uses: actions/checkout@v4
       - name: Install psql

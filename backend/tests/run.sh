@@ -3,12 +3,24 @@
 #
 # Requires DATABASE_URL. Migrations run in order; each test file runs in its own
 # transaction and rolls back, so ordering between them never matters.
+#
+# EARNED_LAYOUT=supabase lays the database out the way Supabase does before
+# any migration runs — pgcrypto in an `extensions` schema instead of `public`.
+# CI runs both layouts, because a pinned search_path that misses `extensions`
+# is silent here and fatal there — every function already had that bug once.
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 : "${DATABASE_URL:?set DATABASE_URL to a throwaway Postgres}"
 
 psql() { command psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --no-psqlrc "$@"; }
+
+if [ "${EARNED_LAYOUT:-default}" = "supabase" ]; then
+  echo "==> supabase layout: pgcrypto lives in the extensions schema"
+  psql -q -c "create schema if not exists extensions;
+              create extension if not exists pgcrypto with schema extensions;
+              grant usage on schema extensions to public;"
+fi
 
 # Supabase provisions the anon/authenticated/service_role roles and auth.uid()
 # before any migration runs, so the scaffolding that stands in for them has to
@@ -33,5 +45,8 @@ for file in backend/tests/[0-9][0-9]_*.sql; do
   echo "==> $file"
   psql -q -f "$file"
 done
+
+echo "==> key rotation drill (real Ed25519, real signatures, the served bytes)"
+backend/tests/keyset_drill.sh
 
 echo "==> all backend tests passed"

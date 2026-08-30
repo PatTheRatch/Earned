@@ -33,6 +33,12 @@ $$;
 grant usage on schema public to anon, authenticated, service_role;
 grant usage on schema auth   to anon, authenticated, service_role;
 
+-- Supabase grants service_role full table access via default privileges, and
+-- the RLS posture leans on that: service_role is the edge functions' identity,
+-- and it both bypasses RLS and holds the grants. Reproduce it, or tests that
+-- read state as service_role pass on Supabase and fail here.
+alter default privileges in schema public grant all on tables to service_role;
+
 -- Become a signed-in user with the given auth uid.
 create or replace function test_sign_in(p_uid uuid) returns void
 language plpgsql as $$

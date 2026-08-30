@@ -7,11 +7,11 @@ The design and threat model is
 Every product decision in it is settled except account deletion (§21.2), which waits on
 privacy/legal review — nothing here should be built against a guessed answer to that one.
 
-## What exists (Milestones A and B)
+## What exists (Milestones A, B and C)
 
-Accounts, the Contract Envelope, and partners with real consent. No override requests, no
-approval tokens, no votes, no grants — those are later milestones and none of their code is
-here.
+Accounts, the Contract Envelope, partners with real consent, and the grant-signing key
+infrastructure. No override requests, no approval tokens, no votes, no grants — those are
+later milestones and none of their code is here.
 
 | | |
 |---|---|
@@ -22,6 +22,7 @@ here.
 | `migrations/0005` | Contact normalisation, encryption and keyed blind indexing; partner `status`; global suppression; invitations; the outbox |
 | `migrations/0006` | `nominate_partner`, `resend_partner_invitation`, `respond_to_invitation`, `revoke_partner` |
 | `migrations/0007` | Roster eligibility (invariant 22), the corrected pre-hardening edit rule, and `envelope_status` |
+| `migrations/0008` | Grant signing keys, the rotation state machine, and root-signed key set documents (§10) |
 
 Migrations are appended, never rewritten — 0005–0007 alter what 0001–0004 created rather
 than editing it, because an applied migration and its file have to keep matching.
@@ -68,6 +69,43 @@ That is the same rule as `Commitment.hardensAt` in EarnedKit, and the two are pi
 together by [`fixtures/hardening-cases.json`](../fixtures/hardening-cases.json), which both
 sides read. Change one without the other and CI fails on both.
 
+### Grant keys and the key set (build order step 5)
+
+When a grant is eventually issued (steps 6–8), the app will trust it because it verifies
+against a key set, not because our server said so. `0008` builds that trust chain before
+any grant exists, because §10.5 is blunt about it: rotation that has never been run is not
+a design, and drilling it with real grants in flight would be drilling on users.
+
+Two levels of key, and the database holds only public halves:
+
+- **Root** — offline. The private half never touches the server, Vault, or this repo; its
+  public half will be compiled into the app. It signs key set *documents*, never grants.
+- **Grant keys** (`g1`, `g2`, …) — Ed25519 pairs whose private halves live in Supabase
+  Vault as `grant_key_<kid>`. The schema stores their public halves and lifecycle:
+  `next → current → retired`, or `revoked` from anywhere, terminally.
+
+The lifecycle rules the tests hold it to: one `current` and one `next` at most; a key
+cannot be promoted until a *published* key set carries it (a key nobody was told about must
+never sign) nor before its `not_before` (clock-skew grace band); the outgoing key retires
+with a verification tail rather than dying, so in-flight grants survive rotation; revoking
+the current key deliberately leaves nothing to sign with until the next key is promoted.
+
+A key set document is assembled by `build_key_set_document()`, signed **offline** by the
+root, and stored by `publish_key_set()` byte-for-byte — versions are strictly monotonic
+and gap-free, which is the server's half of the rollback resistance clients enforce.
+`current_key_set()` serves the newest document verbatim (this is `GET /keys` in substance,
+and the one function `anon` may call — everything in it is public keys). The signing path
+for later milestones starts at `current_signing_kid()`, which names the Vault secret to
+sign with and raises rather than guessing when there is no safe answer.
+
+The state machine is tested in `tests/70_key_rotation.sql`; the crypto path is
+[`tests/keyset_drill.sh`](tests/keyset_drill.sh), which runs the full §10.5 drill in CI
+with real Ed25519 keys — introduce, publish, verify the served bytes against the root key,
+sign a stand-in grant and verify it with the public key *from the served document*, rotate,
+revoke, and confirm a stale document cannot be republished. The launch-gate drill against
+the production project (root key on an offline machine, clients on real devices) still has
+to be run by a person; the script is its rehearsal and its script.
+
 ## Running the tests
 
 Any throwaway Postgres 16 will do; CI uses a service container.
@@ -75,6 +113,11 @@ Any throwaway Postgres 16 will do; CI uses a service container.
 ```sh
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres backend/tests/run.sh
 ```
+
+CI runs the suite twice: once against a bare Postgres and once with
+`EARNED_LAYOUT=supabase`, which lays pgcrypto out in an `extensions` schema the way the
+real project does. A pinned `search_path` that misses `extensions` passes on the first and
+fails on the second — every function here had exactly that bug once, so both layouts gate.
 
 `00_bootstrap.sql` stands in for what Supabase provides in production — the `anon`,
 `authenticated` and `service_role` roles, `auth.uid()`, and the contact-crypto secrets. It reproduces Supabase's own
@@ -114,6 +157,11 @@ without these, and `private.secret()` raises rather than falling back quietly in
 | `contact_key` | Symmetric key for contact ciphertext |
 | `consent_base_url` | Origin of the consent page, e.g. `https://earned.app` — the invitation link is built from it |
 
+A fourth kind arrives with key rotation rather than setup: `grant_key_<kid>`, the private
+half of each grant signing key, created when that key is introduced (see the runbook in
+`tests/keyset_drill.sh` — the real rotation follows the same steps, with the root key kept
+offline). The root private key is never a Vault secret; it never touches the server at all.
+
 **2. Sign in with Apple.** Authentication → Providers → Apple. Needs the Services ID, Team
 ID, Key ID and the `.p8` key from the Apple Developer portal. The same capability also has
 to be enabled on the App ID in Xcode's Signing & Capabilities, or device builds fail to sign.
@@ -151,7 +199,7 @@ any real contact is stored.
 
 ## Not here yet
 
-Override requests, approval tokens and the partner page, grant signing and key rotation.
-Also not here: an actual SMS or email sender. `message_outbox` is where invitations queue,
-and nothing drains it yet. See §22 of the architecture doc for the order, and
-§20 for what must be true before any of it reaches a beta user.
+Override requests, approval tokens and the partner page, and the grants the keys of `0008`
+will eventually sign. Also not here: an actual SMS or email sender. `message_outbox` is
+where invitations queue, and nothing drains it yet. See §22 of the architecture doc for the
+order, and §20 for what must be true before any of it reaches a beta user.
