@@ -147,6 +147,25 @@ Fix it once, in Xcode:
 2. **+ Capability** → **Family Controls**
 3. Build and run again
 
+**If Family Controls isn't in the + Capability list**, it is not because you
+need to request it — Development is self-serve. The list is filtered by the
+selected *team*, and Family Controls only appears for a paid one:
+
+- In **Signing & Capabilities**, check the **Team** dropdown. Enrolling creates
+  a new team entry; the free `(Personal Team)` doesn't disappear and Xcode
+  often stays on it.
+- If the paid team isn't offered at all, Xcode hasn't noticed the membership.
+  Xcode → **Settings → Accounts** → select the Apple ID; if the membership
+  isn't listed on the right, sign out and back in.
+- Failing that, enable it directly on the App ID: developer.apple.com →
+  Certificates, Identifiers & Profiles → **Identifiers** →
+  `com.pattheratch.earned` → tick **Family Controls** → Save. That is what the
+  provisioning profile actually reads. Then toggle "Automatically manage
+  signing" off and on to force a profile regeneration.
+
+(The *request form* is only for Family Controls **Distribution**, needed before
+TestFlight or the App Store — not to build on your own device.)
+
 This is a one-time action per App ID, not per build. It registers the capability
 with the developer portal and regenerates the provisioning profile; re-running
 `xcodegen generate` afterwards does not undo it, because the capability lives on
