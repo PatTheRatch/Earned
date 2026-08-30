@@ -36,7 +36,7 @@ create or replace function public.register_contract_envelope(
 ) returns jsonb
 language plpgsql
 security definer
-set search_path = public, private, pg_temp
+set search_path = public, private, extensions, pg_temp
 as $$
 declare
   v_account  uuid;
@@ -227,7 +227,7 @@ create or replace function public.envelope_status(p_commitment_id uuid)
 returns jsonb
 language plpgsql
 security definer
-set search_path = public, private, pg_temp
+set search_path = public, private, extensions, pg_temp
 as $$
 declare
   v_account uuid;

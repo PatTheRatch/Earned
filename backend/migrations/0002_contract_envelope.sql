@@ -13,7 +13,7 @@
 -- Windows are `double precision` seconds rather than integers because
 -- EarnedKit's TimeInterval is a Double. Rounding here would be a silent
 -- divergence in exactly the arithmetic both sides have to agree on.
-create table public.contract_envelope (
+create table if not exists public.contract_envelope (
   account_id            uuid        not null references public.account(id) on delete cascade,
   commitment_id         uuid        not null,
   plan_id               uuid,
@@ -44,10 +44,10 @@ create table public.contract_envelope (
   primary key (account_id, commitment_id)
 );
 
-create index contract_envelope_plan_idx on public.contract_envelope (account_id, plan_id)
+create index if not exists contract_envelope_plan_idx on public.contract_envelope (account_id, plan_id)
   where plan_id is not null;
 
-create table public.contract_envelope_partner (
+create table if not exists public.contract_envelope_partner (
   account_id    uuid not null,
   commitment_id uuid not null,
   partner_id    uuid not null references public.partner(id) on delete cascade,
@@ -113,6 +113,7 @@ begin
 end;
 $$;
 
+drop trigger if exists contract_envelope_hardens_at on public.contract_envelope;
 create trigger contract_envelope_hardens_at
   before insert or update on public.contract_envelope
   for each row execute function public.contract_envelope_set_hardens_at();

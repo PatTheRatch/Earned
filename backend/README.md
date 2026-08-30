@@ -88,16 +88,38 @@ without RLS or if anyone adds an INSERT/UPDATE/DELETE policy.
 
 ## Applying to a real project
 
-Migrations are plain SQL and run in filename order.
+Migrations run in filename order and are written to **converge on re-run**, so a set that
+failed halfway can simply be applied again.
 
 ```sh
-supabase link --project-ref <ref>
-supabase db push          # or: psql "$SUPABASE_DB_URL" -f backend/migrations/000N_*.sql
+backend/apply.sh "postgresql://postgres.<ref>:<password>@<host>:5432/postgres"
 ```
 
-Then point the app at it. `app/Earned/Backend.plist` is **not** in the repository — the anon
-key is public by design, but the project URL is not, and a fork pointing at someone else's
-project is a bad default. Create it by hand:
+The connection string is in Project Settings → Database → Connection string (URI). It carries
+your database password: pass it as an argument, never commit it.
+
+`pgcrypto` lives in the `extensions` schema on Supabase and in `public` on a plain Postgres,
+so every function pins `search_path` to see both. Getting that wrong is silent until the
+first partner is invited and `hmac` cannot be found, so the test suite is run against a
+database laid out the Supabase way as well as the default one.
+
+### Then: three settings that are not in the migrations
+
+**1. Vault secrets.** Project Settings → Vault. Nothing that touches a real contact works
+without these, and `private.secret()` raises rather than falling back quietly in production.
+
+| Name | What it is |
+|---|---|
+| `contact_pepper` | HMAC key for the blind index. A long random string. **Changing it later invalidates every stored lookup**, so generate it once and keep it |
+| `contact_key` | Symmetric key for contact ciphertext |
+| `consent_base_url` | Origin of the consent page, e.g. `https://earned.app` — the invitation link is built from it |
+
+**2. Sign in with Apple.** Authentication → Providers → Apple. Needs the Services ID, Team
+ID, Key ID and the `.p8` key from the Apple Developer portal. The same capability also has
+to be enabled on the App ID in Xcode's Signing & Capabilities, or device builds fail to sign.
+
+**3. The app's own config.** `app/Earned/Backend.plist` — gitignored, so create it by hand on
+the machine that builds:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -106,28 +128,26 @@ project is a bad default. Create it by hand:
 <dict>
 	<key>SupabaseURL</key>
 	<string>https://YOUR-PROJECT.supabase.co</string>
-	<key>SupabaseAnonKey</key>
-	<string>YOUR-ANON-KEY</string>
+	<key>SupabasePublishableKey</key>
+	<string>sb_publishable_…</string>
 </dict>
 </plist>
 ```
 
-Without that file the app reports "no backend configured" and behaves exactly as it did
-before any of this existed. Gates, hardening, debt, restrictions and the Solo Override are
-all local and none of them may ever start depending on our uptime (S8).
-
-Sign in with Apple also needs enabling twice: once as an Xcode capability on the App ID
-(same one-time step Family Controls needed), and once as a provider in the Supabase
-dashboard under Authentication → Providers → Apple.
+Use the **publishable** key (`sb_publishable_…`), which is meant to ship inside the app. The
+secret key (`sb_secret_…`) bypasses RLS entirely and must never go near the client or the
+repository. Without this file the app reports "no backend configured" and behaves exactly as
+it did before any of this existed — gates, hardening, debt and the Solo Override are all
+local and never depend on our uptime (S8).
 
 ## Key custody — a launch gate, not a detail
 
 `private.secret()` reads Supabase Vault when it is present and falls back to a database
-setting otherwise, so the suite runs on a plain Postgres. **The fallback must never be
+setting otherwise, so the suite can run on a plain Postgres. **The fallback must never be
 production.** A pepper stored in the database's own configuration is dumped alongside the
 rows it exists to protect, which defeats the only thing it is for: making a leaked table of
-phone numbers resistant to offline brute force. Set `contact_pepper`, `contact_key` and
-`consent_base_url` in Vault before any real contact is stored.
+phone numbers resistant to offline brute force. Set the three secrets above in Vault before
+any real contact is stored.
 
 ## Not here yet
 

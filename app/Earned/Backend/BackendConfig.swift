@@ -8,10 +8,11 @@ import Foundation
 /// S8). Until a project is configured, the account and envelope features simply
 /// report themselves as unavailable rather than failing, retrying or nagging.
 ///
-/// Read from `Backend.plist`, which is deliberately **not** in the repository —
-/// the anon key is public by design but the project URL is still Patrick's, and
-/// a checked-in file is one accidental fork away from strangers writing to it.
-/// See backend/README.md for the two keys it needs.
+/// Read from `Backend.plist`, which is deliberately **not** in the repository.
+/// The publishable key is public by design — it ships inside every copy of the
+/// app — but the project it points at is Patrick's, and RLS protecting the data
+/// is not the same as wanting strangers creating accounts against his quota.
+/// See backend/README.md for the two values it needs.
 struct BackendConfig: Sendable {
     let url: URL
     let anonKey: String
@@ -24,7 +25,11 @@ struct BackendConfig: Sendable {
         let parsed = try? PropertyListSerialization.propertyList(from: data, format: nil)
         guard let plist = parsed as? [String: String],
               let rawURL = plist["SupabaseURL"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-              let key = plist["SupabaseAnonKey"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              // Supabase renamed the client-side key: `sb_publishable_…`
+              // replaces the old anon JWT. Both names are accepted so a file
+              // written against either set of docs works.
+              let key = (plist["SupabasePublishableKey"] ?? plist["SupabaseAnonKey"])?
+                  .trimmingCharacters(in: .whitespacesAndNewlines),
               !rawURL.isEmpty, !key.isEmpty,
               let url = URL(string: rawURL)
         else { return nil }

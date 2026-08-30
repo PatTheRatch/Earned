@@ -28,7 +28,7 @@ create or replace function public.nominate_partner(
 ) returns jsonb
 language plpgsql
 security definer
-set search_path = public, private, pg_temp
+set search_path = public, private, extensions, pg_temp
 as $$
 declare
   v_account    uuid;
@@ -122,7 +122,7 @@ create or replace function public.resend_partner_invitation(p_partner_id uuid)
 returns jsonb
 language plpgsql
 security definer
-set search_path = public, private, pg_temp
+set search_path = public, private, extensions, pg_temp
 as $$
 declare
   v_account uuid;
@@ -187,7 +187,7 @@ create or replace function public.respond_to_invitation(p_token text, p_accept b
 returns jsonb
 language plpgsql
 security definer
-set search_path = public, private, pg_temp
+set search_path = public, private, extensions, pg_temp
 as $$
 declare
   v_invitation public.partner_invitation;
@@ -256,7 +256,7 @@ create or replace function public.revoke_partner(p_partner_id uuid)
 returns jsonb
 language plpgsql
 security definer
-set search_path = public, private, pg_temp
+set search_path = public, private, extensions, pg_temp
 as $$
 declare
   v_account uuid;

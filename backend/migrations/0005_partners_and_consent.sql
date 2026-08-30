@@ -24,7 +24,7 @@ revoke all on schema private from public, anon, authenticated;
 -- phone numbers resistant to offline brute force.
 create or replace function private.secret(p_name text) returns text
 language plpgsql stable
-set search_path = private, public, pg_temp
+set search_path = private, public, extensions, pg_temp
 as $$
 declare
   v_value text;
@@ -56,6 +56,7 @@ $$;
 create or replace function public.normalize_contact(p_channel text, p_raw text)
 returns text
 language plpgsql immutable
+set search_path = public, extensions, pg_temp
 as $$
 declare
   v text := btrim(coalesce(p_raw, ''));
@@ -92,12 +93,12 @@ $$;
 -- choose its own blind index could choose one that misses a suppression row.
 create or replace function private.contact_lookup(p_normalized text) returns bytea
 language sql stable
-set search_path = private, public, pg_temp
+set search_path = private, public, extensions, pg_temp
 as $$ select hmac(p_normalized, private.secret('contact_pepper'), 'sha256') $$;
 
 create or replace function private.contact_encrypt(p_normalized text) returns bytea
 language sql volatile
-set search_path = private, public, pg_temp
+set search_path = private, public, extensions, pg_temp
 as $$ select pgp_sym_encrypt(p_normalized, private.secret('contact_key')) $$;
 
 -- MARK: - Partner state

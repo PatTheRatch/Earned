@@ -208,6 +208,9 @@ actor BackendClient {
         request.httpMethod = "POST"
         request.timeoutInterval = 20
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // Supabase's publishable key. Identifies the project and selects the
+        // `anon` role; the user's own JWT below is what promotes a request to
+        // `authenticated`, and RLS keys off that, never off this.
         request.setValue(config.anonKey, forHTTPHeaderField: "apikey")
         if authorized, let accessToken {
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")

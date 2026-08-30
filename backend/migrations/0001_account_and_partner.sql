@@ -11,7 +11,7 @@
 
 create extension if not exists pgcrypto;
 
-create table public.account (
+create table if not exists public.account (
   id                     uuid primary key default gen_random_uuid(),
   -- The Supabase auth user. Deliberately NOT a foreign key into auth.users:
   -- a cascade here would quietly decide what account deletion does to an
@@ -33,7 +33,7 @@ create table public.account (
   deleted_at             timestamptz
 );
 
-create table public.partner (
+create table if not exists public.partner (
   id                  uuid        primary key default gen_random_uuid(),
   account_id          uuid        not null references public.account(id) on delete cascade,
   display_name        text        not null check (length(btrim(display_name)) between 1 and 64),
@@ -65,4 +65,4 @@ create table public.partner (
   unique (account_id, channel, contact_lookup)
 );
 
-create index partner_account_idx on public.partner (account_id);
+create index if not exists partner_account_idx on public.partner (account_id);

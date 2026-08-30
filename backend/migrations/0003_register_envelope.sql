@@ -16,6 +16,10 @@ create or replace function public.contract_policy_digest(
 ) returns bytea
 language sql
 immutable
+-- pgcrypto is in `extensions` on Supabase and `public` on a plain Postgres.
+-- Without this the function inherits the caller's pinned path and cannot find
+-- digest() at all.
+set search_path = public, extensions, pg_temp
 as $$
   -- Canonical by construction: UTC to the microsecond, fixed-scale numerics
   -- rather than float text, and a sorted roster. Two servers holding the same
@@ -48,7 +52,7 @@ create or replace function public.register_contract_envelope(
 ) returns jsonb
 language plpgsql
 security definer
-set search_path = public, pg_temp
+set search_path = public, extensions, pg_temp
 as $$
 declare
   v_account  uuid;
@@ -219,7 +223,7 @@ create or replace function public.withdraw_plan_envelopes(p_plan_id uuid)
 returns jsonb
 language plpgsql
 security definer
-set search_path = public, pg_temp
+set search_path = public, extensions, pg_temp
 as $$
 declare
   v_account uuid;

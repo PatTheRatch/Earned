@@ -8,6 +8,9 @@
 -- `anon` gets nothing. `authenticated` gets SELECT on its own rows, so the app
 -- can show what the server believes, and nothing else.
 
+-- Every statement in this file is written to converge on re-run: a migration
+-- set that jams halfway through is worse than one that can simply be applied
+-- again.
 alter table public.account                   enable row level security;
 alter table public.partner                   enable row level security;
 alter table public.contract_envelope         enable row level security;
@@ -26,6 +29,7 @@ grant select on public.contract_envelope         to authenticated;
 grant select on public.contract_envelope_partner to authenticated;
 
 -- Read your own account, and only while it exists.
+drop policy if exists account_select_own on public.account;
 create policy account_select_own on public.account
   for select to authenticated
   using (auth_user_id = auth.uid() and deleted_at is null);
@@ -35,6 +39,7 @@ create policy account_select_own on public.account
 -- ciphertext and its blind index are columns on this table, so a future change
 -- that widens what the app reads would expose them — column-level grants are
 -- the follow-up when the consent flow lands (§14.1).
+drop policy if exists partner_select_own on public.partner;
 create policy partner_select_own on public.partner
   for select to authenticated
   using (exists (select 1 from public.account a
@@ -42,6 +47,7 @@ create policy partner_select_own on public.partner
                     and a.auth_user_id = auth.uid()
                     and a.deleted_at is null));
 
+drop policy if exists contract_envelope_select_own on public.contract_envelope;
 create policy contract_envelope_select_own on public.contract_envelope
   for select to authenticated
   using (exists (select 1 from public.account a
@@ -49,6 +55,7 @@ create policy contract_envelope_select_own on public.contract_envelope
                     and a.auth_user_id = auth.uid()
                     and a.deleted_at is null));
 
+drop policy if exists contract_envelope_partner_select_own on public.contract_envelope_partner;
 create policy contract_envelope_partner_select_own on public.contract_envelope_partner
   for select to authenticated
   using (exists (select 1 from public.account a
@@ -69,7 +76,7 @@ create or replace function public.ensure_account(
 ) returns jsonb
 language plpgsql
 security definer
-set search_path = public, pg_temp
+set search_path = public, extensions, pg_temp
 as $$
 declare
   v_row public.account;
