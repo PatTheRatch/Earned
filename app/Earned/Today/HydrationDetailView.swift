@@ -53,7 +53,7 @@ struct HydrationDetailView: View {
                 if profile.isEmpty {
                     Text("Nothing").foregroundStyle(.secondary)
                 } else {
-                    ForEach(profile.sortedTokens, id: \.self) { Text($0.rawValue) }
+                    ForEach(profile.sortedTokens, id: \.self) { RestrictionTokenLabel(token: $0) }
                 }
                 NavigationLink("Edit") {
                     GateRestrictionsView(gate: .hydration, title: "Hydration Gate")

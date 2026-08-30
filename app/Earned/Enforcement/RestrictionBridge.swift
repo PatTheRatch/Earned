@@ -110,6 +110,36 @@ enum RestrictionBridge {
         }
     }
 
+    // MARK: - Display
+
+    /// A token resolved for showing to a human. The `Label(_:)` initializers in
+    /// FamilyControls render the real name and icon via a system view — the app
+    /// still cannot read either, which keeps the privacy guarantee intact while
+    /// sparing the user a screen of base64.
+    enum DisplayToken {
+        case application(ApplicationToken)
+        case category(ActivityCategoryToken)
+        case webDomain(WebDomainToken)
+        /// A typed-in name from before real picking existed. Readable as-is.
+        case legacy(String)
+    }
+
+    static func display(_ token: RestrictionToken) -> DisplayToken {
+        if let app = decode(token, kind: .application, as: ApplicationToken.self) {
+            return .application(app)
+        }
+        if let category = decode(token, kind: .category, as: ActivityCategoryToken.self) {
+            return .category(category)
+        }
+        if let domain = decode(token, kind: .webDomain, as: WebDomainToken.self) {
+            return .webDomain(domain)
+        }
+        // Everything unreadable falls back to the raw string, exactly as
+        // `isLegacyPlaceholder` classifies it: a name the user once typed, or a
+        // token this build cannot decode — either way, show what we have.
+        return .legacy(token.rawValue)
+    }
+
     static func legacyPlaceholders(in profile: RestrictionProfile) -> [RestrictionToken] {
         profile.sortedTokens.filter(isLegacyPlaceholder)
     }

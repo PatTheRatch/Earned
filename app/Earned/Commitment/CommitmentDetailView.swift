@@ -252,7 +252,7 @@ struct CommitmentDetailView: View {
                 Text("Nothing").foregroundStyle(.secondary)
             } else {
                 ForEach(record.commitment.restrictions.sortedTokens, id: \.self) {
-                    Text($0.rawValue)
+                    RestrictionTokenLabel(token: $0)
                 }
             }
         } header: {
