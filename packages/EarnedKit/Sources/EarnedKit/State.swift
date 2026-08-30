@@ -174,6 +174,13 @@ public struct EarnedState: Codable, Equatable, Sendable {
             // which it could have been honoured — so withdrawing it takes
             // nothing away. Occurrences already in their window survive,
             // hardened or not: those are real contracts (NORTHSTAR §12).
+            //
+            // The backend reproduces this predicate in
+            // `public.withdraw_plan_envelopes`, because plan cancellation is the
+            // one easing operation it must accept and it verifies rather than
+            // trusts it. Both clauses below are expressible in the fields a
+            // Contract Envelope carries, which is why that is possible — change
+            // this and the SQL has to change with it.
             for (commitmentID, commitmentRecord) in commitments
             where commitmentRecord.commitment.planID == id
                 && commitmentRecord.resolution == nil

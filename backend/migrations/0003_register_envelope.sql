@@ -209,6 +209,12 @@ $$;
 -- envelope fields alone rather than trusted from the client: an occurrence is
 -- withdrawn exactly when EarnedKit withdraws it — not yet hardened, or its
 -- eligible window has not opened (§4.6).
+--
+-- The predicate below mirrors the `planCancelled` case in EarnedKit's
+-- State.applying. Unlike hardening it is not pinned by a shared fixture: it is
+-- two comparisons with none of hardening's float, timezone or clamping
+-- subtleties, and both sides are covered by their own tests. It is still a
+-- duplicated rule, so change one and change the other.
 create or replace function public.withdraw_plan_envelopes(p_plan_id uuid)
 returns jsonb
 language plpgsql
