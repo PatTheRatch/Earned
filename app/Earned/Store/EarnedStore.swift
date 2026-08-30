@@ -29,10 +29,13 @@ final class EarnedStore: ObservableObject {
     private var ticker: AnyCancellable?
     private var authorizationObserver: AnyCancellable?
     private var shieldObserver: AnyCancellable?
+    private var shieldFailureObserver: AnyCancellable?
 
     /// Whether Earned can actually block anything. Surfaced so the app never
     /// claims a Gate is enforcing when Screen Time has not been granted.
     @Published private(set) var shielding: ScreenTimeController.Authorization = .notDetermined
+    /// Why Screen Time refused, when it did. Shown rather than swallowed.
+    @Published private(set) var shieldingFailure: String?
 
     /// Whether warnings the user configured can actually be delivered. Surfaced
     /// so the app never presents a warning toggle as working when it isn't.
@@ -78,6 +81,10 @@ final class EarnedStore: ObservableObject {
                     self?.syncShield()
                 }
             }
+        shieldFailureObserver = screenTime.$failure
+            .sink { [weak self] message in
+                MainActor.assumeIsolated { self?.shieldingFailure = message }
+            }
         authorizationObserver = notifications.$authorization
             .sink { [weak self] status in
                 // NotificationScheduler is @MainActor, so this always arrives
@@ -95,7 +102,7 @@ final class EarnedStore: ObservableObject {
     /// EarnedKit already computed the answer — `effectiveRestrictions` is the
     /// union across every closed Gate — so this only hands it to the system.
     private func syncShield() {
-        guard shielding.canShield else { return }
+        guard screenTime.authorization.canShield else { return }
         screenTime.apply(access.effectiveRestrictions)
     }
 
@@ -103,7 +110,7 @@ final class EarnedStore: ObservableObject {
     /// while Earned isn't running, and re-applies whatever should be in force.
     func refreshShielding() {
         screenTime.refreshAuthorization()
-        if shielding.canShield {
+        if screenTime.authorization.canShield {
             syncShield()
         } else {
             // Holding restrictions the user can no longer manage would be a trap.

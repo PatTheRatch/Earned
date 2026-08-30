@@ -160,6 +160,9 @@ struct SettingsView: View {
                     .foregroundStyle(Theme.signal)
                 Button("Open iOS Settings") { openSystemSettings() }
             }
+            if let failure = store.shieldingFailure {
+                Text(failure).font(.footnote).foregroundStyle(Theme.signal)
+            }
         } header: {
             Text("Restrictions")
         } footer: {
@@ -288,10 +291,19 @@ private struct RestrictionEditor: View {
                 if store.shielding.canShield {
                     Button("Choose apps and websites") { beginPicking() }
                 } else {
-                    Text("Screen Time permission is needed before Earned can block anything.")
+                    Text(store.shielding == .denied
+                         ? "Screen Time is off, so nothing here can be blocked."
+                         : "Screen Time permission is needed before Earned can block anything.")
                         .foregroundStyle(Theme.signal)
-                    Button("Grant Screen Time access") {
-                        Task { await store.requestShieldingAuthorization() }
+                    if store.shielding == .denied {
+                        Button("Open iOS Settings") { openSystemSettings() }
+                    } else {
+                        Button("Grant Screen Time access") {
+                            Task { await store.requestShieldingAuthorization() }
+                        }
+                    }
+                    if let failure = store.shieldingFailure {
+                        Text(failure).font(.footnote).foregroundStyle(Theme.signal)
                     }
                 }
             } header: {
@@ -335,6 +347,11 @@ private struct RestrictionEditor: View {
             // Commit when the picker closes, not on every tap inside it.
             if wasPicking && !isPicking { commit(selection) }
         }
+    }
+
+    private func openSystemSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 
     private func beginPicking() {

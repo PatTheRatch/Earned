@@ -220,6 +220,15 @@ string, and the whole Screen Time adapter lives in the app layer.
   wanted blocked, and quietly dropping that would be the app discarding a
   decision the user made. They are shown as `NOT BLOCKING` with an invitation to
   re-pick, and can be deleted by hand.
+- **`approvedWithDataAccess` is an approval.** Recent iOS grants Screen Time
+  together with usage-data access, and on some versions that is the only "yes"
+  available. Treating it as anything else silently breaks every shield. An
+  authorization status we genuinely don't recognise still maps to denied — the
+  shield is never applied on a guess.
+- **A refused authorization is shown, never swallowed.** Screen Time can refuse
+  for reasons the user can act on (no iCloud account, a managed or child
+  account), and a permission button that silently does nothing is the worst
+  possible version of that.
 - **Enforcement fails closed.** A shield written to `ManagedSettingsStore`
   persists until something changes it, so if Earned is never opened again the
   restriction stays. For a commitment app that is the right direction to fail:

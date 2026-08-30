@@ -40,21 +40,64 @@ final class ScreenTimeController: ObservableObject {
     private static func authorization(from status: AuthorizationStatus) -> Authorization {
         switch status {
         case .notDetermined: return .notDetermined
-        case .approved: return .approved
         case .denied: return .denied
-        @unknown default: return .denied
+        case .approved: return .approved
+        // Recent iOS grants Screen Time *with* usage-data access, and on some
+        // versions that is the only "yes" the user can give. It is an approval,
+        // and treating it as anything else silently breaks every shield.
+        case .approvedWithDataAccess: return .approved
+        @unknown default:
+            // A future status we don't recognise. Assume it is not permission
+            // to restrict — the shield should never be applied on a guess.
+            return .denied
         }
     }
+
+    /// Why the last authorization attempt failed, if it did.
+    ///
+    /// This is surfaced rather than swallowed: Screen Time can refuse for
+    /// reasons the user can act on (not signed in to iCloud, a managed or child
+    /// account) and a button that silently does nothing is the worst possible
+    /// version of that.
+    @Published private(set) var failure: String?
 
     /// Asks for Screen Time permission. `.individual` is the right scope:
     /// Earned is a deal with yourself, not a parent restricting a child.
     func requestAuthorization() async {
+        failure = nil
         do {
             try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
-            authorization = .approved
-        } catch {
             authorization = Self.authorization(from: AuthorizationCenter.shared.authorizationStatus)
+            // Belt and braces: the request succeeded, so treat it as approval
+            // even if the status hasn't settled yet.
+            if authorization == .notDetermined { authorization = .approved }
+        } catch {
+            // FamilyControlsError is an enum, so this yields the case name
+            // (`invalidAccountType`, `networkError`, …) which is far more use
+            // than its localizedDescription.
+            let name = String(describing: error)
+            authorization = Self.authorization(from: AuthorizationCenter.shared.authorizationStatus)
+            // Dismissing the sheet is a choice, not a fault.
+            if !name.localizedCaseInsensitiveContains("cancel") {
+                failure = Self.explain(name)
+            }
         }
+    }
+
+    private static func explain(_ name: String) -> String {
+        if name.localizedCaseInsensitiveContains("invalidAccountType") {
+            return "Screen Time needs an Apple Account signed in to iCloud on this device, "
+                + "and one that isn't managed by someone else. (\(name))"
+        }
+        if name.localizedCaseInsensitiveContains("network") {
+            return "Screen Time couldn't reach Apple to set this up. Check your connection "
+                + "and try again. (\(name))"
+        }
+        if name.localizedCaseInsensitiveContains("unavailable")
+            || name.localizedCaseInsensitiveContains("restricted") {
+            return "Screen Time isn't available on this device. (\(name))"
+        }
+        return "Screen Time refused: \(name)"
     }
 
     /// Puts `profile` into force, replacing whatever was in force before.
