@@ -233,6 +233,24 @@ string, and the whole Screen Time adapter lives in the app layer.
   persists until something changes it, so if Earned is never opened again the
   restriction stays. For a commitment app that is the right direction to fail:
   locked out slightly too long, never let off early.
+- **Enforcement is revocable and nothing can stop that.** iOS Settings →
+  Screen Time → *Apps With Screen Time Access* turns Earned's shield off in two
+  taps, and deleting the app does the same. No third-party app can prevent
+  either. NORTHSTAR §33 anticipates exactly this and requires the gap be stated
+  rather than papered over with a guarantee Earned cannot keep. Apple's own
+  Screen Time passcode ("Lock Screen Time Settings") is the only real friction,
+  and it is the user's to set.
+- **Revoking the shield does not clear what is owed.** The ledger is the source
+  of truth, not `ManagedSettingsStore`: commitments, deadlines and debt survive
+  untouched, and re-granting restores every restriction that was in force.
+  Earned can lose the ability to impose a consequence; it cannot lose the
+  record (§33: outstanding state belongs to the account).
+- **[open] Revocation is not itself recorded.** Every other exit leaves a trace
+  — an override is a ledger event and breaks the streak — but pulling the
+  permission is invisible to history. Whether that should be a recorded event,
+  whether it should break a streak like an override, and whether Today should
+  keep reading LOCKED. while a Gate is unsatisfied but unenforceable, are
+  product decisions and are not mine to invent.
 - **[open] A Gate that closes while Earned isn't running is not shielded until
   the app next opens.** The shield is applied by the app, and a deadline passing
   at 10:00 with the app closed has nothing to act on it. A `DeviceActivityMonitor`

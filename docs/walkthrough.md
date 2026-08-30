@@ -25,6 +25,7 @@ trusted. Re-verify against the code when it drifts.
 | Restriction tokens | **Real** | Apple's picker; opaque tokens Earned itself cannot read |
 | Enforcement — apps actually blocked | **Real** | `ManagedSettingsStore` shields the union of closed Gates |
 | Enforcement while the app is closed | **Missing** | A Gate closing with Earned not running waits for next launch; needs `DeviceActivityMonitor` |
+| Enforcement can be revoked | **By design, unfixable** | iOS Settings → Screen Time → Apps With Screen Time Access. No app can prevent this; a Screen Time passcode is the only friction |
 | Custom shield screen (`NICE TRY.`) | **Missing** | Blocked apps show Apple's default shield; needs a `ShieldConfiguration` extension |
 | Accountability partners | **Missing** | State machine exists; no way to send or collect approvals; step 5 |
 
