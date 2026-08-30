@@ -167,11 +167,15 @@ struct SettingsView: View {
                 Text("No repeating plans").foregroundStyle(.secondary)
             }
             ForEach(store.activePlans, id: \.plan.id) { record in
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(record.plan.title).font(.subheadline.weight(.medium))
-                    Text("\(Format.weekdays(record.plan.weekdays)) · "
-                         + "\(store.state.occurrences(ofPlan: record.plan.id).count) commitments")
-                        .font(.caption).foregroundStyle(.secondary)
+                NavigationLink {
+                    PlanDetailView(planID: record.plan.id)
+                } label: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(record.plan.title).font(.subheadline.weight(.medium))
+                        Text("\(Format.weekdays(record.plan.weekdays)) · "
+                             + "\(store.state.occurrences(ofPlan: record.plan.id).count) commitments")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
             }
             .onDelete { offsets in
@@ -180,8 +184,9 @@ struct SettingsView: View {
         } header: {
             Text("Repeating plans")
         } footer: {
-            Text("Cancelling a plan withdraws the commitments still inside their correction "
-                 + "window. Anything already hardened is a contract in its own right and stays.")
+            Text("A plan is one commitment to the whole schedule, so it hardens as one thing "
+                 + "shortly after you make it. Cancelling withdraws the days that haven't "
+                 + "started yet; days already underway stand on their own.")
         }
     }
 

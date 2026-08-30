@@ -96,6 +96,15 @@ struct CommitmentDetailView: View {
                 }
                 LabeledContent("Counts from",
                                value: Format.deadline(commitment.eligibleFrom, from: store.now))
+                // Where this day came from, so an occurrence is never a mystery
+                // commitment the user doesn't remember making.
+                if let planID = commitment.planID, let plan = store.state.plans[planID] {
+                    NavigationLink {
+                        PlanDetailView(planID: planID)
+                    } label: {
+                        LabeledContent("Part of", value: plan.plan.title)
+                    }
+                }
                 LabeledContent(hardened ? "Hardened" : "Hardens") {
                     Text(hardened ? "Yes — only harder edits allowed"
                                   : Format.relative(commitment.hardensAt, from: store.now))

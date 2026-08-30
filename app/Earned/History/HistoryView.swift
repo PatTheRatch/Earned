@@ -22,6 +22,29 @@ struct HistoryView: View {
                     LabeledContent("Override requests", value: "\(stats.overrideRequests)")
                 }
 
+                if !store.activePlans.isEmpty {
+                    Section {
+                        ForEach(store.activePlans, id: \.plan.id) { record in
+                            let occurrences = store.state.occurrences(ofPlan: record.plan.id)
+                            NavigationLink {
+                                PlanDetailView(planID: record.plan.id)
+                            } label: {
+                                PlanRow(plan: record.plan,
+                                        done: occurrences.filter {
+                                            if case .completed = $0.resolution { return true }
+                                            else { return false }
+                                        }.count,
+                                        total: occurrences.count)
+                            }
+                        }
+                    } header: {
+                        Text("Plans")
+                    } footer: {
+                        Text("Each plan's days are also listed below individually — this is "
+                             + "the same work, counted as the one decision that made it.")
+                    }
+                }
+
                 Section("Commitments") {
                     if store.allCommitments.isEmpty {
                         Text("Nothing yet.").foregroundStyle(.secondary)
@@ -37,6 +60,21 @@ struct HistoryView: View {
             }
             .paperList()
             .navigationTitle("History")
+        }
+    }
+}
+
+private struct PlanRow: View {
+    let plan: CommitmentPlan
+    let done: Int
+    let total: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(plan.title).font(.subheadline.weight(.medium))
+            Text("\(Format.weekdays(plan.weekdays)) · \(done) of \(total) done")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 }

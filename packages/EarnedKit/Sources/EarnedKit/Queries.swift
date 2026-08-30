@@ -74,6 +74,21 @@ extension EarnedState {
             .sorted { $0.commitment.deadline < $1.commitment.deadline }
     }
 
+    /// Unresolved commitments a workout finished **right now** would count
+    /// toward: their eligible window has opened, whether or not their deadline
+    /// has passed.
+    ///
+    /// This is the question `eligibleFrom` exists to answer, and it is not the
+    /// same as "unresolved". A plan occurrence three weeks out is pending but
+    /// not live — going for a run today does nothing for it — while an overdue
+    /// commitment is still live, because a late workout is exactly what clears
+    /// it (NORTHSTAR §16).
+    public func liveCommitments(now: Date) -> [CommitmentRecord] {
+        commitments.values
+            .filter { $0.resolution == nil && $0.commitment.eligibleFrom <= now }
+            .sorted { $0.commitment.deadline < $1.commitment.deadline }
+    }
+
     /// Outstanding workout debt. Missed commitments persist but debt does not
     /// compound: the maximum is 1 (NORTHSTAR §16), however many deadlines have
     /// been missed.

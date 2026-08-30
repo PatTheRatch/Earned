@@ -269,6 +269,45 @@ final class EarnedStore: ObservableObject {
 
     var activePlans: [PlanRecord] { state.activePlans() }
 
+    /// What a workout finished right now would count toward.
+    var live: [CommitmentRecord] { state.liveCommitments(now: now) }
+
+    /// Today's upcoming list, with plan occurrences folded into one entry each.
+    ///
+    /// A four-week Mon/Wed/Fri plan creates twelve commitments, and listing
+    /// twelve near-identical rows is exactly what making it a plan was meant to
+    /// avoid: it is one decision, shown once. Overdue occurrences are
+    /// deliberately *not* folded — each is a Gate holding the phone closed, and
+    /// the lock notice has to name every one of them (NORTHSTAR §19).
+    var upcomingEntries: [UpcomingEntry] {
+        var entries: [UpcomingEntry] = []
+        var seenPlans: Set<UUID> = []
+
+        for record in upcoming {
+            guard let planID = record.commitment.planID,
+                  let planRecord = state.plans[planID], !planRecord.isCancelled else {
+                entries.append(.commitment(record))
+                continue
+            }
+            guard seenPlans.insert(planID).inserted else { continue }
+            // `upcoming` is deadline-ordered, so the first occurrence seen for a
+            // plan is its next one.
+            entries.append(.plan(summary(of: planRecord.plan, next: record)))
+        }
+        return entries
+    }
+
+    private func summary(of plan: CommitmentPlan, next: CommitmentRecord) -> PlanSummary {
+        let occurrences = state.occurrences(ofPlan: plan.id)
+        return PlanSummary(
+            plan: plan,
+            next: next,
+            completed: occurrences.filter {
+                if case .completed = $0.resolution { return true } else { return false }
+            }.count,
+            total: occurrences.count)
+    }
+
     /// Records one unit of active friction toward a solo override.
     @discardableResult
     func recordFrictionProgress(requestID: UUID, units: Int = 1) -> Bool {

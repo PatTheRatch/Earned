@@ -27,8 +27,11 @@ struct TodayView: View {
                         ForEach(store.overdue, id: \.commitment.id) { record in
                             overdueRow(record)
                         }
-                        ForEach(store.upcoming, id: \.commitment.id) { record in
-                            upcomingRow(record)
+                        ForEach(store.upcomingEntries) { entry in
+                            switch entry {
+                            case .commitment(let record): upcomingRow(record)
+                            case .plan(let summary): planRow(summary)
+                            }
                         }
                         ThickRule()
                     }
@@ -136,9 +139,32 @@ struct TodayView: View {
         } label: {
             row(label: dayLabel(record.commitment.deadline),
                 line: Text("\(record.commitment.title) by \(timeLabel(record.commitment.deadline)).")
-                    .foregroundStyle(Theme.muted))
+                    .foregroundStyle(Theme.muted),
+                context: liveNote(record))
         }
         .buttonStyle(.plain)
+    }
+
+    /// A whole recurring plan in one row, headlined by its next outstanding day.
+    private func planRow(_ summary: PlanSummary) -> some View {
+        NavigationLink {
+            PlanDetailView(planID: summary.plan.id)
+        } label: {
+            row(label: dayLabel(summary.next.commitment.deadline),
+                line: Text("\(summary.plan.title) by "
+                           + "\(timeLabel(summary.next.commitment.deadline)).")
+                    .foregroundStyle(Theme.muted),
+                context: [summary.scheduleLine, liveNote(summary.next)]
+                    .compactMap { $0 }.joined(separator: " · "))
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Says so when a commitment's window hasn't opened yet — a run today does
+    /// nothing for Friday's obligation, and the row shouldn't imply otherwise.
+    private func liveNote(_ record: CommitmentRecord) -> String? {
+        guard record.commitment.eligibleFrom > store.now else { return nil }
+        return "counts from \(dayLabel(record.commitment.eligibleFrom).lowercased())"
     }
 
     private func row(label: String, line: Text, context: String? = nil) -> some View {

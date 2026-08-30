@@ -17,7 +17,7 @@ trusted. Re-verify against the code when it drifts.
 
 | Area | Status | Notes |
 |---|---|---|
-| Gate engine — hydration, exercise, hardening, debt, overrides | **Real** | EarnedKit, 71 tests on Linux + macOS |
+| Gate engine — hydration, exercise, hardening, debt, overrides | **Real** | EarnedKit, 81 tests on Linux + macOS |
 | Per-Gate restrictions, eligibility windows, recurring plans | **Real** | Added in the correction pass |
 | All six screens, poster identity, persistence | **Real** | Ledger saved as versioned JSON, replayed and re-validated on launch |
 | Deadline warnings | **Real** | Local notifications; no entitlement needed. Informational only — no snooze |
@@ -171,6 +171,17 @@ let created = store.createPlan(title:, requirement:, weekdays:, deadlineMinuteOf
 The plan is a **template, not a source of truth**. It expands once, at creation, into real
 events. Nothing re-derives a schedule at read time, so replay stays deterministic and every
 occurrence has its own deadline, hardening clock, progress and resolution.
+
+**But it reads as one thing.** Twelve occurrences would otherwise be twelve near-identical
+rows on Today, which is exactly what making it a plan was meant to avoid. Today folds a
+plan's *upcoming* occurrences into a single row headlined by the next one —
+`Run 30 min by 10:00 AM · Mon/Wed/Fri · 3 of 12 done` — and tapping it opens the plan, with
+every day and its outcome. Overdue occurrences are deliberately **not** folded: each one is
+a Gate holding the phone closed, and the lock notice has to name every one (§19).
+
+Rows also say when a day isn't live yet — `counts from wednesday` — because
+`eligibleFrom` means a run today does nothing for Friday's obligation, and the row
+shouldn't imply otherwise.
 
 Occurrences whose deadline has already passed at creation are skipped — a commitment cannot
 be born overdue.

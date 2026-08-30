@@ -212,3 +212,50 @@ final class PlanTests: XCTestCase {
         expectThrows { try ledger.append(.planCreated(noDays), at: d(23, 18)) }
     }
 }
+
+/// What a workout right now would actually count toward. `eligibleFrom` makes
+/// "unresolved" and "live" different questions, and the UI needs the second one.
+final class LiveCommitmentTests: XCTestCase {
+
+    func testFutureOccurrencesArePendingButNotLive() throws {
+        var ledger = Ledger()
+        let plan = CommitmentPlan(title: "Run 30 min", requirement: .run(minutes: 30),
+                                  weekdays: [2, 4, 6], deadlineMinuteOfDay: 10 * 60,
+                                  startDate: d(24),
+                                  endDate: CommitmentPlan.weeks(2, from: d(24),
+                                                                timeZoneIdentifier: "UTC"),
+                                  timeZoneIdentifier: "UTC",
+                                  configuredCorrectionWindow: 2 * 3600,
+                                  overridePolicy: patrickPolicy(), createdAt: d(23, 18))
+        ledger.expectAppend(.planCreated(plan), at: plan.createdAt)
+        for occurrence in plan.occurrences() {
+            ledger.expectAppend(.commitmentCreated(occurrence), at: plan.createdAt)
+        }
+
+        // Monday morning: six occurrences exist, but only Monday's is live.
+        XCTAssertEqual(ledger.state.pendingCommitments(now: d(24, 8)).count, 6)
+        let live = ledger.state.liveCommitments(now: d(24, 8))
+        XCTAssertEqual(live.count, 1)
+        XCTAssertEqual(live.first?.commitment.deadline, d(24, 10))
+    }
+
+    /// An overdue commitment is still live: a late workout is what clears it.
+    func testOverdueCommitmentsStayLive() throws {
+        var ledger = Ledger()
+        ledger.expectAppend(
+            .commitmentCreated(makeCommitment(deadline: d(24, 10), createdAt: d(24, 6))),
+            at: d(24, 6))
+        XCTAssertTrue(ledger.state.pendingCommitments(now: d(24, 12)).isEmpty)
+        XCTAssertEqual(ledger.state.liveCommitments(now: d(24, 12)).count, 1,
+                       "a workout now still clears yesterday's debt")
+    }
+
+    func testResolvedCommitmentsAreNotLive() throws {
+        var ledger = Ledger()
+        ledger.expectAppend(
+            .commitmentCreated(makeCommitment(deadline: d(24, 10), createdAt: d(24, 6))),
+            at: d(24, 6))
+        ledger.expectAppend(.workoutRecorded(workout(start: d(24, 7), minutes: 30)), at: d(24, 8))
+        XCTAssertTrue(ledger.state.liveCommitments(now: d(24, 9)).isEmpty)
+    }
+}
