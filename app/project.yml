@@ -25,6 +25,12 @@ targets:
       path: Earned/Info.plist
       properties:
         CFBundleDisplayName: Earned
+        # Names the asset-catalog icon set. Xcode injects this itself when it
+        # generates the Info.plist, but this target supplies its own
+        # (GENERATE_INFOPLIST_FILE is NO), so it is stated here rather than
+        # left to a merge step — a missing icon shows up as a grey placeholder
+        # on notifications and in Settings, with no build error to explain it.
+        CFBundleIconName: AppIcon
         UILaunchScreen: {}
         # Shown on the Health permission sheet. Written to say exactly what is
         # read and why, because that sheet is the entire consent conversation.
