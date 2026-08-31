@@ -11,6 +11,7 @@ import EarnedKit
 struct CommitmentDetailView: View {
     @EnvironmentObject private var store: EarnedStore
     @EnvironmentObject private var account: AccountStore
+    @EnvironmentObject private var health: HealthImporter
     @Environment(\.dismiss) private var dismiss
     let commitmentID: UUID
 
@@ -19,6 +20,7 @@ struct CommitmentDetailView: View {
     @State private var minutes = 30.0
     @State private var kilometers = 5.0
     @State private var deadline = Date()
+    @State private var verification: WorkoutVerification = .selfReported
     @State private var approvals = 2
     @State private var accountabilityMinutes = 30.0
     @State private var loaded = false
@@ -117,14 +119,50 @@ struct CommitmentDetailView: View {
                 TextField("Title", text: $title)
                     .onSubmit { saveTitle() }
                 requirementEditor(current: commitment.requirement, hardened: hardened)
-                DatePicker("Deadline",
-                          selection: $deadline,
-                          in: hardened ? Date.distantPast...commitment.deadline : store.now...Date.distantFuture,
-                          displayedComponents: [.date, .hourAndMinute])
-                    .onChange(of: deadline) { saveDeadline() }
+                // Two rules meet here and both bind: a deadline must be in
+                // the future, and a hardened one may only move earlier. The
+                // offerable range is their intersection, and once a hardened
+                // commitment is overdue that intersection is empty — there is
+                // no legal edit left, so the control is a label instead of a
+                // picker rather than a field where every choice is refused.
+                if deadlineIsEditable(commitment, hardened: hardened) {
+                    DatePicker("Deadline",
+                              selection: $deadline,
+                              in: hardened ? store.now...commitment.deadline
+                                           : store.now...Date.distantFuture,
+                              displayedComponents: [.date, .hourAndMinute])
+                        .onChange(of: deadline) { saveDeadline() }
+                } else {
+                    LabeledContent("Deadline",
+                                   value: Format.deadline(commitment.deadline, from: store.now))
+                }
                 if hardened {
-                    Text("Hardened: the deadline can only move earlier.")
+                    Text(deadlineIsEditable(commitment, hardened: hardened)
+                         ? "Hardened: the deadline can only move earlier."
+                         : "Hardened and past its deadline — it stands as agreed.")
                         .font(.caption).foregroundStyle(.secondary)
+                }
+                // Verification is a term of the deal like any other, so it
+                // belongs on the screen that shows the deal. Tightenable here,
+                // and after hardening only tightenable — the reducer refuses
+                // the other direction, and the control refuses to offer it.
+                if verification == .selfReported && !hardened {
+                    Picker("Verified by", selection: $verification) {
+                        Text("My word").tag(WorkoutVerification.selfReported)
+                        Text("An app").tag(WorkoutVerification.appVerified)
+                    }
+                    .onChange(of: verification) { _, chosen in
+                        if chosen == .appVerified { Task { await health.requestAccess() } }
+                        saveRequirement()
+                    }
+                } else if verification == .selfReported {
+                    Button("Require an app to vouch") {
+                        verification = .appVerified
+                        Task { await health.requestAccess() }
+                        saveRequirement()
+                    }
+                } else {
+                    LabeledContent("Verified by", value: "An app has to vouch")
                 }
             } header: {
                 Text("What & when")
@@ -237,11 +275,30 @@ struct CommitmentDetailView: View {
         return 0.5
     }
 
+    /// Every field of the requirement, always — including `verification`,
+    /// which this screen does not offer as a control. A value omitted here is
+    /// not "left alone": `Requirement`'s initialiser would default it to
+    /// `.selfReported`, so nudging the duration slider on an unhardened
+    /// commitment would quietly downgrade "an app has to vouch" to the honor
+    /// system. Silently loosening a term the user chose is the one thing this
+    /// app must never do.
+    /// A hardened deadline may only move earlier, and any deadline must be in
+    /// the future. Past its deadline, those two leave nothing to choose from.
+    private func deadlineIsEditable(_ commitment: Commitment, hardened: Bool) -> Bool {
+        !hardened || commitment.deadline > store.now
+    }
+
     private var requirementValue: Requirement {
         switch kind {
-        case .any: return Requirement(activity: activity.filter, metric: .anyQualifyingWorkout)
-        case .duration: return Requirement(activity: activity.filter, metric: .totalDuration(minutes * 60))
-        case .distance: return Requirement(activity: activity.filter, metric: .totalDistance(kilometers * 1000))
+        case .any:
+            return Requirement(activity: activity.filter, metric: .anyQualifyingWorkout,
+                               verification: verification)
+        case .duration:
+            return Requirement(activity: activity.filter, metric: .totalDuration(minutes * 60),
+                               verification: verification)
+        case .distance:
+            return Requirement(activity: activity.filter, metric: .totalDistance(kilometers * 1000),
+                               verification: verification)
         }
     }
 
@@ -286,6 +343,7 @@ struct CommitmentDetailView: View {
         guard let commitment = record?.commitment else { return }
         title = commitment.title
         deadline = commitment.deadline
+        verification = commitment.requirement.verification
         approvals = commitment.overridePolicy.approvalsRequired
         accountabilityMinutes = commitment.overridePolicy.accountabilityWindow / 60
         activity = ActivityFilterChoice(commitment.requirement.activity)
@@ -301,15 +359,36 @@ struct CommitmentDetailView: View {
         }
     }
 
+    // MARK: Saving
+    //
+    // Each of these submits only when the field genuinely differs from what
+    // the ledger holds. That is not an optimisation.
+    //
+    // `onChange` fires for *any* mutation of the bound state, and the first
+    // mutation these fields ever see is `load` copying the commitment into
+    // them on appear — a change nobody made. On an overdue commitment that
+    // was enough to throw "Edited deadline must be in the future" at a user
+    // who had done nothing but open the screen.
+    //
+    // Gating on a `loaded` flag does not fix it: `load()` and `loaded = true`
+    // run in the same update, so by the time `onChange` is delivered the flag
+    // is already set. Comparing against the stored value is timing-independent
+    // and also keeps no-op `commitmentEdited` events out of permanent history,
+    // which is worth having on its own.
+
     private func saveTitle() {
+        guard let current = record?.commitment.title, title != current else { return }
         store.append(.commitmentEdited(id: commitmentID, edit: CommitmentEdit(title: title)))
     }
 
     private func saveDeadline() {
+        guard let current = record?.commitment.deadline, deadline != current else { return }
         store.append(.commitmentEdited(id: commitmentID, edit: CommitmentEdit(deadline: deadline)))
     }
 
     private func saveRequirement() {
+        guard let current = record?.commitment.requirement,
+              requirementValue != current else { return }
         store.append(.commitmentEdited(id: commitmentID, edit: CommitmentEdit(requirement: requirementValue)))
     }
 
@@ -318,6 +397,7 @@ struct CommitmentDetailView: View {
         var policy = current
         policy.approvalsRequired = approvals
         policy.accountabilityWindow = accountabilityMinutes * 60
+        guard policy != current else { return }
         store.append(.commitmentEdited(id: commitmentID, edit: CommitmentEdit(overridePolicy: policy)))
     }
 }
