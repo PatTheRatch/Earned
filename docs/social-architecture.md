@@ -326,29 +326,42 @@ every result, not just its row count.
 
 ---
 
-## 8. Streaks (designed, not built)
+## 8. Streaks (semantics settled, not built)
+
+*Settled by Patrick, August 2026, ahead of S2 implementation.*
 
 Two distinct concepts, deliberately not one gamified score, and no XP behind either:
 
-1. **Commitment streak** — consecutive *eligible* commitments resolved on time.
+1. **Commitment streak** — consecutive *eligible* commitments completed **on time**.
    "Eligible" reuses the reward-streak notion EarnedKit already has: commitments the user
-   marked as streak-participating; hydration acknowledgements never count.
-2. **Integrity streak** — commitments (or time) since the last **user-visible escape
-   event** *under the sharing policy*: an Override the owner chose to share, or an
-   enforcement bypass the owner chose to share. Nothing the owner keeps private can end a
-   streak their friends can see — a streak must never leak what it was built to summarise.
+   marked as streak-participating; hydration acknowledgements never count. Missing a
+   deadline and completing late clears the debt but **breaks the on-time streak** — the
+   two facts are both true and both recorded.
+2. **Since last Override** — the number of commitments completed since the most recent
+   Override. A legitimate Override — Free, Accountability, or Solo — **resets or
+   annotates this counter and does not automatically erase the commitment streak.** An
+   Override is a contract mechanism the user built in on purpose; using one is not a
+   moral failure, and the two numbers stay separate so it never reads as one.
 
-An Override is a legitimate contract mechanism, not cheating, and the presentation must
-not shame it. Friend-facing shapes that fit the receipt language:
+Public copy uses the literal wording — **"6 since last Override"** — never a loaded label
+like "integrity streak". The name describes the arithmetic, not the person.
+
+An **enforcement bypass is not an Override** and is represented separately, exactly as
+NORTHSTAR §33 requires of history. If — and only if — the owner has opted into sharing
+bypass information, a detected bypass may reset the relevant escape-free counter; the
+default, like every default in §7.1, is that it is nobody's business.
+
+Nothing the owner keeps private can end a counter their friends can see — a shared number
+must never leak what it was built to summarise. Friend-facing shapes that fit the receipt
+language:
 
 ```
 12 COMMITMENTS KEPT           10-DAY COMMITMENT STREAK
 6 since last Override         No Overrides this week
 ```
 
-Exact semantics (does a shared Override *reset* or merely *annotate*; how the two streaks
-interact with debt-clearing late workouts) get their own decision record before any
-implementation. Friends are never ranked by either number.
+What remains for S2 is presentation and plumbing, not semantics. Friends are never ranked
+by either number.
 
 ---
 
