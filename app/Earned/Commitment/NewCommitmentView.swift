@@ -6,6 +6,7 @@ struct NewCommitmentView: View {
     @EnvironmentObject private var store: EarnedStore
     @EnvironmentObject private var health: HealthImporter
     @EnvironmentObject private var account: AccountStore
+    @EnvironmentObject private var social: SocialStore
     @Environment(\.dismiss) private var dismiss
 
     private enum Step: Int, CaseIterable {
@@ -91,6 +92,9 @@ struct NewCommitmentView: View {
     @State private var correctionHours = 2.0
     @State private var warnBefore = true
     @State private var rewardEligible = true
+    /// Sharing is chosen, never assumed (NORTHSTAR invariant 26): every
+    /// commitment is born private, and this is the explicit choice otherwise.
+    @State private var shareWithFriends = false
 
     var body: some View {
         NavigationStack {
@@ -296,6 +300,16 @@ struct NewCommitmentView: View {
                          + "need to be able to earn one.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
+                if repeats == .once, social.profileState.profile != nil {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Toggle("Share with friends", isOn: $shareWithFriends)
+                        Text("Friends see the title, the deadline, and whether you kept it. "
+                             + "Never what gets restricted, never your workouts. Changeable "
+                             + "any time, in either direction — this is a privacy choice, "
+                             + "not a contract term.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
             }
 
         case .review:
@@ -309,6 +323,10 @@ struct NewCommitmentView: View {
                 ReviewLine(label: "Escape", value: "\(approvals) approvals, or solo after "
                            + "\(Int(accountabilityMinutes)) min")
                 ReviewLine(label: "Free Overrides", value: rewardEligible ? "Eligible" : "Not eligible")
+                if repeats == .once, social.profileState.profile != nil {
+                    ReviewLine(label: "Visible to",
+                               value: shareWithFriends ? "Friends" : "Only you")
+                }
                 ReviewLine(label: repeats == .weekly ? "Fully hardens" : "Hardens",
                            value: Format.relative(hardensAt, from: store.now))
                 if repeats == .weekly {
@@ -498,6 +516,7 @@ struct NewCommitmentView: View {
             if created { registerEnvelopes(rosterFor: unregisteredIDs); dismiss() }
             return
         }
+        let before = Set(store.allCommitments.map(\.commitment.id))
         let created = store.createCommitment(
             title: title.trimmingCharacters(in: .whitespaces),
             requirement: requirement,
@@ -507,7 +526,15 @@ struct NewCommitmentView: View {
                                            accountabilityWindow: accountabilityMinutes * 60),
             rewardEligible: rewardEligible,
             warningLead: warnBefore ? 30 * 60 : nil)
-        if created { registerEnvelopes(rosterFor: unregisteredIDs); dismiss() }
+        if created {
+            if shareWithFriends,
+               let new = store.allCommitments.first(where: { !before.contains($0.commitment.id) }) {
+                let now = store.now
+                Task { await social.share(new, now: now) }
+            }
+            registerEnvelopes(rosterFor: unregisteredIDs)
+            dismiss()
+        }
     }
 
     /// Registers the new commitment's terms with the server immediately.

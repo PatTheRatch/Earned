@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import EarnedKit
 import EarnedMedia
 
 /// The social layer's state: the user's own profile, their friends, and the
@@ -37,14 +38,24 @@ final class SocialStore: ObservableObject {
     /// be offered immediately rather than waiting to be discovered in a tab.
     @Published var setupOffered = false
 
+    /// Friends' recent events, as the server curates them: bounded, 30-day
+    /// horizon, meaningful only. Empty is a normal answer, rendered honestly.
+    @Published private(set) var activity: [SocialEvent] = []
+    /// Which commitments this user shares, and what was last published.
+    @Published private(set) var sharing: SharingRegistry
+
     private let account: AccountStore
+    private let sharingStorage: SharingRegistryStorage
     /// Fetched avatars, by object path. Paths are random per upload, so a
     /// stale entry can only be an image nobody points at any more.
     private var avatarCache: [String: Data] = [:]
     private var accountID: String?
 
-    init(account: AccountStore) {
+    init(account: AccountStore,
+         sharingStorage: SharingRegistryStorage = .documents()) {
         self.account = account
+        self.sharingStorage = sharingStorage
+        self.sharing = sharingStorage.load()
     }
 
     private var client: BackendClient? {
@@ -214,6 +225,108 @@ final class SocialStore: ObservableObject {
     func profile(handle: String) async -> PublicProfile? {
         guard let client else { return nil }
         return try? await client.loadProfile(handle: handle)
+    }
+
+    // MARK: - Commitment sharing (docs/social-architecture.md §7, §9)
+
+    func isShared(_ commitmentID: UUID) -> Bool { sharing.isShared(commitmentID) }
+
+    /// Choose to share a commitment with friends, and tell the server now.
+    /// The choice is the registry entry; the publish is distribution.
+    func share(_ record: CommitmentRecord, now: Date) async {
+        sharing.share(record.commitment.id)
+        sharingStorage.save(sharing)
+        await syncSharing(commitments: [record], now: now)
+    }
+
+    /// Stop sharing. The server withdraws the commitment and every event it
+    /// generated — nothing survives because a friend once saw it (§7.2).
+    func unshare(_ commitmentID: UUID) async {
+        sharing.unshare(commitmentID)
+        sharingStorage.save(sharing)
+        guard let client else { return }
+        do {
+            try await client.unshareCommitment(commitmentID: commitmentID)
+            failure = nil
+        } catch { failure = error.localizedDescription }
+    }
+
+    /// Publish whatever changed since the server last heard: state
+    /// transitions, edited titles, nothing else. Safe to call every
+    /// foreground; publishing is idempotent on both ends.
+    func syncSharing(commitments: [CommitmentRecord], now: Date) async {
+        guard let client, !sharing.records.isEmpty else { return }
+
+        for commitment in commitments {
+            let id = commitment.commitment.id
+            guard let record = sharing[id] else { continue }
+            guard let story = Self.story(of: commitment) else {
+                // Cancelled inside its correction window: a withdrawn
+                // commitment is withdrawn socially too.
+                try? await client.unshareCommitment(commitmentID: id)
+                sharing.unshare(id)
+                continue
+            }
+            let title = commitment.commitment.title.isEmpty
+                ? "A workout" : commitment.commitment.title
+            guard story.state != record.lastPublishedState
+                    || title != record.lastPublishedTitle else { continue }
+            do {
+                try await client.publishSharedCommitment(
+                    commitmentID: id, title: title,
+                    deadline: commitment.commitment.deadline,
+                    state: story.state, resolvedAt: story.resolvedAt)
+                sharing.recordPublished(id, state: story.state, title: title)
+                failure = nil
+            } catch {
+                failure = error.localizedDescription
+            }
+        }
+        sharingStorage.save(sharing)
+    }
+
+    /// What a friend may be told about a commitment's standing — and only
+    /// that. The server further quiets 'overridden' to 'ended' unless the
+    /// owner shares Override usage; nothing else ever leaves the ledger.
+    private static func story(of record: CommitmentRecord) -> (state: String, resolvedAt: Date?)? {
+        switch record.resolution {
+        case .completed(let at):
+            return (at <= record.commitment.deadline ? "kept" : "kept_late", at)
+        case .overridden(_, let at):
+            return ("overridden", at)
+        case .cancelled:
+            return nil
+        case nil:
+            return ("open", nil)
+        }
+    }
+
+    // MARK: - Streaks and activity
+
+    /// Publish the ledger's two figures, if the owner shares them. The server
+    /// no-ops when the switch is off, so racing a toggle costs nothing.
+    func publishStreaks(_ streaks: SocialStreaks) async {
+        guard let client, profileState.profile?.shareStreaks == true else { return }
+        try? await client.setSocialStreaks(commitmentsKept: streaks.commitmentsKept,
+                                           sinceLastOverride: streaks.sinceLastOverride)
+    }
+
+    func setSharing(shareStreaks: Bool? = nil, shareOverrideUsage: Bool? = nil) async {
+        guard let client else { return }
+        do {
+            try await client.setSocialSharing(shareStreaks: shareStreaks,
+                                              shareOverrideUsage: shareOverrideUsage)
+            await refreshProfile()
+            failure = nil
+        } catch { failure = error.localizedDescription }
+    }
+
+    func refreshActivity() async {
+        guard let client else { return }
+        do {
+            activity = try await client.friendActivity()
+            failure = nil
+        } catch { failure = error.localizedDescription }
     }
 
     private func perform(_ action: (BackendClient) async throws -> Void) async {

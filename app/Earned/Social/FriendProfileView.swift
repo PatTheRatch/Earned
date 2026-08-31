@@ -54,6 +54,18 @@ struct FriendProfileView: View {
                     }
                     .font(Theme.blocker(16))
                     .foregroundStyle(Theme.muted)
+                    // Present only when this friend shares their figures —
+                    // literal wording, no ranking, no score.
+                    if let kept = profile.commitmentsKept {
+                        ThickRule()
+                        Text("\(kept) COMMITMENT" + (kept == 1 ? "" : "S") + " KEPT")
+                            .font(Theme.blocker(16))
+                            .foregroundStyle(Theme.ink)
+                        Text(profile.sinceLastOverride.map { "\($0) since last Override" }
+                             ?? "No Overrides yet")
+                            .font(.subheadline)
+                            .foregroundStyle(Theme.muted)
+                    }
                     SectionLabel(text: relationshipLabel(profile.relationship))
                 }
                 .padding(.vertical, 8)

@@ -13,6 +13,8 @@ struct EditProfileView: View {
     @State private var handle: String
     @State private var city: String
     @State private var discoverable: Bool
+    @State private var shareStreaks: Bool
+    @State private var shareOverrideUsage: Bool
     @State private var photoItem: PhotosPickerItem?
     @State private var saving = false
 
@@ -22,6 +24,8 @@ struct EditProfileView: View {
         _handle = State(initialValue: profile.handle)
         _city = State(initialValue: profile.city ?? "")
         _discoverable = State(initialValue: profile.discoverable)
+        _shareStreaks = State(initialValue: profile.shareStreaks)
+        _shareOverrideUsage = State(initialValue: profile.shareOverrideUsage)
     }
 
     var body: some View {
@@ -75,6 +79,25 @@ struct EditProfileView: View {
             } footer: {
                 Text("Off means nobody new can find you or ask to connect — "
                      + "indistinguishable from not existing. Existing friends keep you.")
+            }
+
+            Section {
+                Toggle("Share streaks with friends", isOn: $shareStreaks)
+                    .onChange(of: shareStreaks) { _, value in
+                        Task { await social.setSharing(shareStreaks: value) }
+                    }
+                Toggle("Share Override use with friends", isOn: $shareOverrideUsage)
+                    .onChange(of: shareOverrideUsage) { _, value in
+                        Task { await social.setSharing(shareOverrideUsage: value) }
+                    }
+            } header: {
+                Text("Sharing")
+            } footer: {
+                Text("Streaks are your commitments-kept count and commitments since your "
+                     + "last Override — an Override is a route your contract contains, not "
+                     + "a failing. Override sharing decides whether a shared commitment you "
+                     + "override says so, or just quietly ends. Turning either off withdraws "
+                     + "what it was sharing, immediately.")
             }
 
             if let failure = social.failure {

@@ -1,4 +1,5 @@
 import SwiftUI
+import EarnedKit
 
 @main
 struct EarnedApp: App {
@@ -48,6 +49,12 @@ struct EarnedApp: App {
                 // changes what the Social tab shows, nothing else.
                 await social.refreshProfile()
                 await social.refreshSocial()
+                // Sharing runs after the health import above, so a run that
+                // just resolved its Gate is the story that gets published —
+                // and always after the profile, whose switches govern it.
+                await social.syncSharing(commitments: store.allCommitments, now: store.now)
+                await social.publishStreaks(store.ledger.state.socialStreaks(now: store.now))
+                await social.refreshActivity()
                 await account.syncEnvelopes(for: store.allCommitments, now: store.now)
                 // Grants last, and only after envelopes: a grant is checked
                 // against the contract digest the server gave us, so a

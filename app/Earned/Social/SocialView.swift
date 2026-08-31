@@ -1,5 +1,6 @@
 import AuthenticationServices
 import SwiftUI
+import EarnedKit
 
 /// The Social tab: people, and — later — meaningful recent activity.
 ///
@@ -8,6 +9,7 @@ import SwiftUI
 /// area ships empty and honest until commitment sharing exists. Nothing here
 /// is required for Earned to work — the Gates neither know nor care.
 struct SocialView: View {
+    @EnvironmentObject private var store: EarnedStore
     @EnvironmentObject private var account: AccountStore
     @EnvironmentObject private var social: SocialStore
 
@@ -37,6 +39,7 @@ struct SocialView: View {
         .task {
             await social.refreshProfile()
             await social.refreshSocial()
+            await social.refreshActivity()
         }
     }
 
@@ -116,6 +119,7 @@ struct SocialView: View {
             .refreshable {
                 await social.refreshProfile()
                 await social.refreshSocial()
+                await social.refreshActivity()
             }
             .toolbar {
                 Button {
@@ -139,6 +143,7 @@ struct SocialView: View {
     @ViewBuilder
     private var myProfileSection: some View {
         if let profile = social.profileState.profile {
+            let streaks = store.ledger.state.socialStreaks(now: store.now)
             Section {
                 NavigationLink {
                     EditProfileView(profile: profile)
@@ -154,8 +159,25 @@ struct SocialView: View {
                     }
                     .padding(.vertical, 4)
                 }
+                // The two figures, straight off the ledger — literal wording,
+                // never a loaded label (docs/social-architecture.md §8).
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(streaks.commitmentsKept) COMMITMENT"
+                         + (streaks.commitmentsKept == 1 ? "" : "S") + " KEPT")
+                        .font(Theme.blocker(16))
+                        .foregroundStyle(Theme.ink)
+                    Text(streaks.sinceLastOverride.map { "\($0) since last Override" }
+                         ?? "No Overrides yet")
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.muted)
+                }
+                .padding(.vertical, 2)
             } header: {
                 Text("My profile")
+            } footer: {
+                Text(profile.shareStreaks
+                     ? "Friends see these numbers."
+                     : "Only you see these numbers. Sharing them is a switch on your profile.")
             }
         }
     }
@@ -233,15 +255,34 @@ struct SocialView: View {
         }
     }
 
-    /// S1 ships this empty, and says so. No events exist yet, and none are
-    /// invented here — commitment sharing is the next milestone
-    /// (docs/social-architecture.md §9).
+    /// The shelf: friends' recent, meaningful events, as the server curates
+    /// them — bounded, 30 days, and then it ends. An empty shelf says so
+    /// rather than inventing anything (docs/social-architecture.md §9).
     private var recentSection: some View {
         Section {
-            Text("Nothing yet. When commitment sharing ships, the promises your friends "
-                 + "choose to share will show up here — kept, missed, and overridden alike.")
-                .font(.footnote)
-                .foregroundStyle(Theme.muted)
+            if social.activity.isEmpty {
+                Text("Nothing yet. When friends share commitments, what they keep — and "
+                     + "what they choose to tell — shows up here.")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.muted)
+            } else {
+                ForEach(social.activity) { event in
+                    HStack(alignment: .top, spacing: 12) {
+                        AvatarView(avatarPath: event.avatarPath,
+                                   displayName: event.displayName, size: 32)
+                        VStack(alignment: .leading, spacing: 2) {
+                            (Text(event.displayName).fontWeight(.semibold)
+                             + Text(" \(event.phrase)"))
+                                .font(.subheadline)
+                                .foregroundStyle(Theme.ink)
+                            Text(Format.relative(event.occurredAt, from: store.now))
+                                .font(.footnote)
+                                .foregroundStyle(Theme.muted)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
         } header: {
             Text("Recent")
         }

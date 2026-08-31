@@ -12,6 +12,7 @@ struct CommitmentDetailView: View {
     @EnvironmentObject private var store: EarnedStore
     @EnvironmentObject private var account: AccountStore
     @EnvironmentObject private var health: HealthImporter
+    @EnvironmentObject private var social: SocialStore
     @Environment(\.dismiss) private var dismiss
     let commitmentID: UUID
 
@@ -199,6 +200,8 @@ struct CommitmentDetailView: View {
 
             restrictionsSection(for: record)
 
+            sharingSection(for: record)
+
             if record.resolution == nil {
                 Section("Ways out") {
                     OverrideMenu(record: record)
@@ -322,7 +325,36 @@ struct CommitmentDetailView: View {
         }
     }
 
+    /// Visibility is a privacy choice, not a contract term: changeable any
+    /// time, in either direction, hardened or not — the Monotonic Commitment
+    /// Principle governs the deal, never who may watch it. Unsharing
+    /// withdraws the commitment and everything friends were shown about it.
     @ViewBuilder
+    private func sharingSection(for record: CommitmentRecord) -> some View {
+        if social.profileState.profile != nil {
+            Section {
+                Toggle("Share with friends",
+                       isOn: Binding(
+                           get: { social.isShared(record.commitment.id) },
+                           set: { share in
+                               Task {
+                                   if share {
+                                       await social.share(record, now: store.now)
+                                   } else {
+                                       await social.unshare(record.commitment.id)
+                                   }
+                               }
+                           }))
+            } header: {
+                Text("Sharing")
+            } footer: {
+                Text("Friends see the title, the deadline, and whether you kept it — never "
+                     + "what gets restricted, never your workouts. Turning this off withdraws "
+                     + "it from their view entirely.")
+            }
+        }
+    }
+
     private func restrictionsSection(for record: CommitmentRecord) -> some View {
         Section {
             if record.commitment.restrictions.isEmpty {

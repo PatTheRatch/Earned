@@ -245,6 +245,53 @@ actor BackendClient {
         PublicProfile(json: try await rpc("get_profile", ["p_handle": handle]))
     }
 
+    // MARK: - Social: sharing and activity
+
+    /// Publish one shared commitment's current story. Idempotent — the server
+    /// emits events only on real transitions, so calling this every foreground
+    /// is chatter-free. Returns the state the server *stored*, which may be
+    /// the quiet 'ended' when the owner's settings say the how is private.
+    @discardableResult
+    func publishSharedCommitment(commitmentID: UUID, title: String, deadline: Date,
+                                 state: String, resolvedAt: Date?) async throws -> String? {
+        var params: [String: Any] = [
+            "p_commitment_id": commitmentID.uuidString,
+            "p_title": title,
+            "p_deadline": Self.timestamp(deadline),
+            "p_state": state,
+        ]
+        if let resolvedAt { params["p_resolved_at"] = Self.timestamp(resolvedAt) }
+        return (try await rpc("publish_shared_commitment", params))["state"] as? String
+    }
+
+    func unshareCommitment(commitmentID: UUID) async throws {
+        _ = try await rpc("unshare_commitment", ["p_commitment_id": commitmentID.uuidString])
+    }
+
+    /// Flip the sharing switches. Nil leaves a switch alone; false withdraws
+    /// what that switch was sharing, server-side, immediately.
+    func setSocialSharing(shareStreaks: Bool?, shareOverrideUsage: Bool?) async throws {
+        var params: [String: Any] = [:]
+        if let shareStreaks { params["p_share_streaks"] = shareStreaks }
+        if let shareOverrideUsage { params["p_share_override_usage"] = shareOverrideUsage }
+        guard !params.isEmpty else { return }
+        _ = try await rpc("set_social_sharing", params)
+    }
+
+    /// Publish the ledger's streak figures. A quiet no-op server-side while
+    /// streak sharing is off.
+    func setSocialStreaks(commitmentsKept: Int, sinceLastOverride: Int?) async throws {
+        var params: [String: Any] = ["p_commitments_kept": commitmentsKept]
+        if let sinceLastOverride { params["p_since_last_override"] = sinceLastOverride }
+        _ = try await rpc("set_social_streaks", params)
+    }
+
+    /// The Recent shelf: friends' events, bounded and recent, then it ends.
+    func friendActivity() async throws -> [SocialEvent] {
+        (try await rpcValue("friend_activity", [:]) as? [[String: Any]] ?? [])
+            .compactMap(SocialEvent.init(json:))
+    }
+
     // MARK: - Social: avatar storage
 
     /// Uploads the re-encoded derivative under the caller's own folder, then
