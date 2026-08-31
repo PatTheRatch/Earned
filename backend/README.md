@@ -7,12 +7,15 @@ The design and threat model is
 Every product decision in it is settled except account deletion (§21.2), which waits on
 privacy/legal review — nothing here should be built against a guessed answer to that one.
 
-## What exists (Milestones A–F)
+## What exists (Milestones A–F, and Social S1)
 
 Accounts, the Contract Envelope, partners with real consent, the grant-signing key
 infrastructure, override requests with their frozen snapshot and delivery, voting with the
-partner page, and signed grants. What is missing is the app half of step 8: nothing yet
-verifies a grant on a phone or records it in a ledger.
+partner page, and signed grants — and the app half of step 8 has since landed too:
+`app/Earned/Grants/` fetches grants, verifies them against the published key set under the
+compiled-in root key, and offers them to the ledger. Milestone S1 adds the social layer:
+profiles, friendships, and avatar storage (`docs/social-architecture.md`) — which grants
+no authority over anything above and is read by nothing above.
 
 | | |
 |---|---|
@@ -28,6 +31,9 @@ verifies a grant on a phone or records it in a ledger.
 | `migrations/0010` | `cast_override_vote` for real, `approval_page`, and the receipt purge (§§6.2, 8, 15, 17) |
 | `migrations/0011` | `server_grant`, the canonical grant document, and two-phase signing (§9) |
 | `migrations/0012` | `current_signing_kid()` refuses a key the *published* key set does not show as current (§10.3) |
+| `migrations/0013` | `profile`: handle, optional city, private timezone, discoverability. `account.display_name` stays the one canonical name |
+| `migrations/0014` | `friendship`: one row per pair, crossed-request resolution, per-member block flags, handle search, and every RPC the Social tab calls |
+| `migrations/0015` | Avatars: the visibility rule as testable functions, and the `avatars` bucket + storage policies where Supabase Storage exists |
 | [`supabase/functions/approval/`](../supabase/functions/approval/) | The partner page: a server-rendered edge function over those two functions (§18). It lives beside `supabase/config.toml` because that is where the CLI looks |
 | [`supabase/functions/grants/`](../supabase/functions/grants/) | Signs grants with the Ed25519 key, because Postgres cannot (§9) |
 

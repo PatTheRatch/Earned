@@ -550,14 +550,37 @@ select cron.schedule('purge-override-receipts', '17 3 * * *',
 
 ---
 
+## 8. Social (Milestone S1)
+
+Migrations `0013`–`0015` apply through the same `backend/apply.sh` pass as everything
+else. `0015` also creates the `avatars` Storage bucket and its policies when it runs
+against a real Supabase project (on a plain Postgres it skips them, loudly).
+
+Verify after applying:
+
+- **The bucket's caps took.** In the dashboard (Storage → avatars) or via SQL: private,
+  `file_size_limit = 1048576`, `allowed_mime_types = {image/jpeg}`. The SQL test suite
+  asserts this only where the storage schema exists, so the hosted project is where it
+  actually gets checked.
+- **The policies exist on `storage.objects`**: `avatars_read`, `avatars_insert`,
+  `avatars_update`, `avatars_delete`. If the Supabase project restricts DDL on
+  `storage.objects` for the migration role, create the same four policies from the
+  dashboard's policy editor — their entire logic is delegated to
+  `public.avatar_is_visible(name)` / `public.avatar_path_is_mine(name)`, so the dashboard
+  version cannot drift from the tested rule.
+- A second test account can find the first by handle, connect, and see its avatar; after a
+  block, neither can find the other.
+
+---
+
 ## What is still missing
 
 Not deployment problems — unbuilt steps, in
 [§22's](accountability-architecture.md) order:
 
-- **The app half of step 8.** Grants are signed and served, but nothing on a phone fetches
-  one, verifies its signature against the key set, or records it in the ledger. Until that
-  lands, an approval changes the database and not the phone.
+- ~~The app half of step 8~~ — *landed.* The app fetches grants, verifies them against the
+  published key set under the compiled-in root key, and offers them to the ledger
+  (`app/Earned/Grants/`). What remains is the end-to-end pass on a real device.
 - **Close and moot propagation (step 9),** and with it the consent page at `/c/<token>`. A
   requester cannot cancel an open request, and completing the workout does not yet tell the
   partners they can stand down.
