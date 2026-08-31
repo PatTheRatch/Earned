@@ -258,14 +258,23 @@ Supabase injects; there is nothing to configure for either.
 > If the deploy complains that Docker is not running, it is trying to bundle locally.
 > Recent CLI versions bundle without it; if yours insists, start Docker Desktop and retry.
 
-**Check** it is reachable, using the ugly URL for now:
+**Check** it is reachable, using the ugly URL for now — and check the *status*, not just
+the page:
 
 ```sh
-curl -s "https://<ref>.functions.supabase.co/approval/not-a-real-token" | head -20
+curl -s -o /dev/null -w '%{http_code}\n' \
+  "https://<ref>.functions.supabase.co/approval/not-a-real-token"
 ```
 
-You should get the "This link is no longer available" page — the same page a forged token
-gets, which is the point (§17).
+- **200** — working. The function ran, asked the database, and was told that token is not
+  real. Fetching the body shows "This link is no longer available", the same page a forged
+  token gets, which is the point (§17).
+- **500** — the function is deployed but cannot reach `approval_page`. Almost always this
+  means the function and the migrations are on **different projects**: check
+  `supabase projects list` against the `$DB` you have been running migrations into.
+
+The body alone cannot tell those apart — the error path deliberately renders the same
+page rather than leaking a stack trace to a partner — so read the status code.
 
 ### 5.2 Put the domain in front of it
 
