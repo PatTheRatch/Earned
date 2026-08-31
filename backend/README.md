@@ -40,6 +40,7 @@ no authority over anything above and is read by nothing above.
 | `migrations/0016` | Commitment sharing: `shared_commitment`, `social_event`, the sharing switches on `profile`, and publish/unshare with one-event-per-transition idempotency |
 | `migrations/0017` | Streak figures (`social_streaks`), the sharing-switch RPC that withdraws what it stops sharing, `friend_activity` behind its 30-day horizon, and the purge that deletes behind the same number |
 | `migrations/0018` | Check-in sharing: one timestamp, stored only while shared, surfaced to friends as whole days past 72 hours — never a live status, never a motive |
+| `migrations/0019` | Earned-user partners (S18/S19): account-linked identity, nomination through friendship, in-app consent and in-app voting through the same snapshot and vote transaction as the web page, and the block rule that revokes accountability both ways |
 | [`supabase/functions/approval/`](../supabase/functions/approval/) | The partner page: a server-rendered edge function over those two functions (§18). It lives beside `supabase/config.toml` because that is where the CLI looks |
 | [`supabase/functions/grants/`](../supabase/functions/grants/) | Signs grants with the Ed25519 key, because Postgres cannot (§9) |
 

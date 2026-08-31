@@ -572,9 +572,11 @@ add commitment sharing, the activity shelf and streak figures, and want the
 `purge-social-events` cron from §7; `0018` adds check-in sharing (no cron — the only
 stored fact is one timestamp the switch itself deletes).
 
-**Applied to the hosted project, 31 August 2026**, and every check below verified by SQL
-the same day — except the two-device pass, which still needs real phones. Notes from the
-run:
+**Applied to the hosted project, 31 August 2026** (0013–0018), and every check below
+verified by SQL the same day — except the two-device pass, which still needs real phones.
+**`0019` (earned-user partners) is built and tested but not yet applied to the hosted
+project** — it goes up by the same road when wanted, and needs no bucket, cron, or
+dashboard step. Notes from the run:
 
 - `apply.sh` needs the database connection string, which deliberately lives nowhere on
   disk. When it isn't to hand, there is a second sanctioned road: the **Management API's

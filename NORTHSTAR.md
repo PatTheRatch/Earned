@@ -2,7 +2,7 @@
 
 **North Star Product Document**
 
-v0.7 · August 2026 · *v0.6 added §45 (Social Accountability) and invariants 23–28; v0.7 settles the product half of account deletion (§33, §45). Sections are append-only — code and docs cite them by number.*
+v0.8 · August 2026 · *v0.6 added §45 (Social Accountability) and invariants 23–28; v0.7 settled the product half of account deletion (§33, §45); v0.8 adds invariant 29 (block supersedes both relationship systems). Sections are append-only — code and docs cite them by number.*
 
 > Do what matters first. Earn the rest.
 
@@ -1324,6 +1324,7 @@ These rules should survive feature debates.
 26. **Sharing is chosen, never assumed.** Every social visibility defaults to private; hydration stays private outright in v1.
 27. **Absence is observable; motive is not.** Earned may say a friend hasn't checked in and what was open when last seen. It never claims to know *why* — "deleted the app to escape" is a sentence the product cannot honestly render.
 28. **Social reputation is representation, not enforcement.** Socially shared completions are the client's own account of itself; nothing on the enforcement path may consume them as evidence.
+29. **Block supersedes both relationship systems.** A block between two Earned accounts revokes any accountability partnership between them, in both directions, and prevents new nominations while it stands — an explicit cross-system rule, never a side effect of shared rows. Frozen contracts keep their thresholds; a route that loses too many partners becomes unavailable, and Solo remains. Unblocking restores neither friendship nor authority: both take a fresh ask and a fresh yes.
 
 ---
 

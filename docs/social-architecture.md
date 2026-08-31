@@ -65,10 +65,29 @@ A person may be both. The relationships still never merge:
 
 The `partner` table is **not** repurposed as a friendship table, and never will be — it
 carries encrypted contact details, consent state and suppression semantics that friendship
-has no business touching. The existing `partner.kind = 'earned_user'` value remains the
-future hook for letting an authenticated friend *become* a partner — but that promotion
-must run through the same nomination-and-consent flow as any other partner. Friendship is
-never implicit accountability consent.
+has no business touching.
+
+### The bridge, as built (migration 0019)
+
+`partner.kind = 'earned_user'` now has its behaviour: an accepted friend can be nominated
+as an accountability partner **by their authenticated identity** — no phone number, no
+email, ever. The friendship is the *nomination channel*: the ask travels through it (which
+is also why a blocked pair fails exactly like strangers, leaking nothing), and stops there.
+Consent is the friend's own explicit in-app act, their session standing where the external
+flow's bearer token stands. Both kinds of partner are first-class: the external flow —
+no account, no app install, consent and approvals through secure web links — is untouched
+and remains the only path for anyone not on Earned.
+
+Two cross-system rules, and only these two:
+
+- **Block supersedes both systems** (NORTHSTAR invariant 29): a block revokes any
+  invited/active earned partnership between the two accounts, both directions, as an
+  explicit rule — frozen contract thresholds never lower, depleted routes become honestly
+  unavailable, Solo remains, and past votes and grants stay on the record. Unblocking
+  restores nothing; authority returns only by fresh nomination and fresh consent.
+- **Nothing else crosses.** Removing a friendship leaves an accountability partnership
+  standing; revoking a partner leaves the friendship standing; becoming one never implies
+  the other (invariant 24).
 
 ---
 

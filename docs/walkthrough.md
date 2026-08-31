@@ -35,6 +35,7 @@ trusted. Re-verify against the code when it drifts.
 | Social — profiles, friends, Social tab | **Real** (Milestone S1) | Profile with unique handle + avatar, friend requests/accept/decline/remove/block, handle search, Social tab. See `docs/social-architecture.md` |
 | Social — commitment sharing, activity, streaks | **Real** (Milestone S2) | Per-commitment Private/Friends choice (default Private), friends' Recent shelf (bounded, 30-day horizon, meaningful events only), and the two streak figures ("12 commitments kept · 6 since last Override"). Overrides are told only when the owner shares Override usage |
 | Social — check-ins and the quiet surface | **Real** (Milestone S3) | Opt-in: friends see "Hasn't checked in · 4 days" (whole days, only past 72 hours, never a live status) and how many shared commitments were open at the last check-in. Facts only — motive is never claimed |
+| Earned-user accountability partners | **Real** (migration 0019; not yet on the hosted project) | An accepted friend can be nominated by identity — no number, no email — and consents in-app; their approval requests arrive in-app through the same snapshot and vote transaction as the web page. External partners keep the full no-account web flow. Block revokes accountability both ways; unblock restores nothing |
 
 **One-sentence version:** the contract machinery is real, the identity is real, Earned
 takes apps away when a Gate is closed, a partner's approval can genuinely unlock a phone,
@@ -493,6 +494,27 @@ commitment just quietly ends in their view. Unsharing withdraws the commitment a
 event it generated. The app republishes on every foreground; the server emits at most
 one event per real transition, so nothing is minted per app-open, and hydration never
 appears at all.
+
+### A friend becomes a partner (or doesn't)
+
+Settings → Partners → **Add accountability partner** now offers two roads. PEOPLE YOU
+KNOW ON EARNED lists accepted friends with their state — Ask / REQUEST SENT /
+PARTNER ✓ — and asking shows the deal plainly: *"Maya will be able to approve
+Accountability Overrides when you ask. Being friends does not give her this authority
+automatically."* SOMEONE ELSE is the untouched external flow: name, text or email, one
+server-sent link, no account or app needed on their end. A friend's profile screen
+carries the same ACCOUNTABILITY block, and never labels a friend a partner before they
+explicitly accept.
+
+The ask lands on the friend's Social tab (and their Partners screen): *"Patrick wants
+you as an accountability partner"* — I'M IN / NO THANKS. Once active, their override
+requests arrive the same way: an APPROVALS section rendering the identical frozen
+snapshot the web page shows, casting the identical vote, with their signed-in session as
+the credential instead of a link. Blocking a friend revokes any accountability between
+the two accounts in both directions on the spot; unblocking brings none of it back.
+
+> Source: `app/Earned/Backend/PartnersView.swift` (`AddPartnerPickerView`),
+> `app/Earned/Social/SocialView.swift`, `backend/migrations/0019_earned_partners.sql`
 
 ### Going quiet (Milestone S3)
 
