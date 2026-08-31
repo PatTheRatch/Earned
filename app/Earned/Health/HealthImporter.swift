@@ -64,8 +64,11 @@ final class HealthImporter: ObservableObject {
     ///
     /// Idempotent by construction rather than by bookkeeping: each imported
     /// workout keeps the HK workout's own UUID, the importer skips ids the
-    /// ledger already holds, and the reducer refuses duplicates as the
-    /// backstop. No anchor to persist, nothing to get out of sync.
+    /// ledger already holds, and the reducer deduplicates as the backstop —
+    /// a duplicate is accepted and counted once, a semantic the engine has
+    /// pinned since before this importer existed, because a ledger that
+    /// already holds the duplicate event must keep replaying forever. No
+    /// anchor to persist, nothing to get out of sync.
     func importWorkouts(into earned: EarnedStore) async {
         guard let store, access == .requested else { return }
 

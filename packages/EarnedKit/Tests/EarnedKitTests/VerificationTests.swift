@@ -144,17 +144,22 @@ final class VerificationTests: XCTestCase {
         XCTAssertEqual(reread.evidence, strava)
     }
 
-    func testTheSameWorkoutCannotBeRecordedTwice() throws {
-        // HealthKit ingestion reuses the HK workout's UUID, so re-seeing a
-        // workout on the next foreground is a duplicate id here — refused by
-        // the reducer, not merely skipped by the importer, because a backstop
-        // nobody proved is a hope.
+    func testReimportingTheSameWorkoutCountsItOnce() throws {
+        // HealthKit ingestion reuses the HK workout's UUID, so a workout seen
+        // again on the next foreground is a duplicate id — accepted and
+        // deduplicated by the reducer (CommitmentTests pins that semantic),
+        // never double-counted. Accepted rather than refused on purpose: a
+        // ledger that already holds the duplicate event must keep replaying
+        // forever, and an append that starts throwing where it used to
+        // succeed would rewrite history's rules retroactively.
         let id = UUID()
         var ledger = ledger(requiring: .selfReported, id: id)
         let run = workout(start: d(22, 7), minutes: 10)
         ledger.expectAppend(.workoutRecorded(run), at: d(22, 7, 20))
-        XCTAssertThrowsError(try ledger.append(.workoutRecorded(run), at: d(22, 7, 21)))
+        ledger.expectAppend(.workoutRecorded(run), at: d(22, 7, 21))
         XCTAssertEqual(ledger.state.workouts.count, 1)
+        XCTAssertEqual(ledger.state.progress(for: id)?.achieved, 600,
+                       "ten minutes, not twenty: seen twice is counted once")
     }
 
     private func encoderFor(_ requirement: Requirement) throws -> Data {
