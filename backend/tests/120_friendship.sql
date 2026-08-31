@@ -201,8 +201,9 @@ select test_assert(
   (select count(*) = 0
      from jsonb_array_elements(public.my_friends()) entry,
           jsonb_object_keys(entry) k
-    where k not in ('handle', 'display_name', 'avatar_path', 'city')),
-  'a friend row is handle, name, avatar, city — nothing else');
+    where k not in ('handle', 'display_name', 'avatar_path', 'city',
+                    'quiet_days', 'open_shared_commitments')),
+  'a friend row is handle, name, avatar, city, and at most the quiet block — nothing else');
 select test_assert(public.get_profile('dave') ->> 'timezone' is null,
                    'timezone is private system information, shown to nobody');
 

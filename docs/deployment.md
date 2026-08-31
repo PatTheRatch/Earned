@@ -558,11 +558,12 @@ storage honest about the retention promise.)
 
 ## 8. Social (Milestone S1)
 
-Migrations `0013`–`0017` apply through the same `backend/apply.sh` pass as everything
+Migrations `0013`–`0018` apply through the same `backend/apply.sh` pass as everything
 else. `0015` also creates the `avatars` Storage bucket and its policies when it runs
 against a real Supabase project (on a plain Postgres it skips them, loudly); `0016`/`0017`
 add commitment sharing, the activity shelf and streak figures, and want the
-`purge-social-events` cron from §7.
+`purge-social-events` cron from §7; `0018` adds check-in sharing (no cron — the only
+stored fact is one timestamp the switch itself deletes).
 
 Verify after applying:
 

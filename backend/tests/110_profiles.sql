@@ -44,10 +44,12 @@ select test_assert(public.my_profile() ->> 'display_name' = 'Pat'
 select test_assert(
   (select count(*) = 0 from jsonb_object_keys(public.my_profile()) k
     where k not in ('handle', 'display_name', 'avatar_path', 'city', 'timezone',
-                    'discoverable', 'share_streaks', 'share_override_usage')),
+                    'discoverable', 'share_streaks', 'share_override_usage',
+                    'share_last_checkin')),
   'my_profile carries exactly the designed fields — no account id, no apple subject');
 select test_assert(public.my_profile() ->> 'share_streaks' = 'false'
-                   and public.my_profile() ->> 'share_override_usage' = 'false',
+                   and public.my_profile() ->> 'share_override_usage' = 'false'
+                   and public.my_profile() ->> 'share_last_checkin' = 'false',
                    'every sharing switch is born off (invariant 26)');
 
 -- MARK: - Handle validation
