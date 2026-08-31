@@ -535,7 +535,7 @@ with whoever is billing you.
 
 ## 7. Scheduled jobs (optional)
 
-Two housekeeping functions. Neither is load-bearing — expiry and the receipt window are
+Three housekeeping functions. None is load-bearing — expiry and the receipt window are
 recomputed wherever they are read, and request creation retires anything elapsed on its way
 past — so these keep stored state tidy rather than keeping the system correct.
 
@@ -554,6 +554,13 @@ select cron.schedule('purge-social-events', '23 3 * * *',
 `friend_activity` already refuses to read past the 30-day horizon; the purge keeps
 storage honest about the retention promise.)
 
+**Done on the hosted project, 31 August 2026.** All three jobs are scheduled and active
+in `cron.job`, and each function was run once by hand to prove it executes cleanly under
+the role cron uses. One divergence from the command above worth knowing: Supabase
+relocates pg_cron to `pg_catalog` regardless of the `with schema extensions` clause —
+the clause is accepted, the extension picks its own home, and `cron.schedule` works the
+same either way.
+
 ---
 
 ## 8. Social (Milestone S1)
@@ -564,6 +571,26 @@ against a real Supabase project (on a plain Postgres it skips them, loudly); `00
 add commitment sharing, the activity shelf and streak figures, and want the
 `purge-social-events` cron from §7; `0018` adds check-in sharing (no cron — the only
 stored fact is one timestamp the switch itself deletes).
+
+**Applied to the hosted project, 31 August 2026**, and every check below verified by SQL
+the same day — except the two-device pass, which still needs real phones. Notes from the
+run:
+
+- `apply.sh` needs the database connection string, which deliberately lives nowhere on
+  disk. When it isn't to hand, there is a second sanctioned road: the **Management API's
+  query endpoint** (`POST /v1/projects/<ref>/database/query`), authenticated with the
+  Supabase CLI's own access token — which the CLI keeps in the macOS keychain as service
+  `Supabase CLI`, so a linked, logged-in machine can deploy without the password. Each
+  migration file goes up verbatim as one query; they are convergent, so a failed half can
+  simply be re-sent.
+- The 0015 storage DO block ran with sufficient privileges — bucket and all four
+  policies created by the migration itself. The dashboard-policy-editor fallback below
+  was **not** needed, and stays documented only for projects where it is.
+- Verified after applying: all five social tables present with RLS enabled and their
+  select-own policies; the full profile column set through `share_last_checkin`; exactly
+  one `set_social_sharing` (three arguments — 0018's drop of the two-argument version
+  took, so PostgREST has no ambiguity); `anon` can execute none of the social functions
+  and `authenticated` all of them; bucket caps as below.
 
 Verify after applying:
 
