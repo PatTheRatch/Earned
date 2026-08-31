@@ -78,6 +78,8 @@ if ! sql -c "select private.contact_lookup('+15550100000')" > /dev/null 2>&1; th
   exit 1
 fi
 
+# Links are built server-side from this, so a stale value produces links that
+# point somewhere real and wrong rather than failing. Say where it came from.
 base_url="$(sql -c "select private.secret('consent_base_url')")"
 
 echo "==> starting from a clean demo account"
@@ -169,6 +171,9 @@ for who in 'Demo Mom' 'Demo Dave'; do
      order by o.created_at desc limit 1")"
   printf '  %-10s %s/a/%s\n' "$who" "$base_url" "$token"
 done
+echo
+echo "  built from consent_base_url in Vault: $base_url"
+echo "  if that is not your live domain, these links are dead — docs/deployment.md §2"
 echo
 echo "Approving as one shows that partner's receipt and leaves the request open."
 echo "Approving as both resolves it: the second sees 'granted', and had there"
