@@ -46,6 +46,31 @@ public struct FrictionRequirement: Codable, Equatable, Sendable {
 
 /// An in-flight (or resolved) override request against one commitment.
 /// Free Overrides never create a request — they are spent directly.
+/// How one partner answered, as the server recorded it.
+///
+/// This is a *copy* of something the server decided, carried in the grant and
+/// kept so a user can see who let them out. It is never counted: the threshold
+/// was met on the server, and re-deriving the decision from these here would
+/// reintroduce exactly the client-side authority the Contract Envelope exists
+/// to remove.
+public struct PartnerVote: Codable, Equatable, Sendable {
+    public enum Kind: String, Codable, Equatable, Sendable {
+        case approve, deny
+    }
+
+    /// As the requester labelled them. Partners have no stable identity the
+    /// app knows — the server holds contacts and never returns them (§14.1).
+    public let partnerDisplayName: String
+    public let vote: Kind
+    public let at: Date
+
+    public init(partnerDisplayName: String, vote: Kind, at: Date) {
+        self.partnerDisplayName = partnerDisplayName
+        self.vote = vote
+        self.at = at
+    }
+}
+
 public struct OverrideRequest: Codable, Equatable, Identifiable, Sendable {
     public let id: UUID
     public let commitmentID: UUID
@@ -62,6 +87,20 @@ public struct OverrideRequest: Codable, Equatable, Identifiable, Sendable {
     /// friction completed). The commitment's resolution records the same moment.
     public internal(set) var grantedAt: Date?
     public internal(set) var grantedKind: OverrideKind?
+    /// The server's identifier for the grant that released this request, when
+    /// the accountability route was the one that resolved it.
+    ///
+    /// The *signature* is deliberately absent, and this is the whole of §9.2:
+    /// keys rotate and are eventually retired, so a 2029 build replaying a
+    /// 2026 ledger would either ignore a stored signature — dead weight in
+    /// permanent history — or fail to verify it and refuse to replay
+    /// legitimate history. What is stable forever is the semantic fact, and
+    /// this id is the thread back to the receipt store that holds the
+    /// cryptography (§9.3). Losing that store costs an audit trail, never
+    /// correctness, because replay never consults it.
+    public internal(set) var serverGrantID: UUID?
+    /// Who voted, as the grant reported it. Shown to a person; never counted.
+    public internal(set) var roster: [PartnerVote]
 
     init(id: UUID, commitmentID: UUID, requestedAt: Date) {
         self.id = id
@@ -70,6 +109,7 @@ public struct OverrideRequest: Codable, Equatable, Identifiable, Sendable {
         self.approvals = [:]
         self.denials = [:]
         self.soloEffortUnits = 0
+        self.roster = []
     }
 
     public var isResolved: Bool { grantedAt != nil }
@@ -93,6 +133,7 @@ extension OverrideRequest {
     private enum CodingKeys: String, CodingKey {
         case id, commitmentID, requestedAt, approvals, denials
         case soloStartedAt, soloEffortUnits, soloRequirement, grantedAt, grantedKind
+        case serverGrantID, roster
     }
 
     public init(from decoder: Decoder) throws {
@@ -105,6 +146,10 @@ extension OverrideRequest {
         soloStartedAt = try container.decodeIfPresent(Date.self, forKey: .soloStartedAt)
         grantedAt = try container.decodeIfPresent(Date.self, forKey: .grantedAt)
         grantedKind = try container.decodeIfPresent(OverrideKind.self, forKey: .grantedKind)
+        // Absent from every ledger written before grants existed, and from
+        // every request the Solo route resolved.
+        serverGrantID = try container.decodeIfPresent(UUID.self, forKey: .serverGrantID)
+        roster = try container.decodeIfPresent([PartnerVote].self, forKey: .roster) ?? []
         soloEffortUnits = try container.decodeIfPresent(Int.self, forKey: .soloEffortUnits) ?? 0
         soloRequirement = try container.decodeIfPresent(FrictionRequirement.self, forKey: .soloRequirement)
     }

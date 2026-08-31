@@ -272,6 +272,20 @@ public struct EarnedState: Codable, Equatable, Sendable {
             }
             overrideRequests[requestID] = request
 
+        case .accountabilityOverrideGranted(let requestID, let decidedAt, let roster,
+                                            let serverGrantID):
+            // `activeRequest` refuses a request that is already resolved, which
+            // is what makes a grant idempotent and what makes a grant arriving
+            // for a commitment the user already completed a no-op (§9.4, §12).
+            var request = try activeRequest(requestID)
+            request.grantedAt = decidedAt
+            request.grantedKind = .accountability
+            request.serverGrantID = serverGrantID
+            request.roster = roster
+            commitments[request.commitmentID]?.resolution = .overridden(.accountability,
+                                                                        at: decidedAt)
+            overrideRequests[requestID] = request
+
         case .overrideDenialRecorded(let requestID, let partnerID):
             var request = try activeRequest(requestID)
             try validateFreshVote(request, partnerID: partnerID)

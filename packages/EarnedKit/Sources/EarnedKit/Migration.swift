@@ -26,13 +26,30 @@ public enum LedgerMigration {
             return document
         case 1:
             return LedgerDocument(version: Ledger.currentSchemaVersion,
-                                  entries: migrateV1ToV2(document.entries))
+                                  entries: migrateV2ToV3(migrateV1ToV2(document.entries)))
+        case 2:
+            return LedgerDocument(version: Ledger.currentSchemaVersion,
+                                  entries: migrateV2ToV3(document.entries))
         case let version where version > Ledger.currentSchemaVersion:
             throw MigrationError.unknownVersion(version)
         default:
             throw MigrationError.unknownVersion(document.version)
         }
     }
+
+    /// v2 → v3: nothing to do, and that is the point.
+    ///
+    /// v3 adds `accountabilityOverrideGranted`, which no v2 ledger can
+    /// contain. The events already written keep meaning exactly what they
+    /// meant — including `overrideApprovalRecorded`, which counted approvals
+    /// on the device. Rewriting those into grants would be inventing server
+    /// decisions that were never made, and this file's rule is that historical
+    /// semantics are never silently rewritten.
+    ///
+    /// The version bump is therefore not about the past; it is so that an
+    /// older build refuses a ledger containing events it cannot replay,
+    /// rather than dropping them and quietly losing an override.
+    private static func migrateV2ToV3(_ entries: [LedgerEntry]) -> [LedgerEntry] { entries }
 
     /// v1 → v2.
     ///

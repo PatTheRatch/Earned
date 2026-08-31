@@ -441,6 +441,126 @@ final class GoldenLedgerTests: XCTestCase {
         XCTAssertEqual(decoded.state.commitments[commitmentID]?.commitment.eligibleFrom, d(24))
     }
 
+    // MARK: - v2 overrides, granted the old way
+
+    /// A v2 ledger whose accountability override was granted by *this engine*
+    /// counting approvals — the authority step 8 moved to the server.
+    ///
+    /// §19 asks for exactly this file. Ledgers like it are on real phones, and
+    /// the temptation when the server became authoritative was to reinterpret
+    /// these events, or to migrate them into grants. Both would be inventing
+    /// server decisions that were never made. They replay under the rules that
+    /// were in force when they were written, and this fixture is what stops
+    /// that being quietly undone.
+    private let v2OverrideFixture = """
+    {
+      "version": 2,
+      "entries": [
+        {
+          "id": "E1000000-0000-0000-0000-000000000001",
+          "date": "2026-08-21T18:00:00Z",
+          "event": {
+            "commitmentCreated": {
+              "_0": {
+                "id": "C1000000-0000-0000-0000-000000000001",
+                "title": "Run 30 min",
+                "requirement": {
+                  "activity": { "types": { "_0": ["running"] } },
+                  "metric": { "totalDuration": { "_0": 1800 } }
+                },
+                "eligibleFrom": "2026-08-22T00:00:00Z",
+                "deadline": "2026-08-22T10:00:00Z",
+                "createdAt": "2026-08-21T18:00:00Z",
+                "configuredCorrectionWindow": 7200,
+                "overridePolicy": {
+                  "approvalsRequired": 2,
+                  "accountabilityWindow": 1800,
+                  "soloEscalation": {
+                    "recentWindow": 2592000,
+                    "steps": [
+                      { "effortUnits": 60, "minimumElapsed": 600 },
+                      { "effortUnits": 180, "minimumElapsed": 1800 },
+                      { "effortUnits": 360, "minimumElapsed": 3600 }
+                    ]
+                  }
+                },
+                "restrictions": { "tokens": ["youtube"] },
+                "rewardEligible": true
+              }
+            }
+          }
+        },
+        {
+          "id": "E1000000-0000-0000-0000-000000000002",
+          "date": "2026-08-22T11:00:00Z",
+          "event": {
+            "overrideRequested": {
+              "id": "R1000000-0000-0000-0000-000000000001",
+              "commitmentID": "C1000000-0000-0000-0000-000000000001"
+            }
+          }
+        },
+        {
+          "id": "E1000000-0000-0000-0000-000000000003",
+          "date": "2026-08-22T11:05:00Z",
+          "event": {
+            "overrideApprovalRecorded": {
+              "requestID": "R1000000-0000-0000-0000-000000000001",
+              "partnerID": "alice"
+            }
+          }
+        },
+        {
+          "id": "E1000000-0000-0000-0000-000000000004",
+          "date": "2026-08-22T11:10:00Z",
+          "event": {
+            "overrideApprovalRecorded": {
+              "requestID": "R1000000-0000-0000-0000-000000000001",
+              "partnerID": "bob"
+            }
+          }
+        }
+      ]
+    }
+    """
+
+    func testV2OverrideLedgerStillReplaysIdentically() throws {
+        let decoded = try Self.decoder.decode(Ledger.self, from: Data(v2OverrideFixture.utf8))
+
+        let commitmentID = UUID(uuidString: "C1000000-0000-0000-0000-000000000001")!
+        let requestID = UUID(uuidString: "R1000000-0000-0000-0000-000000000001")!
+
+        // The second approval resolved it, then and now.
+        XCTAssertEqual(decoded.state.commitments[commitmentID]?.resolution,
+                       .overridden(.accountability, at: d(22, 11, 10)))
+        XCTAssertTrue(decoded.state.accessState(now: d(22, 11, 11)).isFullAccess)
+
+        let request = try XCTUnwrap(decoded.state.overrideRequests[requestID])
+        XCTAssertEqual(request.approvals.count, 2)
+        XCTAssertEqual(request.grantedKind, .accountability)
+        XCTAssertEqual(request.grantedAt, d(22, 11, 10))
+
+        // The fields step 8 added are absent, not defaulted to something
+        // misleading: this override had no server grant, because there was no
+        // server. A missing grant id is the truth about it.
+        XCTAssertNil(request.serverGrantID)
+        XCTAssertTrue(request.roster.isEmpty)
+    }
+
+    func testAV2LedgerIsRewrittenAsV3WithoutChangingItsEvents() throws {
+        let decoded = try Self.decoder.decode(Ledger.self, from: Data(v2OverrideFixture.utf8))
+        let reencoded = try Self.encoder.encode(decoded)
+        let document = try Self.decoder.decode(LedgerDocument.self, from: reencoded)
+
+        XCTAssertEqual(document.version, 3, "saving an old ledger stamps the current version")
+        XCTAssertEqual(document.entries.count, 4, "and invents no events on the way")
+        XCTAssertEqual(document.entries.map(\.id), decoded.entries.map(\.id))
+
+        let replayed = try Ledger(replaying: document.entries)
+        XCTAssertEqual(replayed.state.commitments, decoded.state.commitments,
+                       "a v3 rewrite of a v2 ledger replays to the same state")
+    }
+
     /// Round trip through the exact coder configuration the app uses,
     /// including its ISO-8601 dates, which truncate sub-second precision.
     /// Events stamped with real `Date()` values carry fractional seconds; the

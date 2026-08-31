@@ -34,8 +34,29 @@ public enum Event: Codable, Equatable, Sendable {
     case freeOverrideEarned(id: UUID, source: FreeOverrideSource)
     case freeOverrideSpent(commitmentID: UUID)
     case overrideRequested(id: UUID, commitmentID: UUID)
+    /// A single partner's vote, counted *here* against the local policy.
+    ///
+    /// Superseded by `accountabilityOverrideGranted` and kept because ledgers
+    /// containing it are on real phones and must keep replaying identically.
+    /// Nothing appends these any more: counting approvals on the device was
+    /// the thing the Contract Envelope exists to stop, since a modified client
+    /// could simply decide it had enough.
     case overrideApprovalRecorded(requestID: UUID, partnerID: String)
     case overrideDenialRecorded(requestID: UUID, partnerID: String)
+    /// The server granted an accountability override, verified before it got
+    /// here (docs/accountability-architecture.md §9.2).
+    ///
+    /// The semantic fact only: *an override was granted at this time, by these
+    /// people, under server grant X*. No signature, no key id, no algorithm —
+    /// permanent history must be a pure function of what happened, and
+    /// cryptography has a lifecycle that permanence cannot accommodate. By the
+    /// time this is appended the signature has already been checked against
+    /// the trusted key set; a caller that skipped that step has not been let
+    /// down by this type, it has broken the rule this type is written around.
+    case accountabilityOverrideGranted(requestID: UUID,
+                                       decidedAt: Date,
+                                       roster: [PartnerVote],
+                                       serverGrantID: UUID)
     case soloOverrideStarted(requestID: UUID)
     /// Measurable progress through the active-friction challenge. Elapsed time
     /// alone never completes a solo override.
