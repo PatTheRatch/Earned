@@ -51,9 +51,12 @@ targets:
     # id and separately for each Screen Time extension. See app/README.md.
     #
     # Checked in rather than generated from `properties`, so a change to what
-    # Earned is allowed to do shows up in a diff.
-    entitlements:
-      path: Earned/Earned.entitlements
+    # Earned is allowed to do shows up in a diff. Deliberately NOT declared via
+    # an `entitlements:` block here: XcodeGen treats that block as "generate
+    # this file", and with no `properties` it regenerates it as an empty dict —
+    # silently stripping Family Controls, Sign in with Apple and HealthKit on
+    # every `xcodegen generate`. CODE_SIGN_ENTITLEMENTS below is the only
+    # reference the build actually needs.
     settings:
       base:
         # Must be globally unique across all of Apple's developer accounts.
