@@ -318,6 +318,14 @@ site for everything else.
 moment a stranger is deciding whether to trust the page, which throws away the reason for
 owning a domain.
 
+**And the domain is load-bearing, not decoration.** Supabase will not serve HTML from
+`*.functions.supabase.co`: it rewrites `content-type` to `text/plain`, adds `nosniff`, and
+replaces the CSP with `sandbox`, so the partner page arrives as visible source text. That
+is a reasonable anti-abuse rule for a function domain shared by every project — nobody
+should be able to host a page there — and it means the partner page cannot work at all
+without a domain of your own in front of it. The worker restores the content type and CSP,
+and drops the upstream's `sb-project-ref`, `sb-request-id` and friends on the way past.
+
 1. Add the domain to Cloudflare (free plan is enough) and point your registrar's
    nameservers at the two Cloudflare gives you. Wait for the zone to go **Active** —
    usually minutes, occasionally hours.

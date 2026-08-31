@@ -44,6 +44,13 @@ async function dailyHash(value: string | null): Promise<string | null> {
     .map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+// Note that Supabase overrides two of these on *.functions.supabase.co: it
+// forces content-type to text/plain and replaces the CSP with `sandbox`, so
+// the page arrives as source text if it is fetched from that domain directly.
+// That is an anti-abuse rule for a shared function domain, not a bug, and the
+// Cloudflare worker in web/ restores both on the way to earntherest.com. These
+// stay correct here because they are what the response means, and because the
+// day this moves behind a Supabase custom domain they stop being overridden.
 function html(body: string, status = 200): Response {
   return new Response(body, {
     status,

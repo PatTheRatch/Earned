@@ -54,11 +54,31 @@ export default {
       });
     }
 
-    // A partner page is per-person and time-sensitive; nothing about it should
-    // be cached by an intermediary or indexed by anyone.
-    const out = new Headers(response.headers);
-    out.set("cache-control", "no-store");
-    out.set("x-robots-tag", "noindex, nofollow");
+    // Headers built from scratch, not inherited. Two reasons, and the first is
+    // not optional:
+    //
+    // Supabase refuses to serve HTML from *.functions.supabase.co — it
+    // rewrites content-type to text/plain, adds nosniff, and replaces any CSP
+    // with `sandbox`. That is a sensible anti-abuse rule for a shared function
+    // domain nobody should be able to host a phishing page on, and it means
+    // the partner page renders as source text until something restores the
+    // type. This worker is that something: the page is ours, the domain is
+    // ours, and serving it here is the arrangement Supabase's rule assumes.
+    //
+    // Second, the upstream response carries sb-project-ref, sb-request-id,
+    // x-deno-execution-id, x-sb-edge-region and a __cf_bm cookie scoped to
+    // supabase.co. None of that belongs in front of a stranger who was sent a
+    // link (§17), so an allowlist of nothing is the honest default.
+    const out = new Headers({
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+      "x-robots-tag": "noindex, nofollow",
+      "referrer-policy": "no-referrer",
+      // The page runs no script and posts its vote to this origin. Restored
+      // here because Supabase replaced the function's own copy of it.
+      "content-security-policy":
+        "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'",
+    });
     return new Response(response.body, { status: response.status, headers: out });
   },
 };
