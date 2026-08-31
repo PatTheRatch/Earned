@@ -19,3 +19,8 @@ app/*.xcodeproj
 # public by design, but the project URL is not, and a forked repo pointing at
 # someone else's Supabase is a bad default. See backend/README.md.
 app/Earned/Backend.plist
+
+# Private keys, never. The root key belongs outside this repository entirely
+# (docs/deployment.md §5.3) — this is the net under that, not the plan.
+*.pem
+*.key
