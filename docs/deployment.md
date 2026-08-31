@@ -339,14 +339,27 @@ owning a domain.
    earntherest.com" warnings on the DNS page clear themselves once the domain is
    attached.
 
-**Check:**
+**Check** — three requests, and the *differences* between them are the point:
 
 ```sh
+# 1. the site
 curl -s https://earntherest.com/ | grep -o '<title>.*</title>'
-curl -s "https://earntherest.com/a/not-a-real-token" | grep -o 'no longer available'
+
+# 2. a well-formed token that does not exist -> reaches Supabase, answers "invalid"
+TOK=$(python3 -c "import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip('='))")
+curl -s -o /dev/null -w 'well-formed -> %{http_code}\n' "https://earntherest.com/a/$TOK"
+
+# 3. a malformed token -> filtered at the edge, never reaches the database
+curl -s -o /dev/null -w 'malformed   -> %{http_code}\n' "https://earntherest.com/a/not-a-real-token"
 ```
 
-The first proves the site is served, the second proves the proxy reaches Supabase.
+The title, then **200**, then **404**.
+
+The 404 is not a failure: the worker pins the token shape, so a malformed one is served by
+the static site instead of being proxied. Testing with an obviously-fake string like
+`not-a-real-token` therefore proves nothing about the proxy — it has to be 43 base64url
+characters to get past the edge at all. Against the Supabase URL directly (§5.1) the same
+string returns 200, because there is no worker in front to filter it.
 
 ### 5.3 Rate limiting — do not skip this
 
