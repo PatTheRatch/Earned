@@ -102,24 +102,13 @@ struct GrantSync {
                                                  keySetVersion: trust.keySet?.version ?? 0))
                 resolved.insert(signed.document)
             } catch let failure as TrustFailure {
-                switch failure {
-                case .noTrustAnchor, .unknownKey, .keyNotInService:
-                    // Every one of these can become verifiable later: a key we
-                    // have not been told about yet, or one not yet promoted in
-                    // the set we hold. Held, not discarded (§11) — discarding
-                    // would leave a user locked out with no way back.
+                // Held or dropped, and EarnedKit decides which — it is a rule
+                // about the trust model, and it is switched exhaustively over
+                // there where there are tests for it.
+                if failure.isWorthRetryingAfterAKeyRefresh {
                     hold(signed, reason: String(describing: failure), now: now)
                     outcome.held += 1
-                case .revokedKey:
-                    // The server re-signs revoked grants with the new key
-                    // (§10.4), so this exact document is finished. Dropping it
-                    // is what makes room for the replacement.
-                    resolved.insert(signed.document)
-                    outcome.refused.append(String(describing: failure))
-                default:
-                    // A bad signature never becomes good, and a grant for
-                    // terms nobody agreed to never becomes right. Retrying
-                    // either forever would turn a refusal into a silence.
+                } else {
                     resolved.insert(signed.document)
                     outcome.refused.append(String(describing: failure))
                 }

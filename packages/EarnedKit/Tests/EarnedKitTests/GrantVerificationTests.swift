@@ -326,6 +326,60 @@ final class GrantVerificationTests: XCTestCase {
         XCTAssertGreaterThan(seen, 10, "the vectors should be full of timestamps")
     }
 
+    // MARK: - Held, or thrown away (§11)
+
+    func testAGrantHeldWhileTheKeySetIsStaleSucceedsAfterARefresh() throws {
+        // The §11 row this whole holding mechanism exists for. The phone is
+        // carrying key set v1, which does not yet know g1 may sign; the grant
+        // arrives anyway. Refusing it permanently would leave a locked-out
+        // user with nothing but the Solo route they were trying to avoid.
+        var trust = try trusting(GrantVectors.keySetV1)
+        var held = false
+        do {
+            _ = try trust.verifyGrant(document: Data(GrantVectors.grant.utf8),
+                                      signature: GrantVectors.grantSignature, kid: "g1",
+                                      expectedPolicyDigest: GrantVectors.policyDigest)
+            XCTFail("a key set that has not promoted g1 should not verify its signature")
+        } catch let failure as TrustFailure {
+            held = failure.isWorthRetryingAfterAKeyRefresh
+        }
+        XCTAssertTrue(held, "this grant must be kept, not discarded")
+
+        try trust.accept(keySetDocument: Data(GrantVectors.keySetV2.utf8),
+                         rootSignature: GrantVectors.keySetV2Signature)
+        let grant = try trust.verifyGrant(document: Data(GrantVectors.grant.utf8),
+                                          signature: GrantVectors.grantSignature, kid: "g1",
+                                          expectedPolicyDigest: GrantVectors.policyDigest)
+        XCTAssertEqual(grant.roster.count, 2, "and after the refresh it verifies")
+    }
+
+    func testWhatIsWorthKeepingAndWhatIsNot() {
+        // Listed rather than derived, because each answer has a different
+        // user-visible cost and none of them should be inherited by accident.
+        // A new case added to TrustFailure fails to compile against this list,
+        // which is the intent.
+        let keep: [TrustFailure] = [
+            .noTrustAnchor, .unknownKey("g9"), .keyNotInService("g1"),
+        ]
+        let drop: [TrustFailure] = [
+            // Revoked is the interesting one: the server re-signs under the
+            // new key (§10.4), so keeping this document would leave a dead
+            // entry forever while its replacement arrives beside it.
+            .revokedKey("g1"),
+            .signatureInvalid, .rootSignatureInvalid,
+            .keySetWentBackwards(offered: 1, held: 2), .malformedKeySet("x"),
+            .unsupportedAlgorithm("rsa"), .malformedGrant("x"),
+            .keyIdentifierMismatch(labelled: "g1", document: "g2"),
+            .notAGrant("denied"), .contractMismatch(expected: "a", granted: "b"),
+        ]
+        for failure in keep {
+            XCTAssertTrue(failure.isWorthRetryingAfterAKeyRefresh, "\(failure) must be held")
+        }
+        for failure in drop {
+            XCTAssertFalse(failure.isWorthRetryingAfterAKeyRefresh, "\(failure) must not be held")
+        }
+    }
+
     // MARK: - 4. Real crypto, where there is any
 
     #if canImport(CryptoKit)

@@ -78,6 +78,57 @@ public enum TrustFailure: Error, Equatable, Sendable {
     case notAGrant(String)
 }
 
+extension TrustFailure {
+    /// Whether a later key fetch could change this answer.
+    ///
+    /// This decides whether a grant is **held or thrown away** (§11), which is
+    /// the one judgement in the whole grant path with a user-visible cost in
+    /// both directions. Throw away something that would have verified after
+    /// the next key refresh and a locked-out user's only way back is the Solo
+    /// route they were trying to avoid. Hold something that can never verify —
+    /// a forged signature, a contract nobody agreed to — and a refusal becomes
+    /// a silence that retries forever and is never reported.
+    ///
+    /// It lives here rather than in the app because it is a rule about the
+    /// trust model, and because the app has no tests. Switched exhaustively on
+    /// purpose: a new failure mode should not silently inherit either answer.
+    public var isWorthRetryingAfterAKeyRefresh: Bool {
+        switch self {
+        case .noTrustAnchor:
+            // Only an app release changes this, but an app release is exactly
+            // what would change it, and the grant should still be there.
+            return true
+        case .unknownKey, .keyNotInService:
+            // A key we have not been told about yet, or one not promoted in
+            // the set we hold. Both are answered by a newer key set.
+            return true
+        case .revokedKey:
+            // The server re-signs grants under the new key after a revocation
+            // (§10.4), so *this* document is finished and its replacement is
+            // already coming. Keeping it would leave a permanent dead entry.
+            return false
+        case .rootSignatureInvalid, .signatureInvalid:
+            // A signature that does not verify never starts verifying.
+            return false
+        case .keySetWentBackwards, .malformedKeySet:
+            // About a key set, not about a grant.
+            return false
+        case .unsupportedAlgorithm:
+            // A key set could introduce a key we understand, but this grant
+            // was signed by one we never will be able to check.
+            return false
+        case .malformedGrant, .keyIdentifierMismatch, .notAGrant:
+            return false
+        case .contractMismatch:
+            // The terms this device holds could later be corrected by an
+            // envelope sync — but a grant against terms nobody here agreed to
+            // is exactly what a substituted grant looks like, and holding it
+            // in the hope the terms change to match is the wrong instinct.
+            return false
+        }
+    }
+}
+
 // MARK: - Keys
 
 public struct SigningKey: Equatable, Sendable {
