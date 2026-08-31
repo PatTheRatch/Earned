@@ -52,4 +52,7 @@ backend/tests/keyset_drill.sh
 echo "==> vote concurrency drill (five real sessions, one starting gun)"
 backend/tests/vote_concurrency.sh
 
+echo "==> grant drill (a real grant, signed outside Postgres, verified from the key set)"
+backend/tests/grant_drill.sh
+
 echo "==> all backend tests passed"

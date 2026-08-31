@@ -369,7 +369,66 @@ the static site instead of being proxied. Testing with an obviously-fake string 
 characters to get past the edge at all. Against the Supabase URL directly (§5.1) the same
 string returns 200, because there is no worker in front to filter it.
 
-### 5.3 Rate limiting — do not skip this
+### 5.3 Grant signing keys
+
+A resolved request is not permission until the server signs a statement about it. That
+needs two keys, and where they live is the point.
+
+**The root key never touches any server.** Generate it on a machine you control and keep
+the private half offline — a password manager, a USB stick in a drawer, anywhere that is
+not this project. Its public half will be compiled into the app; it signs key set
+documents, never grants.
+
+```sh
+openssl genpkey -algorithm ed25519 -out root.pem       # keep offline, back up
+openssl pkey -in root.pem -pubout -out root.pub.pem    # this goes into the app later
+```
+
+**A grant key, whose private half lives in the function's secrets** — not in Vault, and not
+in the database. Contact keys are in Vault because they protect data that is in the
+database anyway; this one protects *against* the database. It is the single secret whose
+loss lets someone mint permission a user never earned, so a total database compromise must
+not yield it.
+
+```sh
+openssl genpkey -algorithm ed25519 -out g1.pem
+supabase secrets set GRANT_KEY_G1="$(grep -v -- '-----' g1.pem | tr -d '\n')"
+
+# The public half goes into the schema, is published in a root-signed key set,
+# and only then is allowed to sign anything.
+PUB="$(openssl pkey -in g1.pem -pubout -outform DER | tail -c 32 | openssl base64 -A)"
+psql "$DB" -c "select public.introduce_grant_key('g1', '$PUB');"
+
+DOC="$(psql "$DB" -qtA -c 'select public.build_key_set_document()' | tr -d '\n')"
+printf '%s' "$DOC" > keyset.json
+SIG="$(openssl pkeyutl -sign -inkey root.pem -rawin -in keyset.json | openssl base64 -A)"
+psql "$DB" -v doc="$DOC" -v sig="$SIG" <<'SQL'
+select public.publish_key_set(:'doc', :'sig');
+SQL
+psql "$DB" -c "select public.promote_grant_key('g1');"
+```
+
+Then deploy the signer:
+
+```sh
+supabase functions deploy grants
+```
+
+**Check** — a key that is promoted and published is one the server will sign with:
+
+```sh
+psql "$DB" -c "select public.current_signing_kid();"
+```
+
+`g1`. An error here means the key was introduced but never published or never promoted,
+and the schema is right to refuse: a key nobody was told about must never sign (§10.3).
+
+> Back up `root.pem` before you go further. Losing it means no future key set can ever be
+> published, which means keys can never be rotated — and rotation is the only answer to a
+> compromised grant key. `g1.pem` itself can be discarded once the secret is set; it is
+> recoverable only in the sense that you can rotate to a new key.
+
+### 5.4 Rate limiting — do not skip this
 
 §16 requires per-IP limits on `/a/*`, and Supabase does not provide them. In Cloudflare:
 **Security** → **WAF** → **Rate limiting rules** → a rule matching `URI Path starts with
@@ -379,7 +438,7 @@ The Worker's strict token patterns mean a malformed guess never reaches Postgres
 well-formed one does. 256-bit tokens make guessing arithmetic rather than a threat model;
 the rate limit is what stops someone paying to find out.
 
-### 5.4 End to end, for real
+### 5.5 End to end, for real
 
 ```sh
 backend/tools/demo_request.sh
@@ -471,9 +530,9 @@ select cron.schedule('purge-override-receipts', '17 3 * * *',
 Not deployment problems — unbuilt steps, in
 [§22's](accountability-architecture.md) order:
 
-- **Grants (step 8).** A granted request currently ends at `state = 'granted'`. Nothing is
-  signed, and the app is not told. Until this lands, an approval changes the database and
-  not the phone.
+- **The app half of step 8.** Grants are signed and served, but nothing on a phone fetches
+  one, verifies its signature against the key set, or records it in the ledger. Until that
+  lands, an approval changes the database and not the phone.
 - **Close and moot propagation (step 9),** and with it the consent page at `/c/<token>`. A
   requester cannot cancel an open request, and completing the workout does not yet tell the
   partners they can stand down.

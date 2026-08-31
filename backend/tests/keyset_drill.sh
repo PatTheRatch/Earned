@@ -82,7 +82,8 @@ doc_field() { # doc_field <docfile> <python expr over doc>
   python3 -c "import json,sys; doc=json.load(open(sys.argv[1])); print($2)" "$1"
 }
 
-sql -c "truncate public.grant_signing_key, public.key_set" > /dev/null
+# server_grant references grant_signing_key (0011).
+sql -c "truncate public.server_grant, public.grant_signing_key, public.key_set" > /dev/null
 
 # MARK: - A root, a first key, a first key set
 

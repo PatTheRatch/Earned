@@ -5,9 +5,9 @@ set time zone 'UTC';
 begin;
 
 -- A previous run of keyset_drill.sh leaves its keys behind (it exercises
--- persistence on purpose). This transaction rolls back, so clearing the stage
--- here is invisible outside it.
-truncate public.grant_signing_key, public.key_set;
+-- persistence on purpose), and server_grant references them (0011). This
+-- transaction rolls back, so clearing the stage here is invisible outside it.
+truncate public.server_grant, public.grant_signing_key, public.key_set;
 
 -- The server treats signatures as opaque bytes — verification belongs to
 -- clients holding the root public key — so these tests exercise the state

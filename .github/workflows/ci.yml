@@ -53,7 +53,7 @@ jobs:
         run: backend/tests/run.sh
 
   partner-page:
-    name: Partner page and link router
+    name: Edge functions and link router
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,6 +64,8 @@ jobs:
         run: deno check supabase/functions/approval/index.ts
       - name: Test the renderer
         run: deno test supabase/functions/approval/
+      - name: Typecheck and test the grant signer
+        run: deno check supabase/functions/grants/index.ts && deno test supabase/functions/grants/
       - name: Typecheck the web worker
         run: deno check web/src/index.ts
       - name: Test the link router

@@ -7,11 +7,12 @@ The design and threat model is
 Every product decision in it is settled except account deletion (§21.2), which waits on
 privacy/legal review — nothing here should be built against a guessed answer to that one.
 
-## What exists (Milestones A–E)
+## What exists (Milestones A–F)
 
 Accounts, the Contract Envelope, partners with real consent, the grant-signing key
-infrastructure, override requests with their frozen snapshot and delivery, and voting with
-the partner page. No grants — that is step 8, and none of its code is here.
+infrastructure, override requests with their frozen snapshot and delivery, voting with the
+partner page, and signed grants. What is missing is the app half of step 8: nothing yet
+verifies a grant on a phone or records it in a ledger.
 
 | | |
 |---|---|
@@ -25,7 +26,9 @@ the partner page. No grants — that is step 8, and none of its code is here.
 | `migrations/0008` | Grant signing keys, the rotation state machine, and root-signed key set documents (§10) |
 | `migrations/0009` | `override_request` and its snapshot, recipients and audit log; `create_override_request`, `override_request_status`, expiry, and a vote endpoint that refuses (§§4.5, 6, 7, 13, 16) |
 | `migrations/0010` | `cast_override_vote` for real, `approval_page`, and the receipt purge (§§6.2, 8, 15, 17) |
+| `migrations/0011` | `server_grant`, the canonical grant document, and two-phase signing (§9) |
 | [`supabase/functions/approval/`](../supabase/functions/approval/) | The partner page: a server-rendered edge function over those two functions (§18). It lives beside `supabase/config.toml` because that is where the CLI looks |
+| [`supabase/functions/grants/`](../supabase/functions/grants/) | Signs grants with the Ed25519 key, because Postgres cannot (§9) |
 
 Migrations are appended, never rewritten — 0005–0007 alter what 0001–0004 created rather
 than editing it, because an applied migration and its file have to keep matching.
@@ -83,8 +86,9 @@ Two levels of key, and the database holds only public halves:
 
 - **Root** — offline. The private half never touches the server, Vault, or this repo; its
   public half will be compiled into the app. It signs key set *documents*, never grants.
-- **Grant keys** (`g1`, `g2`, …) — Ed25519 pairs whose private halves live in Supabase
-  Vault as `grant_key_<kid>`. The schema stores their public halves and lifecycle:
+- **Grant keys** (`g1`, `g2`, …) — Ed25519 pairs whose private halves live in the edge
+  function's own secrets as `GRANT_KEY_<KID>`, deliberately not in the database (see
+  step 8 below). The schema stores their public halves and lifecycle:
   `next → current → retired`, or `revoked` from anywhere, terminally.
 
 The lifecycle rules the tests hold it to: one `current` and one `next` at most; a key
@@ -98,8 +102,8 @@ root, and stored by `publish_key_set()` byte-for-byte — versions are strictly 
 and gap-free, which is the server's half of the rollback resistance clients enforce.
 `current_key_set()` serves the newest document verbatim (this is `GET /keys` in substance,
 and the one function `anon` may call — everything in it is public keys). The signing path
-for later milestones starts at `current_signing_kid()`, which names the Vault secret to
-sign with and raises rather than guessing when there is no safe answer.
+for later milestones starts at `current_signing_kid()`, which names the key to sign with
+and raises rather than guessing when there is no safe answer.
 
 The state machine is tested in `tests/70_key_rotation.sql`; the crypto path is
 [`tests/keyset_drill.sh`](tests/keyset_drill.sh), which runs the full §10.5 drill in CI
@@ -209,6 +213,47 @@ Two functions now want a schedule: `expire_override_requests()` and
 recomputed wherever they are read — so a daily `pg_cron` call keeps stored state tidy
 rather than keeping the system correct.
 
+### Grants (build order step 8, server half)
+
+A resolved request is not yet permission. It becomes permission when the server signs a
+statement about it that the app can verify against the key set from `0008` — and the app
+half of that, verification and the ledger event, is deliberately separate work.
+
+**Postgres cannot sign this.** pgcrypto has no Ed25519, so a grant exists in two phases:
+`0011` builds and freezes the exact bytes, and the `grants` edge function attaches a
+signature to them. A half-made grant is a row with no signature, and it is served to
+nobody. The document is stored and served verbatim, exactly as key sets are, so the app
+verifies the bytes it was handed and only then parses them.
+
+§9.1 draws the grant as a payload with a `signature` field inside it. A field inside the
+object it signs cannot be part of what was signed, so the signature travels alongside the
+document instead — and a test asserts the document never contains one.
+
+**The signing key is not in Vault**, which is a deliberate departure from §10.1. Contact
+keys live in Vault because they protect data that is in the database anyway. The grant
+signing key protects *against* the database: it is the one secret whose loss lets someone
+mint permission a user never earned, which is the single thing this design exists to
+prevent. Holding it in the platform's function secrets instead means a total database
+compromise — every table, every Vault row, the service role itself — still cannot sign a
+grant.
+
+```sh
+supabase secrets set GRANT_KEY_G1="$(grep -v -- '-----' g1.pem | tr -d '\n')"
+```
+
+`my_grants()` mints an unsigned document for any of the caller's resolved requests that
+lack one, then serves whatever is signed. Creating that row is not a privilege the caller
+gains: every field in it is server-derived, and the one thing that makes it usable is added
+by a role the account holder has no path to. Repeated polls re-serve the same row rather
+than minting a second decision (§9.4), and `store_override_grant` refuses to replace a
+signature that already exists — an app may already have verified and recorded the first.
+
+`tests/100_grants.sql` holds the schema to that. The crypto is
+[`tests/grant_drill.sh`](tests/grant_drill.sh): two real votes resolve a real request, the
+document is signed outside Postgres with a real key, and the result is verified against the
+public key taken from the *published key set* rather than from the local file — the round
+trip a phone actually performs. Changing one character stops it verifying.
+
 ## Seeing it work against a real project
 
 ```sh
@@ -277,14 +322,16 @@ without these, and `private.secret()` raises rather than falling back quietly in
 | `contact_key` | Symmetric key for contact ciphertext |
 | `consent_base_url` | Origin of the consent and approval pages, e.g. `https://earntherest.com` — both the invitation link (`/c/<token>`) and the approval link (`/a/<token>`) are built from it |
 
-A fourth kind arrives with key rotation rather than setup: `grant_key_<kid>`, the private
-half of each grant signing key, created when that key is introduced (see the runbook in
-`tests/keyset_drill.sh` — the real rotation follows the same steps, with the root key kept
-offline). The root private key is never a Vault secret; it never touches the server at all.
+**Grant signing keys are deliberately not here.** `GRANT_KEY_<KID>` is a *function* secret
+(`supabase secrets set`), not a Vault row, because Vault is in the database and this key
+has to survive the database being lost. The root private key is neither: it never touches
+any server. See step 8 above, and `docs/deployment.md` §5.3.
 
-**2. Sign in with Apple.** Authentication → Providers → Apple. Needs the Services ID, Team
-ID, Key ID and the `.p8` key from the Apple Developer portal. The same capability also has
-to be enabled on the App ID in Xcode's Signing & Capabilities, or device builds fail to sign.
+**2. Sign in with Apple.** Authentication → Providers → Apple: enable it and put the app's
+bundle id in **Client IDs**. That is all the native flow needs — the Services ID, Team ID,
+Key ID and `.p8` set is only for the web redirect flow, which this app never uses. The
+capability also has to be enabled on the App ID in the Apple Developer portal, or device
+builds fail to sign.
 
 **3. The app's own config.** `app/Earned/Backend.plist` — gitignored, so create it by hand on
 the machine that builds:
