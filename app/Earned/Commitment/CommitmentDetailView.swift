@@ -66,6 +66,16 @@ struct CommitmentDetailView: View {
 
     private var record: CommitmentRecord? { store.state.commitments[commitmentID] }
 
+    private func stateWord(_ record: CommitmentRecord) -> (String, Color)? {
+        switch record.resolution {
+        case .completed(let at):
+            return (at <= record.commitment.deadline ? "KEPT" : "KEPT LATE", Theme.ink)
+        case .overridden: return ("OVERRIDE", Theme.muted)
+        case .cancelled: return nil
+        case nil: return record.isOverdue(now: store.now) ? ("OVERDUE", Theme.ink) : nil
+        }
+    }
+
     var body: some View {
         Group {
             if let record {
@@ -87,11 +97,15 @@ struct CommitmentDetailView: View {
         let progress = store.state.progress(for: commitmentID)
 
         List {
-            if record.isOverdue(now: store.now) {
+            // The commitment's own declaration, when it has one: consequence
+            // in signal, resolution in ink, nothing while simply pending.
+            if let word = stateWord(record) {
                 Section {
-                    StateWord(word: "OVERDUE", size: 56)
+                    StateWord(word: word.0, size: 56)
+                        .foregroundStyle(word.1)
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 0))
+                        .accessibilityLabel("\(word.0), \(record.commitment.title)")
                 }
             }
             Section("Status") {

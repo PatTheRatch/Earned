@@ -10,14 +10,17 @@ struct NewCommitmentView: View {
     @Environment(\.dismiss) private var dismiss
 
     private enum Step: Int, CaseIterable {
-        case what, completion, when, escape, review
+        // Sharing is a visibility decision and escape is a contract mechanic,
+        // so they are separate questions (docs/design-language.md v2).
+        case what, completion, when, visibility, escape, review
 
         var question: String {
             switch self {
             case .what: return "What will you do?"
-            case .completion: return "What counts as completion?"
+            case .completion: return "What counts?"
             case .when: return "By when?"
-            case .escape: return "What are the override rules?"
+            case .visibility: return "Who sees this?"
+            case .escape: return "How hard is escape?"
             case .review: return "The deal"
             }
         }
@@ -95,6 +98,7 @@ struct NewCommitmentView: View {
     /// Sharing is chosen, never assumed (NORTHSTAR invariant 26): every
     /// commitment is born private, and this is the explicit choice otherwise.
     @State private var shareWithFriends = false
+    @State private var showingEscapeDetails = false
 
     var body: some View {
         NavigationStack {
@@ -141,38 +145,49 @@ struct NewCommitmentView: View {
             }
 
         case .completion:
-            VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 6) {
-                    SectionLabel(text: "What counts")
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 2) {
+                    SectionLabel(text: "Which workouts")
                     Picker("Counts", selection: $activity) {
                         ForEach(ActivityChoice.allCases) { Text($0.rawValue).tag($0) }
                     }
                     .pickerStyle(.menu)
                     .labelsHidden()
+                    .tint(Theme.ink)
                 }
 
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 0) {
                     SectionLabel(text: "How much")
-                    Picker("Requirement", selection: $kind) {
-                        ForEach(Kind.allCases) { Text($0.rawValue).tag($0) }
+                    ForEach(Kind.allCases) { choice in
+                        ChoiceRow(title: choice.rawValue,
+                                  selected: kind == choice) { kind = choice }
                     }
-                    .pickerStyle(.inline)
-                    .labelsHidden()
                 }
 
-                VStack(alignment: .leading, spacing: 6) {
-                    SectionLabel(text: "Who has to believe you")
-                    Picker("Verification", selection: $verification) {
-                        Text("My word counts").tag(WorkoutVerification.selfReported)
-                        Text("An app has to vouch").tag(WorkoutVerification.appVerified)
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 8) {
+                        SectionLabel(text: "Who has to believe you")
+                        InfoButton(title: "Verification",
+                                   message: "\u{201C}My word counts\u{201D} is the honor "
+                                   + "system: logging a workout yourself satisfies this "
+                                   + "commitment.\n\n\u{201C}An app has to vouch\u{201D} "
+                                   + "means only workouts another app recorded count — an "
+                                   + "Apple Watch session, the Fitness app, or Strava "
+                                   + "synced into Apple Health. Typing one into Health "
+                                   + "yourself doesn't.\n\nVerification is part of the "
+                                   + "contract: once this hardens it can get stricter, "
+                                   + "never weaker.")
                     }
-                    .pickerStyle(.segmented)
-                    Text(verification == .selfReported
-                         ? "Logging it yourself counts. For days you trust yourself."
-                         : "Only workouts recorded by another app count — Apple Watch, "
-                           + "the Fitness app, or Strava synced into Apple Health. "
-                           + "Typing one into Health yourself doesn't.")
-                        .font(.footnote).foregroundStyle(.secondary)
+                    ChoiceRow(title: "My word counts",
+                              subtitle: "For days you trust yourself.",
+                              selected: verification == .selfReported) {
+                        verification = .selfReported
+                    }
+                    ChoiceRow(title: "An app has to vouch",
+                              subtitle: "Only workouts another app recorded count.",
+                              selected: verification == .appVerified) {
+                        verification = .appVerified
+                    }
                 }
                 .onChange(of: verification) { _, chosen in
                     // Asking for Health access the moment it becomes relevant,
@@ -260,87 +275,108 @@ struct NewCommitmentView: View {
                 }
             }
 
+        case .visibility:
+            // A privacy choice, deliberately its own question: sharing is
+            // about who watches, escape is about the contract. The two never
+            // share a screen again.
+            VStack(alignment: .leading, spacing: 14) {
+                ChoiceRow(title: "Only you",
+                          subtitle: "The default. Nobody is told anything.",
+                          selected: !shareWithFriends) { shareWithFriends = false }
+                ChoiceRow(title: "Friends",
+                          subtitle: "The title, the deadline, and whether you kept it.",
+                          selected: shareWithFriends) { shareWithFriends = true }
+                Text("Changeable any time, in either direction — a privacy choice, not "
+                     + "a contract term. Never what gets restricted, never your workouts.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+
         case .escape:
             VStack(alignment: .leading, spacing: 18) {
                 rosterPicker
-                VStack(alignment: .leading, spacing: 6) {
-                    Stepper("Approvals required: \(approvals)",
-                            value: $approvals, in: 1...max(1, roster.count))
-                    Text(roster.isEmpty
-                         ? "No partners on this one, so the only way out will be the Solo "
-                           + "Override."
-                         : "How many of the \(roster.count) must agree before an override "
-                           + "succeeds.")
-                        .font(.footnote).foregroundStyle(.secondary)
+
+                VStack(alignment: .leading, spacing: 0) {
+                    ReceiptRow(label: "Ask",
+                               value: roster.isEmpty
+                                   ? "Nobody — the Solo route only"
+                                   : "\(approvals) of \(roster.count) must approve")
+                    ReceiptRow(label: "Solo",
+                               value: accountabilityMinutes == 0
+                                   ? "Available immediately"
+                                   : "Opens after \(Int(accountabilityMinutes)) min")
+                    HairRule()
                 }
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Wait before a solo override: \(Int(accountabilityMinutes)) min")
-                    Slider(value: $accountabilityMinutes, in: 0...120, step: 5)
-                    Text("The solo escape only opens after partners have had this long.")
-                        .font(.footnote).foregroundStyle(.secondary)
+
+                Button(showingEscapeDetails ? "HIDE DETAILS" : "CUSTOMIZE") {
+                    withAnimation { showingEscapeDetails.toggle() }
                 }
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Correction window: \(Format.duration(correctionHours * 3600))")
-                    Slider(value: $correctionHours, in: 0...6, step: 0.5)
-                    Text("Time to fix mistakes before this hardens. After that it can only get harder.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-                VStack(alignment: .leading, spacing: 6) {
-                    Toggle("Warn me 30 minutes before", isOn: $warnBefore)
-                    if warnBefore, store.warningDelivery == .denied {
-                        Text("Notifications are off, so this warning won't arrive. The deadline "
-                             + "still stands — turn them on in Settings.")
-                            .font(.footnote).foregroundStyle(Theme.signal)
+                .buttonStyle(UnderlineButtonStyle())
+
+                if showingEscapeDetails {
+                    VStack(alignment: .leading, spacing: 16) {
+                        if !roster.isEmpty {
+                            Stepper("Approvals required: \(approvals)",
+                                    value: $approvals, in: 1...max(1, roster.count))
+                        }
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Wait before a solo override: \(Int(accountabilityMinutes)) min")
+                            Slider(value: $accountabilityMinutes, in: 0...120, step: 5)
+                        }
+                        VStack(alignment: .leading, spacing: 6) {
+                            Toggle("Warn me 30 minutes before", isOn: $warnBefore)
+                            if warnBefore, store.warningDelivery == .denied {
+                                Text("Notifications are off, so this warning won't arrive. "
+                                     + "The deadline still stands.")
+                                    .font(.footnote).foregroundStyle(Theme.signal)
+                            }
+                        }
+                        Toggle("Eligible for Free Overrides", isOn: $rewardEligible)
                     }
-                }
-                VStack(alignment: .leading, spacing: 6) {
-                    Toggle("Eligible for Free Overrides", isOn: $rewardEligible)
-                    Text("Whether repeated on-time completions of this commitment count toward "
-                         + "earning a Free Override. Fixed once committed — not all commitments "
-                         + "need to be able to earn one.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-                if repeats == .once, social.profileState.profile != nil {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Toggle("Share with friends", isOn: $shareWithFriends)
-                        Text("Friends see the title, the deadline, and whether you kept it. "
-                             + "Never what gets restricted, never your workouts. Changeable "
-                             + "any time, in either direction — this is a privacy choice, "
-                             + "not a contract term.")
-                            .font(.footnote).foregroundStyle(.secondary)
-                    }
+                    .transition(.opacity)
                 }
             }
 
         case .review:
-            VStack(alignment: .leading, spacing: 14) {
-                ReviewLine(label: "Do", value: title.isEmpty ? "Any workout" : title)
-                ReviewLine(label: "Counts as done", value: Format.requirement(requirement))
-                ReviewLine(label: "By", value: repeats == .weekly
+            // The receipt. This screen should feel like signing something —
+            // every term of the contract, printed, and one act at the bottom.
+            VStack(alignment: .leading, spacing: 0) {
+                ThickRule()
+                ReceiptRow(label: "Do",
+                           value: (title.isEmpty ? "Any workout" : title).uppercased())
+                ReceiptRow(label: "Counts", value: Format.requirement(requirement))
+                ReceiptRow(label: "By", value: repeats == .weekly
                            ? "\(Format.weekdays(weekdays)) at \(timeLabel), \(Int(weeks)) weeks"
                            : Format.deadline(deadline, from: store.now))
-                ReviewLine(label: "Verified by", value: "Apple Health workout record")
-                ReviewLine(label: "Escape", value: "\(approvals) approvals, or solo after "
-                           + "\(Int(accountabilityMinutes)) min")
-                ReviewLine(label: "Free Overrides", value: rewardEligible ? "Eligible" : "Not eligible")
+                ReceiptRow(label: "Verified by",
+                           value: verification == .appVerified
+                               ? "An app has to vouch" : "Your word")
+                ReceiptRow(label: "Escape", value: roster.isEmpty
+                           ? "Solo only, after \(Int(accountabilityMinutes)) min"
+                           : "\(approvals) approvals · solo after \(Int(accountabilityMinutes)) min")
                 if repeats == .once, social.profileState.profile != nil {
-                    ReviewLine(label: "Visible to",
+                    ReceiptRow(label: "Visible to",
                                value: shareWithFriends ? "Friends" : "Only you")
                 }
-                ReviewLine(label: repeats == .weekly ? "Fully hardens" : "Hardens",
-                           value: Format.relative(hardensAt, from: store.now))
-                if repeats == .weekly {
-                    Text("Every occurrence in this plan — including the last week — hardens by "
-                         + "then. There's no editing week three once week one has started; "
-                         + "cancelling later only spares days that haven't opened yet.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                        .padding(.top, 4)
-                } else {
-                    Text("Until it hardens you can change anything. After that it can only get harder — "
-                         + "and missing the deadline doesn't clear it.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                        .padding(.top, 4)
+                ReceiptRow(label: repeats == .weekly ? "Fully hardens" : "Hardens",
+                           value: Format.relative(hardensAt, from: store.now),
+                           valueColor: Theme.signal)
+                ThickRule()
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Correction window: \(Format.duration(correctionHours * 3600))")
+                        .font(.footnote).foregroundStyle(Theme.muted)
+                    Slider(value: $correctionHours, in: 0...6, step: 0.5)
                 }
+                .padding(.top, 14)
+
+                Text(repeats == .weekly
+                     ? "Every occurrence in this plan — including the last week — hardens "
+                       + "by then. There's no editing week three once week one has started."
+                     : "After this hardens, it can only get harder — and missing the "
+                       + "deadline doesn't clear it.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 10)
             }
         }
     }
@@ -350,7 +386,7 @@ struct NewCommitmentView: View {
     private var controls: some View {
         HStack(spacing: 12) {
             if step != .what {
-                Button("Back") { withAnimation { step = Step(rawValue: step.rawValue - 1) ?? .what } }
+                Button("Back") { withAnimation { step = neighbour(from: step, direction: -1) } }
                     .font(.headline)
                     .padding(.vertical, 16)
                     .padding(.horizontal, 20)
@@ -360,13 +396,29 @@ struct NewCommitmentView: View {
                     .buttonStyle(PosterButtonStyle())
             } else {
                 Button("Next") {
-                    withAnimation { step = Step(rawValue: step.rawValue + 1) ?? .review }
+                    withAnimation { step = neighbour(from: step, direction: 1) }
                 }
                 .buttonStyle(PosterButtonStyle())
                 .disabled(!canAdvance)
                 .opacity(canAdvance ? 1 : 0.4)
             }
         }
+    }
+
+    /// The next or previous question, skipping the visibility step where it
+    /// has no answerers: plans (occurrences share individually, later) and
+    /// builds with no profile to share from.
+    private func neighbour(from step: Step, direction: Int) -> Step {
+        var raw = step.rawValue + direction
+        while let candidate = Step(rawValue: raw) {
+            if candidate == .visibility
+                && (repeats == .weekly || social.profileState.profile == nil) {
+                raw += direction
+                continue
+            }
+            return candidate
+        }
+        return direction > 0 ? .review : .what
     }
 
     private var canAdvance: Bool {
@@ -563,21 +615,6 @@ struct NewCommitmentView: View {
     }
 }
 
-struct ReviewLine: View {
-    let label: String
-    let value: String
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: 110, alignment: .leading)
-            Text(value).font(.subheadline)
-            Spacer()
-        }
-    }
-}
 
 
 /// Mon–Sun toggles, in Calendar weekday numbering (1 = Sunday).
