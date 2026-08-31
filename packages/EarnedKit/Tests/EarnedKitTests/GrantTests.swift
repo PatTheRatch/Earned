@@ -151,7 +151,8 @@ final class GrantTests: XCTestCase {
         let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
         let document = try decoder.decode(LedgerDocument.self,
                                           from: try encoder.encode(ledger))
-        XCTAssertEqual(document.version, 3, "a ledger holding a grant is v3")
+        XCTAssertEqual(document.version, Ledger.currentSchemaVersion,
+                       "a saved ledger is stamped with the current version")
         let reloaded = try Ledger(replaying: document.entries)
         XCTAssertEqual(reloaded.state.overrideRequests[requestID]?.roster, [mom, dave])
     }

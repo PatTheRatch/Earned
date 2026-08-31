@@ -26,6 +26,12 @@ targets:
       properties:
         CFBundleDisplayName: Earned
         UILaunchScreen: {}
+        # Shown on the Health permission sheet. Written to say exactly what is
+        # read and why, because that sheet is the entire consent conversation.
+        NSHealthShareUsageDescription: >-
+          Earned reads finished workouts so a run recorded by your watch or a
+          workout app can complete your commitments. Nothing else is read, and
+          nothing is written.
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
     # Screen Time. Family Controls (Development) is self-serve once enrolled in

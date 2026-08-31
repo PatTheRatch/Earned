@@ -117,11 +117,21 @@ public enum CompletionMetric: Codable, Equatable, Sendable {
 public struct Requirement: Codable, Equatable, Sendable {
     public var activity: ActivityFilter
     public var metric: CompletionMetric
+    /// How much evidence a workout needs before it counts (NORTHSTAR §15).
+    /// Lives here rather than on the commitment because it is a third
+    /// dimension of what "done" means, alongside which workouts and how much
+    /// of them — and because this struct already carries the harder-only
+    /// lattice that §15 requires of it.
+    public var verification: WorkoutVerification
 
-    public init(activity: ActivityFilter = .any, metric: CompletionMetric = .anyQualifyingWorkout) {
+    public init(activity: ActivityFilter = .any,
+                metric: CompletionMetric = .anyQualifyingWorkout,
+                verification: WorkoutVerification = .selfReported) {
         self.activity = activity
         self.metric = metric
+        self.verification = verification
     }
+
 
     // Convenience constructors for the shapes NORTHSTAR §13 names.
     public static let anyWorkout = Requirement()
@@ -143,7 +153,9 @@ public struct Requirement: Codable, Equatable, Sendable {
     /// Harder in *every* dimension. A change that tightens one dimension while
     /// loosening another is not "harder" and is rejected after hardening.
     public func isAtLeastAsHard(as other: Requirement) -> Bool {
-        activity.isAtLeastAsHard(as: other.activity) && metric.isAtLeastAsHard(as: other.metric)
+        activity.isAtLeastAsHard(as: other.activity)
+            && metric.isAtLeastAsHard(as: other.metric)
+            && verification.isAtLeastAsStrict(as: other.verification)
     }
 
     public var displayName: String {
@@ -162,21 +174,31 @@ public struct Requirement: Codable, Equatable, Sendable {
 // MARK: - Backward-compatible decoding
 
 extension Requirement {
-    private enum CodingKeys: String, CodingKey { case activity, metric }
+    // `verification` must appear here or the synthesized encoder silently
+    // drops it: a custom CodingKeys is the whole story of what gets written,
+    // and a key it omits is not "defaulted", it is gone.
+    private enum CodingKeys: String, CodingKey { case activity, metric, verification }
 
     /// Ledger v1 stored `Requirement` as a bare enum — `anyWorkout`,
     /// `totalDuration`, `totalDistance` — with no activity dimension. Those
     /// decode as the same metric with an unrestricted activity filter, which is
     /// exactly what they meant at the time.
+    ///
+    /// Anything written before verification tiers existed (v1 and v3 alike)
+    /// decodes `.selfReported`, because everything counted when it was
+    /// written — the rule that was in force, not a guess.
     public init(from decoder: Decoder) throws {
         if let container = try? decoder.container(keyedBy: CodingKeys.self),
            container.contains(.activity), container.contains(.metric) {
             activity = try container.decode(ActivityFilter.self, forKey: .activity)
             metric = try container.decode(CompletionMetric.self, forKey: .metric)
+            verification = try container.decodeIfPresent(WorkoutVerification.self,
+                                                         forKey: .verification) ?? .selfReported
             return
         }
         activity = .any
         metric = try LegacyRequirement(from: decoder).metric
+        verification = .selfReported
     }
 }
 

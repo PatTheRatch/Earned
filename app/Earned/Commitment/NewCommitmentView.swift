@@ -4,6 +4,7 @@ import EarnedKit
 /// Deliberate without being bureaucratic: one decision per screen (NORTHSTAR §9).
 struct NewCommitmentView: View {
     @EnvironmentObject private var store: EarnedStore
+    @EnvironmentObject private var health: HealthImporter
     @EnvironmentObject private var account: AccountStore
     @Environment(\.dismiss) private var dismiss
 
@@ -70,6 +71,7 @@ struct NewCommitmentView: View {
     @State private var step: Step = .what
     @State private var title = ""
     @State private var kind: Kind = .any
+    @State private var verification: WorkoutVerification = .selfReported
     @State private var activity: ActivityChoice = .any
     @State private var repeats: Repeat = .once
     @State private var weekdays: Set<Int> = []
@@ -150,6 +152,28 @@ struct NewCommitmentView: View {
                     }
                     .pickerStyle(.inline)
                     .labelsHidden()
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    SectionLabel(text: "Who has to believe you")
+                    Picker("Verification", selection: $verification) {
+                        Text("My word counts").tag(WorkoutVerification.selfReported)
+                        Text("An app has to vouch").tag(WorkoutVerification.appVerified)
+                    }
+                    .pickerStyle(.segmented)
+                    Text(verification == .selfReported
+                         ? "Logging it yourself counts. For days you trust yourself."
+                         : "Only workouts recorded by another app count — Apple Watch, "
+                           + "the Fitness app, or Strava synced into Apple Health. "
+                           + "Typing one into Health yourself doesn't.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                .onChange(of: verification) { _, chosen in
+                    // Asking for Health access the moment it becomes relevant,
+                    // not at launch: the permission dialog should arrive while
+                    // the user is looking at the sentence that explains it.
+                    guard chosen == .appVerified else { return }
+                    Task { await health.requestAccess() }
                 }
 
                 switch kind {
@@ -337,9 +361,12 @@ struct NewCommitmentView: View {
 
     private var requirement: Requirement {
         switch kind {
-        case .any: return Requirement(activity: activity.filter, metric: .anyQualifyingWorkout)
-        case .duration: return Requirement(activity: activity.filter, metric: .totalDuration(minutes * 60))
-        case .distance: return Requirement(activity: activity.filter, metric: .totalDistance(kilometers * 1000))
+        case .any: return Requirement(activity: activity.filter, metric: .anyQualifyingWorkout,
+                                verification: verification)
+        case .duration: return Requirement(activity: activity.filter, metric: .totalDuration(minutes * 60),
+                                verification: verification)
+        case .distance: return Requirement(activity: activity.filter, metric: .totalDistance(kilometers * 1000),
+                                verification: verification)
         }
     }
 

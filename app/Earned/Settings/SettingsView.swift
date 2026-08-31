@@ -368,12 +368,17 @@ private struct RestrictionEditor: View {
     }
 }
 
-/// Manual workout entry, standing in for HealthKit until step 4.
+/// Manual workout entry — the honor system's front door, now that HealthKit
+/// imports the vouched-for kind on its own.
 ///
-/// Stays open across entries — testing usually means backfilling several
-/// sessions at once (a missed week, say), not one workout per visit to this
-/// screen. Each record resets the inputs and adds to a running list rather
-/// than dismissing.
+/// Everything logged here is `.selfReported` evidence by definition: it moves
+/// honor-system commitments fully and app-verified ones not at all (NORTHSTAR
+/// §15). The form says so rather than letting someone discover it at the
+/// deadline.
+///
+/// Stays open across entries — backfilling usually means several sessions at
+/// once (a missed week, say), not one workout per visit to this screen. Each
+/// record resets the inputs and adds to a running list rather than dismissing.
 private struct LogWorkoutView: View {
     @EnvironmentObject private var store: EarnedStore
     @Environment(\.dismiss) private var dismiss
@@ -387,6 +392,12 @@ private struct LogWorkoutView: View {
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    Text("Logged by hand, so it counts as your word. Commitments set "
+                         + "to \u{201C}an app has to vouch\u{201D} only move when a workout "
+                         + "arrives through Apple Health.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
                 Section("Activity") {
                     Picker("Activity", selection: $activity) {
                         ForEach(ActivityType.allCases, id: \.self) { Text($0.displayName).tag($0) }

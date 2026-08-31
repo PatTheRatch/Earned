@@ -13,5 +13,11 @@
 	<array>
 		<string>Default</string>
 	</array>
+	<!-- HealthKit, read-only in practice: the importer asks for workouts and
+	     nothing else, and never writes. Same capability caveat as the others —
+	     the App ID needs HealthKit enabled under Signing & Capabilities or a
+	     device build fails to sign. -->
+	<key>com.apple.developer.healthkit</key>
+	<true/>
 </dict>
 </plist>

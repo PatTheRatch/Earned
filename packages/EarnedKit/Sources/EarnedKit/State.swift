@@ -190,6 +190,14 @@ public struct EarnedState: Codable, Equatable, Sendable {
             }
 
         case .workoutRecorded(let workout):
+            // The backstop for automated ingestion: HealthKit re-imports use
+            // the HK workout's own UUID precisely so a second sighting of the
+            // same workout is a duplicate id here rather than double-counted
+            // progress. The importer checks first; this is what makes the
+            // check load-bearing instead of hopeful.
+            guard !workouts.contains(where: { $0.id == workout.id }) else {
+                throw EarnedError.invalidWorkout("This workout is already recorded.")
+            }
             guard workout.end > workout.start else {
                 throw EarnedError.invalidWorkout("Workout must end after it starts.")
             }

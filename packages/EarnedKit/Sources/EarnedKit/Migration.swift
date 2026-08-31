@@ -25,11 +25,15 @@ public enum LedgerMigration {
         case Ledger.currentSchemaVersion:
             return document
         case 1:
-            return LedgerDocument(version: Ledger.currentSchemaVersion,
-                                  entries: migrateV2ToV3(migrateV1ToV2(document.entries)))
+            return LedgerDocument(
+                version: Ledger.currentSchemaVersion,
+                entries: migrateV3ToV4(migrateV2ToV3(migrateV1ToV2(document.entries))))
         case 2:
             return LedgerDocument(version: Ledger.currentSchemaVersion,
-                                  entries: migrateV2ToV3(document.entries))
+                                  entries: migrateV3ToV4(migrateV2ToV3(document.entries)))
+        case 3:
+            return LedgerDocument(version: Ledger.currentSchemaVersion,
+                                  entries: migrateV3ToV4(document.entries))
         case let version where version > Ledger.currentSchemaVersion:
             throw MigrationError.unknownVersion(version)
         default:
@@ -50,6 +54,21 @@ public enum LedgerMigration {
     /// older build refuses a ledger containing events it cannot replay,
     /// rather than dropping them and quietly losing an override.
     private static func migrateV2ToV3(_ entries: [LedgerEntry]) -> [LedgerEntry] { entries }
+
+    /// v3 → v4: nothing to rewrite, deliberately.
+    ///
+    /// v4 adds workout evidence and requirement verification tiers (NORTHSTAR
+    /// §15). Tolerant decoding already reads old shapes truthfully — a v3
+    /// workout was a manual entry, so it decodes `.selfReported`, and a v3
+    /// requirement decodes `.selfReported` because everything counted when it
+    /// was written. Stamping those into the entries here would add nothing the
+    /// decoder does not already say.
+    ///
+    /// The bump earns its keep in the other direction: a v3 build handed a v4
+    /// ledger refuses it whole, rather than silently ignoring the `evidence`
+    /// keys it has never heard of — which would let a manual entry satisfy a
+    /// commitment whose whole point was that it must not.
+    private static func migrateV3ToV4(_ entries: [LedgerEntry]) -> [LedgerEntry] { entries }
 
     /// v1 → v2.
     ///

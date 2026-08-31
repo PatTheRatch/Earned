@@ -552,7 +552,8 @@ final class GoldenLedgerTests: XCTestCase {
         let reencoded = try Self.encoder.encode(decoded)
         let document = try Self.decoder.decode(LedgerDocument.self, from: reencoded)
 
-        XCTAssertEqual(document.version, 3, "saving an old ledger stamps the current version")
+        XCTAssertEqual(document.version, Ledger.currentSchemaVersion,
+                       "saving an old ledger stamps the current version")
         XCTAssertEqual(document.entries.count, 4, "and invents no events on the way")
         XCTAssertEqual(document.entries.map(\.id), decoded.entries.map(\.id))
 

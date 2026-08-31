@@ -4,6 +4,7 @@ import SwiftUI
 struct EarnedApp: App {
     @StateObject private var store = EarnedStore()
     @StateObject private var account = AccountStore()
+    @StateObject private var health = HealthImporter()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -11,6 +12,7 @@ struct EarnedApp: App {
             RootView()
                 .environmentObject(store)
                 .environmentObject(account)
+                .environmentObject(health)
         }
         .onChange(of: scenePhase) { _, phase in
             // Notification permission can be revoked in iOS Settings while
@@ -18,6 +20,11 @@ struct EarnedApp: App {
             // foreground rather than trusting what we saw at launch.
             guard phase == .active else { return }
             Task { await store.refreshWarnings() }
+            // Health first, before anything network: a run finished ten
+            // minutes ago should resolve its Gate here and now, not after a
+            // round trip — and a Gate resolved locally is one less override
+            // anybody needs to ask for.
+            Task { await health.importWorkouts(into: store) }
             // Anything created offline is still owed an envelope. Registering
             // late costs the accountability route for that commitment (S13),
             // so the retry happens at the first opportunity, not the next

@@ -21,7 +21,7 @@ trusted. Re-verify against the code when it drifts.
 | Per-Gate restrictions, eligibility windows, recurring plans | **Real** | Added in the correction pass |
 | All six screens, poster identity, persistence | **Real** | Ledger saved as versioned JSON, replayed and re-validated on launch |
 | Deadline warnings | **Real** | Local notifications; no entitlement needed. Informational only — no snooze |
-| Workout verification | *Stub* | Logged by hand in Settings; HealthKit is step 4 |
+| Workout verification | **Real** | HealthKit import with provenance; per-commitment tiers (NORTHSTAR §15) — your word, or an app has to vouch |
 | Restriction tokens | **Real** | Apple's picker; opaque tokens Earned itself cannot read |
 | Enforcement — apps actually blocked | **Real** | `ManagedSettingsStore` shields the union of closed Gates |
 | Enforcement while the app is closed | **Missing** | A Gate closing with Earned not running waits for next launch; needs `DeviceActivityMonitor` |
@@ -425,7 +425,7 @@ Against the north star's MVP list (§35):
 | User-selected restricted apps + shielding | Done (app-driven; background transitions pending) |
 | Guided onboarding, Today, lock explanation, history | Done |
 | Per-Gate warnings before a deadline (§20) | Done |
-| Apple Health workout verification | Not started (step 4) |
+| Apple Health workout verification | Done — with per-commitment verification tiers (§15) |
 
 **The Developer Program enrollment landed, and enforcement went in with it.** Earned now
 takes apps away rather than describing what it would take away. What remains:
@@ -438,8 +438,14 @@ takes apps away rather than describing what it would take away. What remains:
    The `NICE TRY.` surface has been reserved in `docs/design-language.md` since the identity
    pass for exactly this moment — the one place the loud voice is earned, because the user
    just reached for a restricted app.
-3. **HealthKit verification.** Removes the last stub in the daily loop. `ActivityType`
-   already exists for `HKWorkoutActivityType` to map onto, and the paid account now covers it.
+3. ~~**HealthKit verification.**~~ Done. `Health/HealthImporter.swift` reads finished
+   workouts (one type, read-only, only while something unresolved could be moved by them),
+   keeps HealthKit's own workout UUID so re-imports are duplicates rather than
+   double-counts, and records *who vouched* — iOS's user-entered flag and the writing
+   app's identity decide whether a workout is the user's word or an app's. On top of it,
+   NORTHSTAR §15's verification tiers: each commitment chooses whether your word counts
+   or only vouched-for workouts do, frozen at hardening, tightenable after, never
+   loosenable — the same lattice as every other term of the deal.
 
 The backend (accountability partners) is still fully buildable, but it unblocks the rung
 nobody can use alone anyway.
