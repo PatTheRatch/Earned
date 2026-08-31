@@ -27,6 +27,7 @@ verifies a grant on a phone or records it in a ledger.
 | `migrations/0009` | `override_request` and its snapshot, recipients and audit log; `create_override_request`, `override_request_status`, expiry, and a vote endpoint that refuses (§§4.5, 6, 7, 13, 16) |
 | `migrations/0010` | `cast_override_vote` for real, `approval_page`, and the receipt purge (§§6.2, 8, 15, 17) |
 | `migrations/0011` | `server_grant`, the canonical grant document, and two-phase signing (§9) |
+| `migrations/0012` | `current_signing_kid()` refuses a key the *published* key set does not show as current (§10.3) |
 | [`supabase/functions/approval/`](../supabase/functions/approval/) | The partner page: a server-rendered edge function over those two functions (§18). It lives beside `supabase/config.toml` because that is where the CLI looks |
 | [`supabase/functions/grants/`](../supabase/functions/grants/) | Signs grants with the Ed25519 key, because Postgres cannot (§9) |
 
@@ -102,8 +103,20 @@ root, and stored by `publish_key_set()` byte-for-byte — versions are strictly 
 and gap-free, which is the server's half of the rollback resistance clients enforce.
 `current_key_set()` serves the newest document verbatim (this is `GET /keys` in substance,
 and the one function `anon` may call — everything in it is public keys). The signing path
-for later milestones starts at `current_signing_kid()`, which names the key to sign with
-and raises rather than guessing when there is no safe answer.
+starts at `current_signing_kid()`, which names the key to sign with and raises rather than
+guessing when there is no safe answer.
+
+**Promotion is not publication, and clients only ever see publication.** A key must appear
+in a published set before it may be promoted, so the set that first carries it necessarily
+calls it `next` — and it stays that way until a human with the offline root key publishes
+again. Nothing noticed for a while, and nothing could, because publishing needs a key that
+deliberately does not exist on any server. A client applying §10.3 — refuse a signature
+from a key nobody was told could sign — would therefore have rejected every grant this
+system produced, with every component behaving as designed and nothing to see but a locked
+phone. A client that instead accepted `next` keys would have given up the only thing
+publication buys. Neither is fixable on the phone, so `0012` fixes it here: signing is
+refused, loudly, in the function log, while the affected users still have the Solo route.
+Introduce, publish, promote, **publish again** — every time, including rotations.
 
 The state machine is tested in `tests/70_key_rotation.sql`; the crypto path is
 [`tests/keyset_drill.sh`](tests/keyset_drill.sh), which runs the full §10.5 drill in CI
@@ -254,6 +267,13 @@ document is signed outside Postgres with a real key, and the result is verified 
 public key taken from the *published key set* rather than from the local file — the round
 trip a phone actually performs. Changing one character stops it verifying.
 
+[`tools/grant_vectors.sh`](tools/grant_vectors.sh) runs the same path once more and freezes
+the result into `GrantVectors.swift`: real keys, real signatures, the whole lifecycle. On
+macOS CI EarnedKit verifies those bytes with CryptoKit, which is the only place Postgres,
+OpenSSL and Swift are ever checked against one another. Regenerate deliberately and never
+to make a red test go green — a vector that stops verifying means the wire format moved,
+and that is a decision rather than a chore.
+
 ## Seeing it work against a real project
 
 ```sh
@@ -278,6 +298,12 @@ CI runs the suite twice: once against a bare Postgres and once with
 `EARNED_LAYOUT=supabase`, which lays pgcrypto out in an `extensions` schema the way the
 real project does. A pinned `search_path` that misses `extensions` passes on the first and
 fails on the second — every function here had exactly that bug once, so both layouts gate.
+
+The runner says how many test files it ran, and fails if that is not all of them. The
+pattern used to be `[0-9][0-9]_*.sql`, which quietly stopped matching the moment a file
+reached three digits: `100_grants.sql` was skipped by every local run and every CI job,
+green, for as long as it existed. A suite that can shrink without saying so is worse than
+a smaller one.
 
 `00_bootstrap.sql` stands in for what Supabase provides in production — the `anon`,
 `authenticated` and `service_role` roles, `auth.uid()`, and the contact-crypto secrets. It reproduces Supabase's own
