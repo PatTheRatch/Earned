@@ -365,6 +365,8 @@ final class AccountStore: ObservableObject {
             }
             return (((progress.achieved / 100).rounded() / 10),
                     ((progress.required / 100).rounded() / 10), "km")
+        case .kilocalories:
+            return (progress.achieved.rounded(), progress.required.rounded(), "cal")
         }
     }
 

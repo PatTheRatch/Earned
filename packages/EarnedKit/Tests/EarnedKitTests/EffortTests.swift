@@ -112,7 +112,9 @@ final class EffortTests: XCTestCase {
             at: d(22, 9)))
 
         let other = UUID()
-        var byTime = ledger(requiring: .totalDuration(1800), id: other)
+        // `self.`, because the local `ledger` a few lines up shadows the
+        // helper by this point in the scope.
+        var byTime = self.ledger(requiring: .totalDuration(1800), id: other)
         XCTAssertThrowsError(try byTime.append(
             .commitmentEdited(id: other, edit: CommitmentEdit(
                 requirement: Requirement(activity: .only(.running),

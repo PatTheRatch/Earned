@@ -112,6 +112,8 @@ struct LockScreenView: View {
             return "\(Int(progress.achieved / 60))/\(Int(progress.required / 60)) MIN"
         case .meters:
             return String(format: "%.1f/%.1f KM", progress.achieved / 1000, progress.required / 1000)
+        case .kilocalories:
+            return "\(Int(progress.achieved))/\(Int(progress.required)) CAL"
         }
     }
 }
