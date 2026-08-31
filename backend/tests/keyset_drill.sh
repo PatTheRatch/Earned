@@ -112,6 +112,7 @@ pass "a tampered document is rejected by the same check"
 # MARK: - The signing path
 
 sql -c "select public.promote_grant_key('g1')" > /dev/null
+publish v1b.json   # promotion is not in force until it is published (0012)
 kid="$(sql -c "select public.current_signing_kid()")"
 [ "$kid" = "g1" ] || fail "current_signing_kid returned '$kid', wanted g1"
 
@@ -132,6 +133,7 @@ echo "select public.introduce_grant_key('g2', :'pub')" \
   | sql -v pub="$g2_pub" > /dev/null
 publish v2.json
 sql -c "select public.promote_grant_key('g2')" > /dev/null
+publish v2b.json
 
 kid="$(sql -c "select public.current_signing_kid()")"
 [ "$kid" = "g2" ] || fail "after rotation current_signing_kid is '$kid', wanted g2"

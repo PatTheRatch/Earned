@@ -54,6 +54,13 @@ keyset_sig="$(openssl pkeyutl -sign -inkey "$workdir/root.pem" -rawin \
 echo "select public.publish_key_set(:'doc', :'sig')" \
   | sql -v doc="$(cat "$workdir/keyset.json")" -v sig="$keyset_sig" > /dev/null
 sql -c "select public.promote_grant_key('g1')" > /dev/null
+# Published a second time: the first document was taken before promotion and
+# still calls g1 `next`, and signing against that is what 0012 refuses.
+sql -c "select public.build_key_set_document()" | tr -d '\n' > "$workdir/keyset.json"
+keyset_sig="$(openssl pkeyutl -sign -inkey "$workdir/root.pem" -rawin \
+                -in "$workdir/keyset.json" | openssl base64 -A)"
+echo "select public.publish_key_set(:'doc', :'sig')" \
+  | sql -v doc="$(cat "$workdir/keyset.json")" -v sig="$keyset_sig" > /dev/null
 
 # MARK: - A request, resolved by two real votes
 

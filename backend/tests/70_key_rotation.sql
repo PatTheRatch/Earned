@@ -76,8 +76,16 @@ select test_raises(
 -- MARK: promotion
 
 select public.promote_grant_key('g1');
+-- Promotion alone is not enough, and this is the check that says so. The
+-- published set still calls g1 `next`, which is all any app has been told, so
+-- signing with it would produce grants every correct client refuses (0012).
+select test_raises(
+  $$select public.current_signing_kid()$$,
+  'a promoted key whose promotion was never published still cannot sign');
+
+select public.publish_key_set(public.build_key_set_document(), test_b64(64));
 select test_assert(public.current_signing_kid() = 'g1',
-                   'after publication and promotion, g1 signs');
+                   'after publication, promotion and publication again, g1 signs');
 
 -- MARK: rotation
 
@@ -91,6 +99,7 @@ select test_raises(
 
 select public.publish_key_set(public.build_key_set_document(), test_b64(64));
 select public.promote_grant_key('g2');
+select public.publish_key_set(public.build_key_set_document(), test_b64(64));
 
 select test_assert(public.current_signing_kid() = 'g2', 'g2 signs after promotion');
 select test_assert(
@@ -152,7 +161,7 @@ select test_raises($$select count(*) from public.grant_signing_key$$,
                    'a signed-in account cannot read key lifecycle state');
 select test_raises($$select count(*) from public.key_set$$,
                    'a signed-in account cannot read the key set table directly');
-select test_assert((public.current_key_set() ->> 'version')::int = 4,
+select test_assert((public.current_key_set() ->> 'version')::int = 6,
                    'but the published key set itself is served to it');
 reset role;
 
@@ -162,7 +171,7 @@ select test_raises($$select count(*) from public.grant_signing_key$$,
                    'anon cannot read key lifecycle state');
 select test_raises($$select count(*) from public.key_set$$,
                    'anon cannot read the key set table directly');
-select test_assert((public.current_key_set() ->> 'version')::int = 4,
+select test_assert((public.current_key_set() ->> 'version')::int = 6,
                    'the published key set is public — anon may fetch it');
 reset role;
 

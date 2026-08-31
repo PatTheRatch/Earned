@@ -406,7 +406,23 @@ psql "$DB" -v doc="$DOC" -v sig="$SIG" <<'SQL'
 select public.publish_key_set(:'doc', :'sig');
 SQL
 psql "$DB" -c "select public.promote_grant_key('g1');"
+
+# And publish again. The document above was built before the promotion, so it
+# still describes g1 as `next` — and `next` is all any app would ever be told.
+# Signing against that produces grants every correct client refuses, so the
+# server refuses to do it. This second publication is what puts g1 in service.
+DOC="$(psql "$DB" -qtA -c 'select public.build_key_set_document()' | tr -d '\n')"
+printf '%s' "$DOC" > keyset.json
+SIG="$(openssl pkeyutl -sign -inkey root.pem -rawin -in keyset.json | openssl base64 -A)"
+psql "$DB" -v doc="$DOC" -v sig="$SIG" <<'SQL'
+select public.publish_key_set(:'doc', :'sig');
+SQL
 ```
+
+The same two-step applies to every future rotation: introduce, publish, promote, **publish
+again**. Skipping the last one is the one mistake here that produces no error until a
+locked-out user's grant fails to verify on their phone, which is why the server now checks
+it instead of trusting the runbook.
 
 Then deploy the signer:
 
@@ -420,8 +436,17 @@ supabase functions deploy grants
 psql "$DB" -c "select public.current_signing_kid();"
 ```
 
-`g1`. An error here means the key was introduced but never published or never promoted,
-and the schema is right to refuse: a key nobody was told about must never sign (§10.3).
+`g1`. An error here names which step is missing — never published, never promoted, or
+promoted without republishing — and the schema is right to refuse every one of them: a key
+nobody was told could sign must never sign (§10.3).
+
+Confirm the served key set agrees, since that document is the only thing an app ever sees:
+
+```sh
+psql "$DB" -qtA -c "select public.current_key_set() ->> 'document'" | python3 -m json.tool
+```
+
+`g1` must appear with `"state": "current"`.
 
 > Back up `root.pem` before you go further. Losing it means no future key set can ever be
 > published, which means keys can never be rotated — and rotation is the only answer to a

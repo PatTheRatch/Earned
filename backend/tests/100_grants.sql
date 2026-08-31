@@ -68,6 +68,9 @@ set local role service_role;
 select public.introduce_grant_key('g1', test_b64(32));
 select public.publish_key_set(public.build_key_set_document(), test_b64(64));
 select public.promote_grant_key('g1');
+-- And published again, because a promotion nobody was told about is a key no
+-- client will honour a signature from (0012).
+select public.publish_key_set(public.build_key_set_document(), test_b64(64));
 reset role;
 select test_sign_in('11111111-1111-1111-1111-111111111111');
 

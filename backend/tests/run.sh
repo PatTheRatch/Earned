@@ -40,11 +40,22 @@ trap 'rm -f "$generated"' EXIT
 python3 backend/tests/generate_hardening_sql.py > "$generated"
 psql -q -f "$generated"
 
-for file in backend/tests/[0-9][0-9]_*.sql; do
-  case "$file" in *00_bootstrap.sql) continue ;; esac
+# Every .sql in here that is not the bootstrap is a test, and the count is
+# checked out loud. `[0-9][0-9]_*.sql` used to be the pattern, which silently
+# stopped matching the moment a file reached three digits: 100_grants.sql was
+# skipped by every run and every CI job, green, for as long as it existed. A
+# test suite that can quietly shrink is worse than a smaller one, so the number
+# it ran is now part of its output.
+ran=0
+for file in backend/tests/*.sql; do
+  case "$file" in */00_bootstrap.sql) continue ;; esac
   echo "==> $file"
   psql -q -f "$file"
+  ran=$((ran + 1))
 done
+expected=$(( $(ls backend/tests/*.sql | wc -l) - 1 ))
+[ "$ran" -eq "$expected" ] || { echo "ran $ran test files, expected $expected" >&2; exit 1; }
+echo "==> $ran test files ran"
 
 echo "==> key rotation drill (real Ed25519, real signatures, the served bytes)"
 backend/tests/keyset_drill.sh
