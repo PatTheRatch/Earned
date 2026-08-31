@@ -96,6 +96,7 @@ final class HealthImporter: ObservableObject {
                                          end: sample.endDate,
                                          distanceMeters: sample.totalDistance?
                                              .doubleValue(for: .meter()),
+                                         activeEnergyKilocalories: Self.activeEnergy(of: sample),
                                          evidence: Self.evidence(of: sample)))
         }
     }
@@ -140,6 +141,18 @@ final class HealthImporter: ObservableObject {
             return .selfReported
         }
         return .appVerified(source: source)
+    }
+
+    /// Active energy only — the calories burned *above* resting.
+    ///
+    /// Not `totalEnergyBurned`, which folds in the basal rate a body spends
+    /// lying still: a workout can post a total above zero having demanded
+    /// nothing, which is exactly the reading a commitment measured in effort
+    /// must not accept. (`totalEnergyBurned` is also deprecated from iOS 18;
+    /// `statistics(for:)` has been the answer since 16.)
+    private static func activeEnergy(of sample: HKWorkout) -> Double? {
+        sample.statistics(for: HKQuantityType(.activeEnergyBurned))?
+            .sumQuantity()?.doubleValue(for: .kilocalorie())
     }
 
     private static func activity(of sample: HKWorkout) -> ActivityType {

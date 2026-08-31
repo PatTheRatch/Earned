@@ -26,6 +26,7 @@ struct NewCommitmentView: View {
         case any = "Just show up"
         case duration = "A total time"
         case distance = "A total distance"
+        case calories = "A total effort"
         var id: String { rawValue }
     }
 
@@ -78,6 +79,7 @@ struct NewCommitmentView: View {
     @State private var weeks = 4.0
     @State private var minutes = 30.0
     @State private var kilometers = 5.0
+    @State private var calories = 200.0
     @State private var day = Date()
     @State private var preset: TimePreset = .morning
     @State private var customTime = Date()
@@ -194,6 +196,16 @@ struct NewCommitmentView: View {
                         Text(String(format: "%.1f km", kilometers)).font(.headline)
                         Slider(value: $kilometers, in: 0.5...42, step: 0.5)
                         Text("Distance adds up across workouts too.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                case .calories:
+                    VStack(alignment: .leading) {
+                        Text("\(Int(calories)) active calories").font(.headline)
+                        Slider(value: $calories, in: 25...800, step: 25)
+                        Text("Active calories only — what you burned above resting. "
+                             + "The one measure here that a minute of standing still "
+                             + "can't satisfy. Best read from a watch; a phone alone "
+                             + "estimates it roughly.")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                 }
@@ -366,6 +378,9 @@ struct NewCommitmentView: View {
         case .duration: return Requirement(activity: activity.filter, metric: .totalDuration(minutes * 60),
                                 verification: verification)
         case .distance: return Requirement(activity: activity.filter, metric: .totalDistance(kilometers * 1000),
+                                verification: verification)
+        case .calories: return Requirement(activity: activity.filter,
+                                metric: .totalActiveEnergy(calories),
                                 verification: verification)
         }
     }

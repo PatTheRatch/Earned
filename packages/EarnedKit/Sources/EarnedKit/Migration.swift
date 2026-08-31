@@ -27,13 +27,18 @@ public enum LedgerMigration {
         case 1:
             return LedgerDocument(
                 version: Ledger.currentSchemaVersion,
-                entries: migrateV3ToV4(migrateV2ToV3(migrateV1ToV2(document.entries))))
+                entries: migrateV4ToV5(
+                    migrateV3ToV4(migrateV2ToV3(migrateV1ToV2(document.entries)))))
         case 2:
-            return LedgerDocument(version: Ledger.currentSchemaVersion,
-                                  entries: migrateV3ToV4(migrateV2ToV3(document.entries)))
+            return LedgerDocument(
+                version: Ledger.currentSchemaVersion,
+                entries: migrateV4ToV5(migrateV3ToV4(migrateV2ToV3(document.entries))))
         case 3:
             return LedgerDocument(version: Ledger.currentSchemaVersion,
-                                  entries: migrateV3ToV4(document.entries))
+                                  entries: migrateV4ToV5(migrateV3ToV4(document.entries)))
+        case 4:
+            return LedgerDocument(version: Ledger.currentSchemaVersion,
+                                  entries: migrateV4ToV5(document.entries))
         case let version where version > Ledger.currentSchemaVersion:
             throw MigrationError.unknownVersion(version)
         default:
@@ -69,6 +74,19 @@ public enum LedgerMigration {
     /// keys it has never heard of — which would let a manual entry satisfy a
     /// commitment whose whole point was that it must not.
     private static func migrateV3ToV4(_ entries: [LedgerEntry]) -> [LedgerEntry] { entries }
+
+    /// v4 → v5: nothing to rewrite.
+    ///
+    /// v5 adds `CompletionMetric.totalActiveEnergy` and the active-energy
+    /// figure on a workout. No v4 ledger contains either, and workouts that
+    /// never recorded energy decode as nil — *not reported*, which counts as
+    /// nothing rather than as an unknown quantity.
+    ///
+    /// Again the bump is for the other direction, and here it is not merely
+    /// tidiness: a v4 build cannot decode `totalActiveEnergy` at all, so
+    /// without the version it would quarantine the ledger with a parse error
+    /// about an unknown case. Refusing by version says what actually happened.
+    private static func migrateV4ToV5(_ entries: [LedgerEntry]) -> [LedgerEntry] { entries }
 
     /// v1 → v2.
     ///

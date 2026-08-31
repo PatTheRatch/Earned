@@ -66,6 +66,12 @@ public struct Workout: Codable, Equatable, Identifiable, Sendable {
     public var start: Date
     public var end: Date
     public var distanceMeters: Double?
+    /// Active energy burned, in kilocalories, when the source reported it.
+    ///
+    /// Nil means *not reported*, which counts as nothing rather than as
+    /// something unknown — a workout that cannot say how hard it was does not
+    /// get the benefit of the doubt against a commitment measured in effort.
+    public var activeEnergyKilocalories: Double?
     public var evidence: WorkoutEvidence
 
     public init(id: UUID = UUID(),
@@ -73,12 +79,14 @@ public struct Workout: Codable, Equatable, Identifiable, Sendable {
                 start: Date,
                 end: Date,
                 distanceMeters: Double? = nil,
+                activeEnergyKilocalories: Double? = nil,
                 evidence: WorkoutEvidence = .selfReported) {
         self.id = id
         self.activity = activity
         self.start = start
         self.end = end
         self.distanceMeters = distanceMeters
+        self.activeEnergyKilocalories = activeEnergyKilocalories
         self.evidence = evidence
     }
 
@@ -103,7 +111,8 @@ public struct Workout: Codable, Equatable, Identifiable, Sendable {
 
 extension Workout {
     private enum CodingKeys: String, CodingKey {
-        case id, activity, activityType, start, end, distanceMeters, evidence
+        case id, activity, activityType, start, end, distanceMeters
+        case activeEnergyKilocalories, evidence
     }
 
     /// Ledger v1 stored a free-form `activityType` string. Known names map onto
@@ -115,6 +124,8 @@ extension Workout {
         start = try container.decode(Date.self, forKey: .start)
         end = try container.decode(Date.self, forKey: .end)
         distanceMeters = try container.decodeIfPresent(Double.self, forKey: .distanceMeters)
+        activeEnergyKilocalories = try container.decodeIfPresent(
+            Double.self, forKey: .activeEnergyKilocalories)
 
         // Workouts written before evidence existed were manual entries, so
         // .selfReported is what they were rather than a guess about them.
@@ -139,13 +150,15 @@ extension Workout {
         try container.encode(start, forKey: .start)
         try container.encode(end, forKey: .end)
         try container.encodeIfPresent(distanceMeters, forKey: .distanceMeters)
+        try container.encodeIfPresent(activeEnergyKilocalories,
+                                      forKey: .activeEnergyKilocalories)
         try container.encode(evidence, forKey: .evidence)
     }
 }
 
 /// Progress toward a commitment's requirement, for UI and accountability context.
 public struct CommitmentProgress: Equatable, Sendable {
-    public enum Unit: Equatable, Sendable { case workouts, seconds, meters }
+    public enum Unit: Equatable, Sendable { case workouts, seconds, meters, kilocalories }
     public var achieved: Double
     public var required: Double
     public var unit: Unit
@@ -166,6 +179,9 @@ extension Requirement {
         case .totalDistance(let required):
             let total = workouts.reduce(0) { $0 + ($1.distanceMeters ?? 0) }
             return CommitmentProgress(achieved: total, required: required, unit: .meters)
+        case .totalActiveEnergy(let required):
+            let total = workouts.reduce(0) { $0 + ($1.activeEnergyKilocalories ?? 0) }
+            return CommitmentProgress(achieved: total, required: required, unit: .kilocalories)
         }
     }
 }

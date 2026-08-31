@@ -85,17 +85,31 @@ public enum CompletionMetric: Codable, Equatable, Sendable {
     case totalDuration(TimeInterval)
     /// Accumulated meters across qualifying workouts.
     case totalDistance(Double)
+    /// Accumulated active kilocalories across qualifying workouts.
+    ///
+    /// The only metric here that measures *effort* rather than opportunity.
+    /// A minute of standing outside with the Workout app running is a
+    /// qualifying run of some duration and some distance; it is not 200
+    /// kilocalories. That gap is the entire reason this case exists.
+    ///
+    /// It is a proxy, not a truth: active energy is estimated, and estimated
+    /// far better from a watch's heart rate than from a phone's accelerometer.
+    /// Same posture as §15 — this raises the cost of negotiating with
+    /// yourself, and does not pretend to be unfoolable.
+    case totalActiveEnergy(Double)
 
     public var isValid: Bool {
         switch self {
         case .anyQualifyingWorkout: return true
         case .totalDuration(let seconds): return seconds > 0
         case .totalDistance(let meters): return meters > 0
+        case .totalActiveEnergy(let kilocalories): return kilocalories > 0
         }
     }
 
-    /// Cross-dimension changes (duration ↔ distance) are incomparable and so are
-    /// rejected after hardening; anything is at least as hard as "one workout".
+    /// Cross-dimension changes (duration ↔ distance ↔ energy) are incomparable
+    /// and so are rejected after hardening; anything is at least as hard as
+    /// "one workout".
     public func isAtLeastAsHard(as other: CompletionMetric) -> Bool {
         switch (self, other) {
         case (_, .anyQualifyingWorkout):
@@ -103,6 +117,8 @@ public enum CompletionMetric: Codable, Equatable, Sendable {
         case (.totalDuration(let new), .totalDuration(let old)):
             return new >= old
         case (.totalDistance(let new), .totalDistance(let old)):
+            return new >= old
+        case (.totalActiveEnergy(let new), .totalActiveEnergy(let old)):
             return new >= old
         default:
             return false
@@ -147,6 +163,9 @@ public struct Requirement: Codable, Equatable, Sendable {
     public static func cycle(minutes: Double) -> Requirement {
         Requirement(activity: .only(.cycling), metric: .totalDuration(minutes * 60))
     }
+    public static func burn(calories: Double, doing activity: ActivityFilter = .any) -> Requirement {
+        Requirement(activity: activity, metric: .totalActiveEnergy(calories))
+    }
 
     public var isValid: Bool { activity.isValid && metric.isValid }
 
@@ -167,6 +186,8 @@ public struct Requirement: Codable, Equatable, Sendable {
             return "\(activity.displayName) · \(minutes) min"
         case .totalDistance(let meters):
             return String(format: "%@ · %.1f km", activity.displayName, meters / 1000)
+        case .totalActiveEnergy(let kilocalories):
+            return "\(activity.displayName) · \(Int(kilocalories.rounded())) cal"
         }
     }
 }

@@ -22,6 +22,7 @@ trusted. Re-verify against the code when it drifts.
 | All six screens, poster identity, persistence | **Real** | Ledger saved as versioned JSON, replayed and re-validated on launch |
 | Deadline warnings | **Real** | Local notifications; no entitlement needed. Informational only — no snooze |
 | Workout verification | **Real** | HealthKit import with provenance; per-commitment tiers (NORTHSTAR §15) — your word, or an app has to vouch |
+| What "done" means | **Real** | Show up, total time, total distance, or **active calories** — the one target a minute of standing still cannot satisfy |
 | Restriction tokens | **Real** | Apple's picker; opaque tokens Earned itself cannot read |
 | Enforcement — apps actually blocked | **Real** | `ManagedSettingsStore` shields the union of closed Gates |
 | Enforcement while the app is closed | **Missing** | A Gate closing with Earned not running waits for next launch; needs `DeviceActivityMonitor` |

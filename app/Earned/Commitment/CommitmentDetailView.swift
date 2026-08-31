@@ -19,13 +19,14 @@ struct CommitmentDetailView: View {
     @State private var kind: RequirementKind = .any
     @State private var minutes = 30.0
     @State private var kilometers = 5.0
+    @State private var calories = 200.0
     @State private var deadline = Date()
     @State private var verification: WorkoutVerification = .selfReported
     @State private var approvals = 2
     @State private var accountabilityMinutes = 30.0
     @State private var loaded = false
 
-    private enum RequirementKind: Hashable { case any, duration, distance }
+    private enum RequirementKind: Hashable { case any, duration, distance, calories }
     @State private var activity: ActivityFilterChoice = .any
     private enum ActivityFilterChoice: Hashable, CaseIterable {
         case any, running, walking, cycling, strength
@@ -240,6 +241,7 @@ struct CommitmentDetailView: View {
                     Text("Any workout").tag(RequirementKind.any)
                     Text("Total duration").tag(RequirementKind.duration)
                     Text("Total distance").tag(RequirementKind.distance)
+                    Text("Active calories").tag(RequirementKind.calories)
                 }
             }
         case .duration:
@@ -262,12 +264,27 @@ struct CommitmentDetailView: View {
                 Text("Hardened: distance can only increase.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+        case .calories:
+            VStack(alignment: .leading) {
+                Text("Active calories: \(Int(calories))")
+                Slider(value: $calories, in: minCalories(current)...1000, step: 25)
+                    .onChange(of: calories) { saveRequirement() }
+            }
+            if hardened {
+                Text("Hardened: the calorie target can only increase.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 
     private func minDuration(_ current: Requirement) -> Double {
         if case .totalDuration(let seconds) = current.metric { return max(5, seconds / 60) }
         return 5
+    }
+
+    private func minCalories(_ current: Requirement) -> Double {
+        if case .totalActiveEnergy(let kilocalories) = current.metric { return max(25, kilocalories) }
+        return 25
     }
 
     private func minDistance(_ current: Requirement) -> Double {
@@ -298,6 +315,9 @@ struct CommitmentDetailView: View {
                                verification: verification)
         case .distance:
             return Requirement(activity: activity.filter, metric: .totalDistance(kilometers * 1000),
+                               verification: verification)
+        case .calories:
+            return Requirement(activity: activity.filter, metric: .totalActiveEnergy(calories),
                                verification: verification)
         }
     }
@@ -356,6 +376,9 @@ struct CommitmentDetailView: View {
         case .totalDistance(let meters):
             kind = .distance
             kilometers = meters / 1000
+        case .totalActiveEnergy(let kilocalories):
+            kind = .calories
+            calories = kilocalories
         }
     }
 

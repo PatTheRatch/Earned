@@ -385,6 +385,8 @@ private struct LogWorkoutView: View {
     @State private var minutes = 30.0
     @State private var kilometers = 5.0
     @State private var includeDistance = false
+    @State private var calories = 200.0
+    @State private var includeCalories = false
     @State private var endedMinutesAgo = 0.0
     @State private var activity: ActivityType = .running
     @State private var logged: [Workout] = []
@@ -414,6 +416,11 @@ private struct LogWorkoutView: View {
                     if includeDistance {
                         Text(String(format: "%.1f km", kilometers))
                         Slider(value: $kilometers, in: 0.5...42, step: 0.5)
+                    }
+                    Toggle("Include active calories", isOn: $includeCalories)
+                    if includeCalories {
+                        Text("\(Int(calories)) cal")
+                        Slider(value: $calories, in: 25...1000, step: 25)
                     }
                 }
                 Section("Finished") {
@@ -460,7 +467,8 @@ private struct LogWorkoutView: View {
         let workout = Workout(activity: activity,
                               start: end.addingTimeInterval(-minutes * 60),
                               end: end,
-                              distanceMeters: includeDistance ? kilometers * 1000 : nil)
+                              distanceMeters: includeDistance ? kilometers * 1000 : nil,
+                              activeEnergyKilocalories: includeCalories ? calories : nil)
         guard store.recordWorkout(workout) else { return }
         logged.append(workout)
         endedMinutesAgo = 0

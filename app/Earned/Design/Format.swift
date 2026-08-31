@@ -16,7 +16,7 @@ enum Format {
         return remainder == 0 ? "\(hours) h" : "\(hours) h \(remainder) min"
     }
 
-    /// "18 / 30 min", "3.2 / 5.0 km", "0 / 1 workout"
+    /// "18 / 30 min", "3.2 / 5.0 km", "0 / 1 workout", "40 / 200 cal"
     static func progress(_ progress: CommitmentProgress) -> String {
         switch progress.unit {
         case .workouts:
@@ -26,6 +26,8 @@ enum Format {
             return "\(Int(progress.achieved / 60)) / \(Int(progress.required / 60)) min"
         case .meters:
             return String(format: "%.1f / %.1f km", progress.achieved / 1000, progress.required / 1000)
+        case .kilocalories:
+            return "\(Int(progress.achieved)) / \(Int(progress.required)) cal"
         }
     }
 
@@ -41,6 +43,8 @@ enum Format {
             return "\(Int((left / 60).rounded(.up))) minutes to go."
         case .meters:
             return String(format: "%.1f km to go.", left / 1000)
+        case .kilocalories:
+            return "\(Int(left.rounded(.up))) calories to go."
         }
     }
 
@@ -77,6 +81,8 @@ enum Format {
             return "\(activity) · \(duration(seconds))"
         case .totalDistance(let meters):
             return String(format: "%@ · %.1f km", activity, meters / 1000)
+        case .totalActiveEnergy(let kilocalories):
+            return "\(activity) · \(Int(kilocalories)) cal"
         }
     }
 
