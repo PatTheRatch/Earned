@@ -495,7 +495,7 @@ final class GoldenLedgerTests: XCTestCase {
           "date": "2026-08-22T11:00:00Z",
           "event": {
             "overrideRequested": {
-              "id": "R1000000-0000-0000-0000-000000000001",
+              "id": "D1000000-0000-0000-0000-000000000001",
               "commitmentID": "C1000000-0000-0000-0000-000000000001"
             }
           }
@@ -505,7 +505,7 @@ final class GoldenLedgerTests: XCTestCase {
           "date": "2026-08-22T11:05:00Z",
           "event": {
             "overrideApprovalRecorded": {
-              "requestID": "R1000000-0000-0000-0000-000000000001",
+              "requestID": "D1000000-0000-0000-0000-000000000001",
               "partnerID": "alice"
             }
           }
@@ -515,7 +515,7 @@ final class GoldenLedgerTests: XCTestCase {
           "date": "2026-08-22T11:10:00Z",
           "event": {
             "overrideApprovalRecorded": {
-              "requestID": "R1000000-0000-0000-0000-000000000001",
+              "requestID": "D1000000-0000-0000-0000-000000000001",
               "partnerID": "bob"
             }
           }
@@ -528,7 +528,7 @@ final class GoldenLedgerTests: XCTestCase {
         let decoded = try Self.decoder.decode(Ledger.self, from: Data(v2OverrideFixture.utf8))
 
         let commitmentID = UUID(uuidString: "C1000000-0000-0000-0000-000000000001")!
-        let requestID = UUID(uuidString: "R1000000-0000-0000-0000-000000000001")!
+        let requestID = UUID(uuidString: "D1000000-0000-0000-0000-000000000001")!
 
         // The second approval resolved it, then and now.
         XCTAssertEqual(decoded.state.commitments[commitmentID]?.resolution,
