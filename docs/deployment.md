@@ -329,7 +329,15 @@ owning a domain.
    npx wrangler deploy
    ```
 4. In the dashboard: **Workers & Pages** → `earned-web` → **Settings** → **Domains &
-   Routes** → add `earntherest.com/*` and `www.earntherest.com/*`.
+   Routes** → **Add** → **Custom Domain**, once for `earntherest.com` and once for
+   `www.earntherest.com`.
+
+   Custom Domain, not Route. A Custom Domain creates the proxied DNS record for you, which
+   is what you want on a zone that has none. A Route is pattern matching over a hostname
+   that must already resolve, so on a fresh zone it silently matches nothing. Do not add
+   DNS records by hand for this — Cloudflare manages them, and the "Visitors cannot reach
+   earntherest.com" warnings on the DNS page clear themselves once the domain is
+   attached.
 
 **Check:**
 

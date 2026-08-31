@@ -17,9 +17,13 @@ assets = { directory = "./public", binding = "ASSETS" }
 [vars]
 SUPABASE_FUNCTIONS_URL = "https://xqdobukkwqjgbpykwoxk.functions.supabase.co"
 
-# Custom domain routing is configured in the Cloudflare dashboard (Workers &
-# Pages → the worker → Settings → Domains & Routes), because it depends on the
-# zone being active. Both of these are needed:
+# Hostnames are attached in the Cloudflare dashboard (Workers & Pages → the
+# worker → Settings → Domains & Routes), because it depends on the zone being
+# active. Add each as a **Custom Domain**, not a Route:
 #
-#   earntherest.com/*
-#   www.earntherest.com/*
+#   earntherest.com
+#   www.earntherest.com
+#
+# A Custom Domain creates the proxied DNS record itself. A Route is pattern
+# matching over a hostname that must already resolve, so on a fresh zone with
+# no records it matches nothing and the site stays unreachable.
