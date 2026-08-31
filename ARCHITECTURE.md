@@ -46,7 +46,7 @@ Current state (gate satisfied? access allowed? why locked?) is a pure function o
 
 ### Testability
 
-A dependency-free package builds on Linux. This development environment has no Swift toolchain, so verification runs through **GitHub Actions on a macOS runner** (build + full EarnedKit test suite on every push), with Patrick's Mac for on-device work. The enforcement UI can only be tested by hand on a phone; the gate engine — the part where a logic bug means being wrongly locked out — gets exhaustive automated tests.
+A dependency-free package builds on Linux. Verification runs both locally (development now happens on Patrick's Mac, which has the full toolchain) and through **GitHub Actions** (Linux + macOS: full EarnedKit suite, backend schema/RLS suite against a throwaway Postgres in both layouts, edge-function checks, and an XcodeGen + xcodebuild compile of the app, on every push). The enforcement UI can only be tested by hand on a phone; the gate engine — the part where a logic bug means being wrongly locked out — gets exhaustive automated tests.
 
 ## 3. Backend: Supabase
 
@@ -105,10 +105,14 @@ retroactively revoke something already earned.
 /
 ├── NORTHSTAR.md          # product vision
 ├── ARCHITECTURE.md       # this file
-├── app/                  # iOS app + extensions (Xcode project)
+├── app/                  # iOS app (Xcode project, generated from project.yml)
 ├── packages/
-│   └── EarnedKit/        # pure domain engine (Swift package)
-├── backend/              # Supabase: schema, migrations, edge functions
+│   ├── EarnedKit/        # pure domain engine (Swift package, builds on Linux)
+│   └── EarnedMedia/      # avatar image pipeline (Apple platforms; ImageIO)
+├── backend/              # Supabase: schema, migrations, SQL test suite
+├── supabase/             # CLI config + edge functions (approval page, grant signer)
+├── web/                  # link router (Cloudflare Worker)
+├── fixtures/             # cross-language pinned test vectors (hardening cases)
 └── docs/                 # design notes, decision records, API notes
 ```
 
@@ -125,14 +129,18 @@ Everything versions together; a change to gate semantics lands in EarnedKit, app
 
 ## 6. Roadmap
 
-1. ~~**EarnedKit core**~~ — *done.* Event ledger, gate engine (hydration + exercise), hardening/monotonicity, debt, override state machine. 32 tests green on Linux and macOS.
-2. ~~**App shell**~~ — *done.* XcodeGen-generated project, onboarding, Today, lock-screen receipt, commitment creation, history, settings. EarnedKit wired in; CI compiles the app on every push.
-3. **Enforcement** — FamilyControls authorization, app selection, ManagedSettings shields, DeviceActivity schedules, shield UI ("the receipt").
-4. **Verification** — HealthKit workout observation → ledger events.
-5. **Overrides** — Free Override, Supabase-backed accountability links, Solo Override friction flow.
-6. **Live on Patrick's phone** — six-week success test (NORTHSTAR §41).
+Statuses here distinguish *built* (code exists), *tested* (automated tests hold it),
+*deployed* (running in the hosted project — see `docs/deployment.md`), and
+*device-verified* (exercised by hand on Patrick's phone). A migration existing is none of
+those on its own.
 
-Steps 1 and 2 are complete. Steps 3–4 need on-device iteration; step 5's backend is buildable from here.
+1. ~~**EarnedKit core**~~ — *built + tested.* Event ledger, gate engine (hydration + exercise), hardening/monotonicity, debt, override state machine, enforcement-integrity semantics, plans, verification tiers. 135 tests green on Linux and macOS.
+2. ~~**App shell**~~ — *built.* XcodeGen-generated project, onboarding, Today, lock-screen receipt, commitment creation, history, settings. EarnedKit wired in; CI compiles the app on every push.
+3. **Enforcement** — *mostly built.* FamilyControls authorization, `FamilyActivityPicker` app selection, and `ManagedSettingsStore` shields are real (`app/Earned/Enforcement/`); shields fail closed. Still missing: a `DeviceActivityMonitor` extension (a Gate closing while Earned isn't running waits for next launch) and a `ShieldConfiguration` extension (blocked apps show Apple's default shield, not `NICE TRY.`).
+4. ~~**Verification**~~ — *built.* `Health/HealthImporter.swift`: HealthKit workout import with provenance (who vouched), duplicate-safe re-import, per-commitment verification tiers.
+5. ~~**Overrides**~~ — *built + tested; backend deployed.* Free Override and Solo friction flow in EarnedKit; the accountability backend is complete through signed grants — accounts, partners with real consent (server-sent invitations, global suppression), Contract Envelopes, override requests with frozen snapshots, the partner approval page, concurrent-safe voting, Ed25519-signed grants with key rotation, and on-device grant verification against a compiled-in root key (`app/Earned/Grants/`). Sign in with Apple connects the app to it. The SQL suite plus three drills (key rotation, vote concurrency, grant round-trip) hold it in CI.
+6. **Live on Patrick's phone** — six-week success test (NORTHSTAR §41). In progress; the §41 questions are not yet answerable.
+7. **Social Accountability, Milestone S1** — *built + tested.* Profiles (handle, avatar, optional city), mutual friendships with block semantics, and the Social tab. Design: `docs/social-architecture.md`; commitment sharing and activity events are deliberately later milestones.
 
 The Xcode project is **generated** from `app/project.yml` and not committed, so there are no
 project-file merge conflicts. Screen Time and HealthKit capabilities are deliberately absent
@@ -147,3 +155,33 @@ Recorded per NORTHSTAR §33's "product intent vs OS-enforceable reality" mandate
 - Safari can be shielded as an app; per-domain web restriction uses `WebDomain` tokens and is coarser.
 - Preventing deletion of Earned itself is weak without Screen Time restrictions the user sets outside the app. Document honestly, don't fake-guarantee.
 - DeviceActivity schedules have granularity limits (15-minute minimum intervals in places) that may affect hydration-timer precision — needs a prototype before promising minute-level enforcement.
+
+## 8. Social layer (Milestone S1)
+
+Full design and privacy model: [docs/social-architecture.md](docs/social-architecture.md).
+The decisions with architectural weight:
+
+- **Friend ≠ accountability partner, structurally.** Friendship is a new `friendship`
+  table; the `partner` table (encrypted contacts, consent, suppression) is not repurposed
+  and is never consulted by the social layer. Nothing on the enforcement path reads
+  friendship, and nothing social reads the accountability tables.
+- **One canonical display name.** `account.display_name` stays authoritative; the
+  `profile` table (handle, avatar path, optional city, private timezone, discoverability)
+  deliberately has no name column. Profile reads join the name in; profile edits write it
+  to `account`. No split-brain identity.
+- **Social data is representation, not authority.** The Contract Envelope trust boundary
+  is not extended to social claims: a completion shown to friends is the client's
+  self-report, and nothing may consume it as enforcement evidence. If server-authoritative
+  completion is ever wanted, that is a separate project.
+- **Same backend posture.** Default-deny RLS, no client table writes, SECURITY DEFINER
+  functions that re-derive the caller from the JWT; cross-account reads (search, friend
+  profiles) also go through functions so field exposure is decided in one place. Handles,
+  not account ids, are the only discovery mechanism.
+- **Avatars in Supabase Storage**, private bucket, `<account_id>/<random>.jpg`, visibility
+  delegated from the storage policy to one SQL function that the plain-Postgres test suite
+  can exercise. The client re-encodes every image (ImageIO, in `packages/EarnedMedia`)
+  before upload — downscaled, fresh JPEG, no EXIF/GPS — so the original never leaves the
+  phone.
+- **Availability contract unchanged (S8).** Profile setup and the Social tab are wholly
+  optional to the running of Earned: a backend outage or an incomplete profile never
+  touches local Gate enforcement or the Solo Override.

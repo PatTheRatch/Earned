@@ -1,6 +1,6 @@
 # Earned — What Actually Happens
 
-**End-to-end walkthrough · 29 August 2026**
+**End-to-end walkthrough · 31 August 2026**
 
 Every screen you'd hit from a fresh install to a live commitment, traced against the code
 that runs it. Each claim cites the file it comes from, so this can be checked rather than
@@ -27,15 +27,18 @@ trusted. Re-verify against the code when it drifts.
 | Enforcement — apps actually blocked | **Real** | `ManagedSettingsStore` shields the union of closed Gates |
 | Enforcement while the app is closed | **Missing** | A Gate closing with Earned not running waits for next launch; needs `DeviceActivityMonitor` |
 | Enforcement integrity — noticing a revocation | **Partial** | Detected the next time Earned runs. iOS never tells a backgrounded app its authorization went away, so a revocation is invisible until launch |
-| Deleting and reinstalling erases what is owed | **Hole** | The ledger is a file in the app's container, so a reinstall wipes commitments, debt and bypass records. Cheaper than any Override; needs account-authoritative state |
+| Deleting and reinstalling erases what is owed | **Hole, narrowed** | The ledger is still a file in the app's container, so a reinstall wipes local commitments, debt and bypass records. The server now holds every registered Contract Envelope, so *terms* survive — but nothing yet rebuilds obligations from them on reinstall |
 | Enforcement can be revoked | **By design, unfixable** | iOS Settings → Screen Time → Apps With Screen Time Access. No app can prevent this; a Screen Time passcode is the only friction |
 | Custom shield screen (`NICE TRY.`) | **Missing** | Blocked apps show Apple's default shield; needs a `ShieldConfiguration` extension |
-| Accountability partners | **Missing** | State machine exists; no way to send or collect approvals; step 5 |
+| Sign in with Apple + Contract Envelopes | **Real** | `Backend/AccountStore.swift`: nonce-checked sign-in, `ensure_account`, idempotent envelope registration and re-sync on every foreground. Optional to everything local (S8) |
+| Accountability partners | **Real** (backend deployed per `deployment.md`; end-to-end device verification is the open item) | Nomination with server-sent consent links, partner list and roster eligibility in-app (`Backend/PartnersView.swift`), override requests with frozen snapshots, the partner approval page, concurrent-safe voting, Ed25519-signed grants verified on-device against a compiled-in root key (`Grants/`), applied to the ledger which may still refuse a stale grant |
+| Social — profiles, friends, Social tab | **Real** (Milestone S1) | Profile with unique handle + avatar, friend requests/accept/decline/remove/block, handle search, Social tab. No activity events yet — the Recent area says so rather than inventing any. See `docs/social-architecture.md` |
 
-**One-sentence version:** the contract machinery is real, the identity is real, and Earned
-now actually takes apps away when a Gate is closed — the remaining holes are that a Gate
-closing while the app isn't running waits for the next launch, workouts are still logged
-by hand, and deleting the app still erases everything it was holding you to.
+**One-sentence version:** the contract machinery is real, the identity is real, Earned
+takes apps away when a Gate is closed, a partner's approval can genuinely unlock a phone,
+and there is now a Social tab with real friends on it — the remaining holes are that a
+Gate closing while the app isn't running waits for the next launch, blocked apps show
+Apple's shield rather than ours, and deleting the app still erases the local ledger.
 
 ---
 
@@ -449,5 +452,31 @@ takes apps away rather than describing what it would take away. What remains:
    or only vouched-for workouts do, frozen at hardening, tightenable after, never
    loosenable — the same lattice as every other term of the deal.
 
-The backend (accountability partners) is still fully buildable, but it unblocks the rung
-nobody can use alone anyway.
+The accountability backend is no longer a future: partners can be nominated and consent,
+requests go out with frozen snapshots, votes resolve concurrently-safely, and a signed
+grant comes back, verifies on the phone against the compiled-in root key, and unlocks the
+commitment it names. What that rung still needs is the end-to-end device pass — a real
+partner, a real link, a real unlock — recorded here once it happens.
+
+### Social (Milestone S1)
+
+A fourth tab sits between History and Settings. Today remains the default and the center
+of gravity — Social is deliberately not the launch tab.
+
+Signed out (or with no backend configured), the tab says what it is for and, where
+possible, offers the same Sign in with Apple button as Settings. Signed in without a
+profile, it offers the four-step setup — name (prefilled from Apple's one-time offer),
+handle, optional photo, optional city — ending on `WELCOME TO EARNED.` Nothing about
+Gates, commitments, or the Solo Override waits on any of this (S8).
+
+With a profile, the screen is a printed roster, not a feed: **MY PROFILE** (avatar or
+initials, name, @handle), **REQUESTS** (incoming with accept/decline, outgoing with
+cancel — only when there are any), **FRIENDS** (or an honest empty state pointing at
+ADD FRIEND), and **RECENT** — which in S1 contains exactly one line explaining that
+activity from friends will appear when commitment sharing ships. It fabricates no events.
+Adding a friend is handle search; a friend's profile screen shows avatar, name, handle,
+city if they set one, and REMOVE FRIEND / BLOCK at the bottom. Blocking is mutual
+invisibility from that moment on.
+
+> Source: `app/Earned/Social/`, `app/Earned/Backend/SocialStore.swift`,
+> `backend/migrations/0013–0015`, `docs/social-architecture.md`
