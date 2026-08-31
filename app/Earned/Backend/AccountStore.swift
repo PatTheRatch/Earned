@@ -315,7 +315,11 @@ final class AccountStore: ObservableObject {
             // must not do is claim partners were asked when they were not.
             return
         }
-        let shown = progress.map(Self.forPartners) ?? (0, 0, "")
+        // Labels on the fallback too: an unlabelled tuple on either side of
+        // `??` collapses the whole expression to an unlabelled type, and the
+        // three arguments below are all Doubles that would then be positional.
+        let shown = progress.map(Self.forPartners)
+            ?? (achieved: 0, required: 0, unit: "")
         do {
             let receipt = try await client.createOverrideRequest(
                 clientRequestID: requestID,
