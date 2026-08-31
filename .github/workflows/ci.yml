@@ -61,9 +61,9 @@ jobs:
         with:
           deno-version: v2.x
       - name: Typecheck the edge function
-        run: deno check backend/functions/approval/index.ts
+        run: deno check supabase/functions/approval/index.ts
       - name: Test the renderer
-        run: deno test backend/functions/approval/
+        run: deno test supabase/functions/approval/
       - name: Typecheck the web worker
         run: deno check web/src/index.ts
       - name: Test the link router

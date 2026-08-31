@@ -25,7 +25,7 @@ the partner page. No grants — that is step 8, and none of its code is here.
 | `migrations/0008` | Grant signing keys, the rotation state machine, and root-signed key set documents (§10) |
 | `migrations/0009` | `override_request` and its snapshot, recipients and audit log; `create_override_request`, `override_request_status`, expiry, and a vote endpoint that refuses (§§4.5, 6, 7, 13, 16) |
 | `migrations/0010` | `cast_override_vote` for real, `approval_page`, and the receipt purge (§§6.2, 8, 15, 17) |
-| `functions/approval/` | The partner page: a server-rendered edge function over those two functions (§18) |
+| [`supabase/functions/approval/`](../supabase/functions/approval/) | The partner page: a server-rendered edge function over those two functions (§18). It lives beside `supabase/config.toml` because that is where the CLI looks |
 
 Migrations are appended, never rewritten — 0005–0007 alter what 0001–0004 created rather
 than editing it, because an applied migration and its file have to keep matching.
@@ -182,7 +182,7 @@ removes the snapshot, and receipts reduce to status-only (S15, §15).
 
 Every token state answers with a page, not an error (§6.2): `request`, `receipt`,
 `resolved`, `withdrawn`, `expired`, and the deliberately identical faces of `invalid` and
-`gone`. The page itself is [`functions/approval/`](functions/approval/) — server-rendered,
+`gone`. The page itself is [`supabase/functions/approval/`](../supabase/functions/approval/) — server-rendered,
 no Supabase credential in any browser, no JavaScript on the page at all, votes cast by
 form post. All the rules live in SQL under the test suite; all the words live in
 `render.ts` under its own tests (escaping hostile text, the §7 two-halves labelling, no
@@ -195,9 +195,8 @@ supabase functions deploy approval
 ```
 
 [`supabase/config.toml`](../supabase/config.toml) sets `verify_jwt = false` for this
-function and points the CLI at `backend/functions/approval/`, since the code lives here
-rather than in the CLI's default location. Turning JWT verification off is required and
-correct: partners are strangers without accounts
+function, so no `--no-verify-jwt` flag is needed. Turning JWT verification off is required
+and correct: partners are strangers without accounts
 (S4), and the 256-bit token in the URL is the entire credential. The function reads
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from the environment Supabase injects.
 Point `consent_base_url`'s `/a/<token>` links at it (a redirect or rewrite from your

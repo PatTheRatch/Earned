@@ -246,9 +246,11 @@ No `--no-verify-jwt` flag: [`supabase/config.toml`](../supabase/config.toml) set
 `verify_jwt = false` for this function, and that is deliberate. Partners are strangers with
 no Earned account (**S4**) and the 256-bit token in the URL is the entire credential, so
 JWT verification must be off — and a setting that must never be wrong belongs in a file
-under review rather than in a flag someone types from memory. That same config file also
-points the CLI at `backend/functions/approval/`, since the function lives with the rest of
-the backend rather than in the CLI's default `supabase/functions/` location.
+under review rather than in a flag someone types from memory.
+
+Run it **from the repo root**. The CLI resolves `supabase/config.toml` and the function
+directory relative to where you invoke it, so running from a subdirectory fails with
+`Entrypoint path does not exist`.
 
 The function reads `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from the environment
 Supabase injects; there is nothing to configure for either.
