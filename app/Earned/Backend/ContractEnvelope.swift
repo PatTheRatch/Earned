@@ -69,6 +69,11 @@ struct EnvelopeReceipt: Equatable, Sendable {
     let approvalsRequired: Int
     let accountabilityAvailable: Bool
     let registeredAt: Date?
+    /// The digest of the terms the server holds, in the form a grant states
+    /// it. A grant naming a different digest was granted against different
+    /// terms than the ones this app thinks are in force (§4.5), and is
+    /// refused rather than reconciled.
+    let policyDigest: String?
 
     init(json: [String: Any]) throws {
         guard let idString = json["commitment_id"] as? String,
@@ -84,6 +89,13 @@ struct EnvelopeReceipt: Equatable, Sendable {
         self.approvalsRequired = json["approvals_required"] as? Int ?? 0
         self.accountabilityAvailable = json["accountability_available"] as? Bool ?? false
         self.registeredAt = Self.date(json["registered_at"])
+        // The schema serves bare hex here and `sha256:<hex>` inside a grant
+        // document. Normalised once, on the way in, so the comparison later is
+        // between two things of the same shape — a mismatch there would look
+        // exactly like a forged grant and be impossible to tell apart.
+        self.policyDigest = (json["policy_digest"] as? String).map {
+            $0.hasPrefix("sha256:") ? $0 : "sha256:" + $0
+        }
     }
 
     private static func date(_ value: Any?) -> Date? {

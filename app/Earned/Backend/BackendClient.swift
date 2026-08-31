@@ -155,6 +155,74 @@ actor BackendClient {
         return rows.compactMap(Partner.init(row:))
     }
 
+    // MARK: - Overrides and grants
+
+    /// Ask the roster. Everything that decides the answer — the threshold, who
+    /// is on it, whether the contract has hardened — comes from the envelope
+    /// the server holds; what is sent here is only what the *partners* will be
+    /// shown (§7), and it is labelled self-reported because it is.
+    ///
+    /// `clientRequestID` is the idempotency key (§9.4). It must be the same on
+    /// a retry, or a user who lost the response gets a second request and five
+    /// people get a second message.
+    @discardableResult
+    func createOverrideRequest(clientRequestID: UUID,
+                               commitmentID: UUID,
+                               progressAchieved: Double,
+                               progressRequired: Double,
+                               progressUnit: String,
+                               reliability: (completed: Int, of: Int,
+                                             overrideRequests: Int, missed: Int),
+                               reason: String?) async throws -> OverrideRequestReceipt {
+        var params: [String: Any] = [
+            "p_client_request_id": clientRequestID.uuidString,
+            "p_commitment_id": commitmentID.uuidString,
+            "p_progress_achieved": progressAchieved,
+            "p_progress_required": progressRequired,
+            "p_progress_unit": progressUnit,
+            "p_reliability_completed": reliability.completed,
+            "p_reliability_of": reliability.of,
+            "p_reliability_override_requests": reliability.overrideRequests,
+            "p_reliability_missed": reliability.missed,
+        ]
+        if let reason, !reason.isEmpty { params["p_reason"] = reason }
+        return try OverrideRequestReceipt(json: await rpc("create_override_request", params))
+    }
+
+    /// The published key set, with the root signature beside it.
+    ///
+    /// Deliberately callable signed out: it is public by design (§10.2), and
+    /// an app that could only learn about key rotation while authenticated
+    /// would be least able to verify anything exactly when it most needs to.
+    func fetchKeySet() async throws -> (document: Data, rootSignature: Data) {
+        let json = try await post(path: "/rest/v1/rpc/current_key_set",
+                                  body: [String: String](), authorized: accessToken != nil)
+        guard let document = json["document"] as? String,
+              let signature = json["root_signature"] as? String,
+              let rootSignature = Data(base64Encoded: signature) else {
+            throw Failure.refused(status: 200, message: "The key set came back unreadable.")
+        }
+        // `.utf8` of the string the server sent is the byte sequence the root
+        // signed. JSON transport escapes bytes losslessly and Swift does not
+        // normalise strings it decodes, so this round-trips exactly — which it
+        // must, because verification is over these bytes and nothing else.
+        return (Data(document.utf8), rootSignature)
+    }
+
+    /// Everything this account has been granted, signed.
+    ///
+    /// Goes to the edge function rather than the RPC because signing happens
+    /// there: the key lives in that function's environment and nowhere the
+    /// database can reach (§9, migration 0011). The function calls `my_grants`
+    /// with this caller's own JWT, so RLS applies here exactly as anywhere.
+    func fetchGrants() async throws -> [SignedGrant] {
+        guard accessToken != nil else { throw Failure.notSignedIn }
+        let json = try await post(path: "/functions/v1/grants",
+                                  body: [String: String](), authorized: true)
+        guard let rows = json["grants"] as? [[String: Any]] else { return [] }
+        return rows.compactMap(SignedGrant.init(row:))
+    }
+
     // MARK: - Plumbing
 
     /// ISO-8601 with fractional seconds. The server parses microseconds and the

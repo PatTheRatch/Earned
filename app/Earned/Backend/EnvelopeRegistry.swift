@@ -39,6 +39,11 @@ struct RegistrationRecord: Codable, Equatable, Sendable {
     var partnerCount: Int
     var updatedAt: Date
     var failure: String?
+    /// The digest of the terms the server acknowledged, kept so a grant can be
+    /// checked against the contract it claims to be for without a round trip.
+    /// Nil for records written before grants existed, and nil is not "any
+    /// digest will do" — it means this app cannot yet tell, so it refuses.
+    var policyDigest: String?
 }
 
 extension RegistrationRecord {
@@ -57,6 +62,7 @@ extension RegistrationRecord {
         partnerCount = try container.decode(Int.self, forKey: .partnerCount)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
         failure = try container.decodeIfPresent(String.self, forKey: .failure)
+        policyDigest = try container.decodeIfPresent(String.self, forKey: .policyDigest)
     }
 }
 
@@ -77,7 +83,8 @@ struct EnvelopeRegistry: Codable, Equatable, Sendable {
             accountabilityAvailable: receipt.accountabilityAvailable,
             partnerCount: receipt.partnerCount,
             updatedAt: date,
-            failure: nil)
+            failure: nil,
+            policyDigest: receipt.policyDigest)
     }
 
     mutating func recordFailure(_ commitmentID: UUID, terms: String,
@@ -86,7 +93,8 @@ struct EnvelopeRegistry: Codable, Equatable, Sendable {
         // being unable to reach the server does not un-say what it said.
         var record = records[commitmentID] ?? RegistrationRecord(
             status: .failed, termsSignature: terms, partnerIDs: [], version: 0, hardensAt: nil,
-            accountabilityAvailable: false, partnerCount: 0, updatedAt: date, failure: reason)
+            accountabilityAvailable: false, partnerCount: 0, updatedAt: date, failure: reason,
+            policyDigest: nil)
         if record.status != .late { record.status = .failed }
         record.failure = reason
         record.updatedAt = date

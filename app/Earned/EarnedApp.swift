@@ -27,7 +27,44 @@ struct EarnedApp: App {
             Task {
                 await account.refreshPartners()
                 await account.syncEnvelopes(for: store.allCommitments, now: store.now)
+                // Grants last, and only after envelopes: a grant is checked
+                // against the contract digest the server gave us, so a
+                // commitment whose envelope has not synced yet has nothing to
+                // check against and its grant would be held for no reason.
+                await applyGrants()
             }
+        }
+    }
+
+    /// A partner's approval only becomes an unlocked phone here.
+    ///
+    /// Everything cryptographic happened before this point; what is left is a
+    /// plain domain fact — these people said yes, at this time — offered to
+    /// the ledger, which may still refuse it. Refusal is not an error: the
+    /// commitment may have been completed while the partner was tapping
+    /// approve, and §12 is explicit that their stale page must not reopen a
+    /// resolved commitment.
+    @MainActor
+    private func applyGrants() async {
+        for verified in await account.syncGrants() {
+            let grant = verified.grant
+            // Idempotent in both directions (§9.4): the server re-serves the
+            // same grant on every poll, so a grant already in history is
+            // skipped here before the reducer has to be the one to say no.
+            if store.ledger.state.overrideRequests[grant.clientRequestID]?
+                .serverGrantID == grant.serverGrantID { continue }
+
+            let applied = store.append(
+                .accountabilityOverrideGranted(requestID: grant.clientRequestID,
+                                               decidedAt: grant.decidedAt,
+                                               roster: grant.roster,
+                                               serverGrantID: grant.serverGrantID),
+                // The moment the *server* decided, not the moment this phone
+                // heard about it. A grant can sit undelivered for hours while
+                // a user is offline (§11), and dating it now would misdate
+                // their own history.
+                at: grant.decidedAt)
+            if applied { account.recordReceipt(for: verified) }
         }
     }
 }

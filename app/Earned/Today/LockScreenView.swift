@@ -119,6 +119,7 @@ struct LockScreenView: View {
 /// The escape hatches, in the order the contract allows them (NORTHSTAR §§22–25).
 struct OverrideMenu: View {
     @EnvironmentObject private var store: EarnedStore
+    @EnvironmentObject private var account: AccountStore
     let record: CommitmentRecord
 
     private var request: OverrideRequest? {
@@ -139,8 +140,21 @@ struct OverrideMenu: View {
                 requestStatus(request)
             } else {
                 Button("Request an override") {
-                    store.append(.overrideRequested(id: UUID(),
-                                                    commitmentID: record.commitment.id))
+                    // Local first, and unconditionally. The Solo clock starts
+                    // here on this device's own time, so a user is never
+                    // trapped by our downtime (§11, S8); asking the partners
+                    // is what happens *next*, and may not happen at all.
+                    let requestID = UUID()
+                    guard store.append(.overrideRequested(id: requestID,
+                                                          commitmentID: record.commitment.id))
+                    else { return }
+                    Task {
+                        await account.requestOverride(
+                            requestID: requestID,
+                            commitmentID: record.commitment.id,
+                            progress: store.state.progress(for: record.commitment.id),
+                            reliability: store.state.reliability(now: store.now))
+                    }
                 }
                 .font(.system(size: 12))
                 .tint(Theme.muted)
@@ -179,11 +193,37 @@ struct OverrideMenu: View {
                 .tint(Theme.ink)
             }
 
-            Text("Accountability partners arrive with the backend; until then the "
-                 + "solo route is the only one that ends in an unlock.")
-                .font(.system(size: 11))
-                .foregroundStyle(Theme.muted.opacity(0.7))
+            partnerStatus
         }
+    }
+
+    /// What can honestly be said about the partners.
+    ///
+    /// Never "2 approvals received": while offline we do not know that, and
+    /// §11 is explicit that saying so would be a lie told by a progress bar.
+    /// What this device knows is whether anyone was asked, and whether a
+    /// grant it cannot yet check is sitting in the queue.
+    @ViewBuilder
+    private var partnerStatus: some View {
+        Group {
+            if let failure = account.requestFailure {
+                Text(failure)
+            } else if account.heldGrants > 0 {
+                Text("An approval arrived that this app cannot verify yet. "
+                     + "Retrying after the next key refresh.")
+            } else if let receipt = account.lastRequest, receipt.partnersNotified > 0 {
+                Text("Asked \(receipt.partnersNotified) "
+                     + "\(receipt.partnersNotified == 1 ? "partner" : "partners"). "
+                     + "Waiting to hear back.")
+            } else if account.hasAccountabilityRoute(for: record.commitment.id) {
+                Text("Waiting to hear back from your partners.")
+            } else {
+                Text("No accountability route on this commitment; "
+                     + "the solo route is the only one that ends in an unlock.")
+            }
+        }
+        .font(.system(size: 11))
+        .foregroundStyle(Theme.muted.opacity(0.7))
     }
 }
 

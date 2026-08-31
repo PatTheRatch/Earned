@@ -2,8 +2,8 @@ import AuthenticationServices
 import Combine
 import CryptoKit
 import Foundation
-import Security
 import EarnedKit
+import Security
 
 /// Sign in with Apple, and the sync of Contract Envelopes that depends on it.
 ///
@@ -33,16 +33,34 @@ final class AccountStore: ObservableObject {
     /// messages to this contact", "you have already invited this contact".
     /// Shown as written rather than flattened into a generic failure.
     @Published var partnerFailure: String?
+    /// Anything that stopped a grant being believed — a build with no trust
+    /// anchor, a signature that did not check out, a network that was not
+    /// there. Separate from `syncFailure` because the answers are different:
+    /// one means try again later, the other means something is wrong.
+    @Published private(set) var grantFailure: String?
+    /// Grants this device is keeping because it could not check them yet
+    /// (§11). Surfaced so "waiting to hear back" can be honest about the
+    /// difference between nobody answering and us not being able to tell.
+    @Published private(set) var heldGrants: Int = 0
+    /// The server's answer to the last override request, so the UI can say
+    /// how many people were actually asked rather than guessing from the
+    /// roster — a partner who has since revoked is on the roster and is not
+    /// asked.
+    @Published private(set) var lastRequest: OverrideRequestReceipt?
+    @Published private(set) var requestFailure: String?
 
     private let client: BackendClient?
     private let storage: EnvelopeRegistryStorage
+    private let grants: GrantStore
     private var currentNonce: String?
 
     private static let appleUserKey = "earned.appleUserID"
     private static let displayNameKey = "earned.displayName"
 
-    init(storage: EnvelopeRegistryStorage = .documents()) {
+    init(storage: EnvelopeRegistryStorage = .documents(),
+         grants: GrantStore = .documents()) {
         self.storage = storage
+        self.grants = grants
         self.registry = storage.load()
         let client = BackendClient()
         self.client = client
@@ -258,7 +276,121 @@ final class AccountStore: ObservableObject {
         }
     }
 
-    // MARK: -
+    /// Whether the server currently says this commitment has a working way
+    /// out through its partners. The server's answer, re-read on every sync —
+    /// a partner can revoke while Earned isn't running, and an app still
+    /// showing the answer it got at registration would be offering a route
+    /// that no longer exists.
+    func hasAccountabilityRoute(for commitmentID: UUID) -> Bool {
+        guard case .signedIn = session else { return false }
+        return registry[commitmentID]?.accountabilityAvailable == true
+    }
+
+    // MARK: - Asking the roster
+
+    /// Ask this commitment's partners to let the user out.
+    ///
+    /// Called *after* the local `overrideRequested` event, never instead of
+    /// it, and never conditional on this succeeding. The Solo Override's clock
+    /// starts on the local one and its availability depends on nothing we run
+    /// (§11, S8) — a user must never be trapped by our downtime, which is the
+    /// only defensible behaviour for a product that takes away access to
+    /// someone's phone.
+    ///
+    /// `requestID` is the ledger's own request id and is reused verbatim as
+    /// the server's `client_request_id`. That is what lets a grant find its
+    /// way back to the request it answers, and it is also the idempotency key
+    /// (§9.4): a retry after a lost response returns the same request rather
+    /// than messaging five people twice.
+    func requestOverride(requestID: UUID,
+                         commitmentID: UUID,
+                         progress: CommitmentProgress?,
+                         reliability: ReliabilityStats,
+                         reason: String? = nil) async {
+        guard let client, case .signedIn = session else { return }
+        guard registry[commitmentID]?.accountabilityAvailable == true else {
+            // No live route: not registered, registered late (S13), or the
+            // roster has fallen below the threshold that was agreed. Silent
+            // here because the UI already shows which routes exist — what it
+            // must not do is claim partners were asked when they were not.
+            return
+        }
+        let shown = progress.map(Self.forPartners) ?? (0, 0, "")
+        do {
+            let receipt = try await client.createOverrideRequest(
+                clientRequestID: requestID,
+                commitmentID: commitmentID,
+                progressAchieved: shown.achieved,
+                progressRequired: shown.required,
+                progressUnit: shown.unit,
+                reliability: (completed: reliability.completed,
+                              // The server wants "8 of 10". EarnedKit counts
+                              // outcomes rather than a total, so the total is
+                              // the outcomes that happened — a commitment
+                              // still live is not yet part of either number.
+                              of: reliability.completed + reliability.missedDeadlines,
+                              overrideRequests: reliability.overrideRequests,
+                              missed: reliability.missedDeadlines),
+                reason: reason)
+            lastRequest = receipt
+            requestFailure = nil
+        } catch {
+            requestFailure = error.localizedDescription
+        }
+    }
+
+    /// Progress as a partner should read it, not as the engine stores it.
+    ///
+    /// "1080 of 1800 seconds" is a number about our data model; "18 of 30
+    /// minutes" is the thing the partner is being asked to judge (§13). The
+    /// conversion is here rather than on the page because the page renders
+    /// whatever it is given and must not have to know our units.
+    private static func forPartners(_ progress: CommitmentProgress)
+        -> (achieved: Double, required: Double, unit: String) {
+        switch progress.unit {
+        case .workouts:
+            return (progress.achieved, progress.required, "workouts")
+        case .seconds:
+            return ((progress.achieved / 60).rounded(), (progress.required / 60).rounded(),
+                    "minutes")
+        case .meters:
+            guard progress.required >= 1000 else {
+                return (progress.achieved.rounded(), progress.required.rounded(), "metres")
+            }
+            return (((progress.achieved / 100).rounded() / 10),
+                    ((progress.required / 100).rounded() / 10), "km")
+        }
+    }
+
+    // MARK: - Grants
+
+    /// Ask what we have been granted, and check it.
+    ///
+    /// Returns the events to append rather than appending them: the ledger's
+    /// own rules decide whether a grant is still meaningful — the commitment
+    /// may have been finished while a partner was tapping approve (§12) — and
+    /// that decision belongs to EarnedKit, not to a networking type.
+    ///
+    /// A receipt is written only after the caller reports the ledger accepted
+    /// the event, so the audit trail never claims something the domain refused.
+    func syncGrants() async -> [GrantSync.Verified] {
+        guard let client, case .signedIn = session else { return [] }
+        // Only commitments whose terms this device actually knows. A grant is
+        // checked against the digest the server gave us when it acknowledged
+        // the contract; without it there is nothing to compare (§4.5).
+        let digests = registry.records.compactMapValues(\.policyDigest)
+
+        let outcome = await GrantSync(client: client, store: grants).run(policyDigests: digests)
+        heldGrants = outcome.held
+        grantFailure = outcome.failure ?? outcome.refused.first
+        return outcome.verified
+    }
+
+    /// Called back once the ledger has accepted a grant's event.
+    func recordReceipt(for verified: GrantSync.Verified) {
+        guard let client else { return }
+        grants.record(GrantSync(client: client, store: grants).receipt(for: verified))
+    }
 
     private static func randomNonce(length: Int = 32) -> String {
         let characters = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._")
