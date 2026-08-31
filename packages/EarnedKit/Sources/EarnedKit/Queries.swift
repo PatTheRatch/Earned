@@ -44,6 +44,24 @@ public struct GateWarning: Equatable, Sendable {
     public var headline: String
 }
 
+/// The two social streak figures (docs/social-architecture.md §8). Distinct
+/// concepts, deliberately never combined into one score.
+public struct SocialStreaks: Equatable, Sendable {
+    /// Consecutive streak-eligible commitments completed **on time**. Broken
+    /// by a late completion, a missed deadline, or a detected bypass — never
+    /// by an Override, and never reset by earning a reward.
+    public var commitmentsKept: Int
+    /// Commitments completed (on time or late) since the most recent Override
+    /// of any kind. Nil when no Override has ever been used — which renders
+    /// as "No Overrides yet", not as zero.
+    public var sinceLastOverride: Int?
+
+    public init(commitmentsKept: Int, sinceLastOverride: Int?) {
+        self.commitmentsKept = commitmentsKept
+        self.sinceLastOverride = sinceLastOverride
+    }
+}
+
 /// Reliability figures for accountability context (NORTHSTAR §24).
 public struct ReliabilityStats: Equatable, Sendable {
     public var completed: Int
@@ -252,6 +270,69 @@ extension EarnedState {
 
     /// Progress toward the next Free Override, for display.
     public func completionStreak(now: Date) -> Int { rewardStreak(at: now) }
+
+    // MARK: - Social streaks (docs/social-architecture.md §8)
+
+    /// The two numbers the social layer may present. Two, never one score:
+    /// an Override is a contract mechanism the user built in on purpose, so it
+    /// annotates the second figure without erasing the first.
+    ///
+    /// Deliberately not `rewardStreak`: that one resets when a Free Override
+    /// is *earned*, because the reward consumes it. "12 commitments kept" owes
+    /// nobody a reset for being rewarded.
+    public func socialStreaks(now: Date) -> SocialStreaks {
+        enum Outcome { case kept, broken, completion }
+        var timeline: [(Date, Outcome)] = []
+        var overrides: [Date] = []
+
+        for record in commitments.values where record.commitment.rewardEligible {
+            let deadline = record.commitment.deadline
+            switch record.resolution {
+            case .completed(let at) where at <= deadline:
+                timeline.append((at, .kept))
+            case .completed(let at):
+                // Late completion clears the debt and breaks the on-time
+                // streak — both facts are true, and both are recorded. The
+                // completion itself still counts toward "since last Override".
+                timeline.append((deadline, .broken))
+                timeline.append((at, .completion))
+            case .overridden(_, let at):
+                // Settled semantics: a legitimate Override does not
+                // automatically erase the commitment streak. The obligation
+                // was resolved through a route the contract contains, so the
+                // on-time count neither advances nor resets.
+                overrides.append(at)
+            case .cancelled:
+                continue
+            case nil:
+                if now > deadline { timeline.append((deadline, .broken)) }
+            }
+        }
+
+        // A bypass is not an Override (NORTHSTAR §33): it resolved nothing,
+        // and a streak is a claim about honouring commitments — so it breaks
+        // the kept count, and it never touches the override clock.
+        for bypass in enforcementBypasses {
+            timeline.append((bypass.detectedAt, .broken))
+        }
+
+        var kept = 0
+        for (at, outcome) in timeline.sorted(by: { $0.0 < $1.0 }) where at <= now {
+            switch outcome {
+            case .kept: kept += 1
+            case .broken: kept = 0
+            case .completion: break
+            }
+        }
+
+        guard let lastOverride = overrides.filter({ $0 <= now }).max() else {
+            return SocialStreaks(commitmentsKept: kept, sinceLastOverride: nil)
+        }
+        let since = timeline.filter {
+            $0.0 > lastOverride && $0.0 <= now && ($0.1 == .kept || $0.1 == .completion)
+        }.count
+        return SocialStreaks(commitmentsKept: kept, sinceLastOverride: since)
+    }
 
     // MARK: - Reliability (NORTHSTAR §24)
 
