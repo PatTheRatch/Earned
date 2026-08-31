@@ -2,12 +2,11 @@ import AuthenticationServices
 import SwiftUI
 import EarnedKit
 
-/// The Social tab: people, and — later — meaningful recent activity.
+/// The Social tab: a quiet accountability roster, not a feed (NORTHSTAR §45).
 ///
-/// Deliberately a printed roster, not a feed (NORTHSTAR §45). It holds the
-/// user's identity, their friends, and the requests in flight; the Recent
-/// area ships empty and honest until commitment sharing exists. Nothing here
-/// is required for Earned to work — the Gates neither know nor care.
+/// You, then anything waiting on you, then your people, then a bounded shelf
+/// of what they chose to share — and then it ends. Nothing here is required
+/// for Earned to work; the Gates neither know nor care.
 struct SocialView: View {
     @EnvironmentObject private var store: EarnedStore
     @EnvironmentObject private var account: AccountStore
@@ -21,18 +20,20 @@ struct SocialView: View {
             Group {
                 switch account.session {
                 case .notConfigured:
-                    explainer("No backend is configured for this build, so there is nobody to "
-                              + "connect to yet. Everything else works as normal.")
+                    intro(message: "No backend is configured for this build, so there is "
+                                 + "nobody to connect to yet. Everything else works as normal.")
                 case .signedOut, .failed:
                     signedOut
                 case .signingIn:
-                    ProgressView()
+                    PosterPage {
+                        PageHeader(title: "SOCIAL")
+                        ProgressView().padding(.top, Theme.blockSpacing)
+                    }
                 case .signedIn:
                     signedIn
                 }
             }
-            .background(Theme.paper)
-            .navigationTitle("Social")
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showingAdd) { AddFriendView() }
             .sheet(isPresented: $showingSetup) { ProfileSetupView() }
         }
@@ -46,41 +47,43 @@ struct SocialView: View {
 
     // MARK: - Pre-profile states
 
-    private func explainer(_ message: String) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            SectionLabel(text: "Social")
-            Text("Make a promise visible, and walking away from it starts to weigh something.")
-                .font(Theme.blocker())
+    private func intro(message: String) -> some View {
+        PosterPage {
+            PageHeader(title: "SOCIAL")
+            Text("Make a promise visible, and walking away from it starts to weigh "
+                 + "something.")
+                .font(Theme.blocker(17))
                 .foregroundStyle(Theme.ink)
-            Text(message).foregroundStyle(Theme.muted)
-            Spacer()
+                .padding(.top, Theme.blockSpacing)
+            Text(message)
+                .font(Theme.body).foregroundStyle(Theme.muted)
+                .padding(.top, 10)
         }
-        .padding(28)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var signedOut: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            SectionLabel(text: "Social")
-            Text("Make a promise visible, and walking away from it starts to weigh something.")
-                .font(Theme.blocker())
+        PosterPage {
+            PageHeader(title: "SOCIAL")
+            Text("Make a promise visible, and walking away from it starts to weigh "
+                 + "something.")
+                .font(Theme.blocker(17))
                 .foregroundStyle(Theme.ink)
-            Text("Friends are people you choose. They see what you choose to share — and "
-                 + "nothing gives anyone authority over your commitments. Sign in to set up "
-                 + "your profile.")
-                .foregroundStyle(Theme.muted)
+                .padding(.top, Theme.blockSpacing)
+            Text("Friends see what you choose to share — and nothing gives anyone "
+                 + "authority over your commitments. Sign in to set up your profile.")
+                .font(Theme.body).foregroundStyle(Theme.muted)
+                .padding(.top, 10)
             SignInWithAppleButton(.signIn,
                                   onRequest: account.prepareRequest,
                                   onCompletion: handleSignIn)
                 .signInWithAppleButtonStyle(.black)
                 .frame(height: 46)
+                .padding(.top, Theme.blockSpacing)
             if case .failed(let message) = account.session {
-                Text(message).font(.footnote).foregroundStyle(Theme.signal)
+                Text(message).font(Theme.footnote).foregroundStyle(Theme.signal)
+                    .padding(.top, 8)
             }
-            Spacer()
         }
-        .padding(28)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func handleSignIn(_ result: Result<ASAuthorization, Error>) {
@@ -95,267 +98,339 @@ struct SocialView: View {
     @ViewBuilder
     private var signedIn: some View {
         if social.needsSetup {
-            VStack(alignment: .leading, spacing: 16) {
-                SectionLabel(text: "Your profile")
-                Text("YOU NEED A NAME FIRST.")
-                    .font(Theme.display(34))
-                    .foregroundStyle(Theme.ink)
-                Text("A profile is a display name and a handle. A photo and a city are "
-                     + "optional. That's it — this is an identity card, not a questionnaire.")
-                    .foregroundStyle(Theme.muted)
+            PosterPage {
+                PageHeader(title: "SOCIAL")
+                EmptyState(title: "YOU NEED A NAME FIRST",
+                           message: "A profile is a display name and a handle. A photo and "
+                                    + "a city are optional — this is an identity card, not "
+                                    + "a questionnaire.")
+                    .padding(.top, Theme.blockSpacing)
                 Button("SET UP YOUR PROFILE") { showingSetup = true }
                     .buttonStyle(PosterButtonStyle())
-                Spacer()
+                    .padding(.top, 12)
             }
-            .padding(28)
-            .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            List {
-                myProfileSection
-                // Decisions someone is waiting on come before everything
-                // social: an override request has a clock on it.
-                if !account.pendingApprovals.isEmpty { approvalsSection }
-                if !account.partnerRequests.isEmpty { accountabilityRequestsSection }
-                if !social.requests.isEmpty { requestsSection }
-                friendsSection
-                recentSection
-            }
-            .paperList()
-            .refreshable {
-                await social.refreshProfile()
-                await social.refreshSocial()
-                await social.refreshActivity()
-            }
-            .toolbar {
+            roster
+        }
+    }
+
+    private var roster: some View {
+        PosterPage {
+            HStack(alignment: .top) {
+                PageHeader(title: "SOCIAL")
+                Spacer()
                 Button {
                     showingAdd = true
                 } label: {
-                    Label("Add friend", systemImage: "plus")
+                    Image(systemName: "plus")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(Theme.ink)
+                        .frame(width: 44, height: 44, alignment: .topTrailing)
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Add friend")
+                .padding(.top, 16)
             }
-            .overlay(alignment: .bottom) {
-                if let failure = social.failure {
-                    Text(failure)
-                        .font(.footnote).foregroundStyle(Theme.paper)
-                        .padding(10)
-                        .frame(maxWidth: .infinity)
-                        .background(Theme.signal)
-                }
+
+            youBlock
+
+            if !account.pendingApprovals.isEmpty { approvalsBlock }
+            if !account.partnerRequests.isEmpty { accountabilityBlock }
+            if !social.requests.isEmpty { requestsBlock }
+            peopleBlock
+            recentBlock
+
+            if let failure = social.failure {
+                Text(failure).font(Theme.footnote).foregroundStyle(Theme.signal)
+                    .padding(.top, 12)
             }
+        }
+        .refreshable {
+            await social.refreshProfile()
+            await social.refreshSocial()
+            await social.refreshActivity()
+            await account.refreshPartners()
         }
     }
 
+    // MARK: - You
+
     @ViewBuilder
-    private var myProfileSection: some View {
+    private var youBlock: some View {
         if let profile = social.profileState.profile {
             let streaks = store.ledger.state.socialStreaks(now: store.now)
-            Section {
-                NavigationLink {
-                    EditProfileView(profile: profile)
-                } label: {
+            NavigationLink {
+                EditProfileView(profile: profile)
+            } label: {
+                VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 14) {
                         AvatarView(avatarPath: profile.avatarPath,
-                                   displayName: profile.displayName, size: 52)
+                                   displayName: profile.displayName, size: 56)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(profile.displayName).font(Theme.blocker(17))
+                            Text(profile.displayName)
+                                .font(Theme.blocker(18)).foregroundStyle(Theme.ink)
                             Text("@\(profile.handle)")
-                                .font(.subheadline).foregroundStyle(Theme.muted)
+                                .font(Theme.footnote).foregroundStyle(Theme.muted)
                         }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Theme.muted)
                     }
-                    .padding(.vertical, 4)
+                    HStack(alignment: .top, spacing: Theme.blockSpacing) {
+                        Metric(value: "\(streaks.commitmentsKept) KEPT",
+                               caption: "in a row, on time", size: 26)
+                        Metric(value: streaks.sinceLastOverride.map { "\($0)" } ?? "—",
+                               caption: streaks.sinceLastOverride == nil
+                                        ? "no Overrides yet" : "since last Override",
+                               size: 26)
+                    }
+                    .padding(.top, 14)
+                    Text(profile.shareStreaks
+                         ? "Friends see these numbers."
+                         : "Only you see these numbers.")
+                        .font(Theme.footnote).foregroundStyle(Theme.muted)
+                        .padding(.top, 6)
                 }
-                // The two figures, straight off the ledger — literal wording,
-                // never a loaded label (docs/social-architecture.md §8).
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("\(streaks.commitmentsKept) COMMITMENT"
-                         + (streaks.commitmentsKept == 1 ? "" : "S") + " KEPT")
-                        .font(Theme.blocker(16))
-                        .foregroundStyle(Theme.ink)
-                    Text(streaks.sinceLastOverride.map { "\($0) since last Override" }
-                         ?? "No Overrides yet")
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.muted)
-                }
-                .padding(.vertical, 2)
-            } header: {
-                Text("My profile")
-            } footer: {
-                Text(profile.shareStreaks
-                     ? "Friends see these numbers."
-                     : "Only you see these numbers. Sharing them is a switch on your profile.")
+                .padding(.top, 18)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
         }
     }
+
+    // MARK: - Waiting on you
 
     /// Override requests waiting on this user, as someone's accountability
     /// partner — the in-app counterpart of the web approval page, rendering
-    /// the same frozen snapshot and casting the same vote.
-    private var approvalsSection: some View {
-        Section {
+    /// the same frozen snapshot and casting the same vote. Signal color,
+    /// because a clock is running on someone's phone.
+    private var approvalsBlock: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SectionLabel(text: "Approvals", color: Theme.signal)
+                .padding(.top, Theme.blockSpacing)
             ForEach(account.pendingApprovals) { approval in
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("\(approval.requesterName) is asking to be let out of a commitment.")
-                        .font(.headline)
-                    Text(approval.title).font(Theme.blocker(16))
-                    if let achieved = approval.progressAchieved,
-                       let required = approval.progressRequired, required > 0 {
-                        Text("Progress: \(Int(achieved)) of \(Int(required)) "
-                             + (approval.progressUnit ?? ""))
-                            .font(.footnote).foregroundStyle(Theme.muted)
-                    }
-                    if let completed = approval.reliabilityCompleted,
-                       let of = approval.reliabilityOf, of > 0 {
-                        Text("\(completed) of their last \(of) commitments completed "
-                             + "(as reported by their phone).")
-                            .font(.footnote).foregroundStyle(Theme.muted)
-                    }
-                    if let reason = approval.reason {
-                        Text("“\(reason)”").font(.footnote).foregroundStyle(Theme.ink)
-                    }
-                    HStack(spacing: 12) {
-                        Button("Approve") {
-                            Task { await account.castVote(on: approval, approve: true) }
+                VStack(alignment: .leading, spacing: 0) {
+                    ThickRule().padding(.top, 8)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("\(approval.requesterName) is asking to be let out of a "
+                             + "commitment.")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Theme.ink)
+                        Text(approval.title.uppercased())
+                            .font(Theme.blocker(17)).foregroundStyle(Theme.ink)
+                        if let achieved = approval.progressAchieved,
+                           let required = approval.progressRequired, required > 0 {
+                            Text("Progress: \(Int(achieved)) of \(Int(required)) "
+                                 + (approval.progressUnit ?? ""))
+                                .font(Theme.footnote).foregroundStyle(Theme.muted)
                         }
-                        .buttonStyle(.borderedProminent).tint(Theme.ink)
-                        Button("Deny") {
-                            Task { await account.castVote(on: approval, approve: false) }
+                        if let completed = approval.reliabilityCompleted,
+                           let of = approval.reliabilityOf, of > 0 {
+                            Text("\(completed) of their last \(of) commitments completed "
+                                 + "(as reported by their phone).")
+                                .font(Theme.footnote).foregroundStyle(Theme.muted)
                         }
-                        .buttonStyle(.bordered).tint(Theme.muted)
+                        if let reason = approval.reason {
+                            Text("“\(reason)”").font(Theme.footnote).foregroundStyle(Theme.ink)
+                        }
+                        HStack(spacing: 12) {
+                            Button("APPROVE") {
+                                Task { await account.castVote(on: approval, approve: true) }
+                            }
+                            .buttonStyle(UnderlineButtonStyle())
+                            Button("DENY") {
+                                Task { await account.castVote(on: approval, approve: false) }
+                            }
+                            .buttonStyle(UnderlineButtonStyle(color: Theme.muted))
+                        }
+                        .padding(.top, 4)
                     }
-                    .buttonStyle(.borderless)
+                    .padding(.vertical, 10)
                 }
-                .padding(.vertical, 4)
             }
-        } header: {
-            Text("Approvals")
-        } footer: {
-            Text("You're an accountability partner; this is the job. A denial is final for "
-                 + "your vote, not a veto — and doing nothing lets the request expire.")
         }
     }
 
     /// People who want this user as *their* accountability partner. Consent
     /// is explicit and in-app — friendship never implied it (invariant 24).
-    private var accountabilityRequestsSection: some View {
-        Section {
+    private var accountabilityBlock: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SectionLabel(text: "Accountability").padding(.top, Theme.blockSpacing)
             ForEach(account.partnerRequests) { request in
-                PartnerRequestRow(request: request)
+                VStack(alignment: .leading, spacing: 0) {
+                    ThickRule().padding(.top, 8)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("\(request.requesterDisplayName) wants you as an "
+                             + "accountability partner.")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Theme.ink)
+                        Text("@\(request.requesterHandle) may ask you to approve an "
+                             + "Override. Being friends does not give you this role — "
+                             + "saying yes here does.")
+                            .font(Theme.footnote).foregroundStyle(Theme.muted)
+                        HStack(spacing: 12) {
+                            Button("I'M IN") {
+                                Task { await account.respondToPartnerRequest(request,
+                                                                             accept: true) }
+                            }
+                            .buttonStyle(UnderlineButtonStyle())
+                            Button("NO THANKS") {
+                                Task { await account.respondToPartnerRequest(request,
+                                                                             accept: false) }
+                            }
+                            .buttonStyle(UnderlineButtonStyle(color: Theme.muted))
+                        }
+                        .padding(.top, 4)
+                    }
+                    .padding(.vertical, 10)
+                }
             }
-        } header: {
-            Text("Accountability")
         }
     }
 
-    private var requestsSection: some View {
-        Section {
+    private var requestsBlock: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SectionLabel(text: "Requests").padding(.top, Theme.blockSpacing)
             ForEach(social.requests.incoming) { person in
-                HStack(spacing: 12) {
-                    AvatarView(avatarPath: person.avatarPath,
-                               displayName: person.displayName, size: 36)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(person.displayName)
-                        Text("@\(person.handle)").font(.footnote).foregroundStyle(Theme.muted)
+                VStack(alignment: .leading, spacing: 0) {
+                    HairRule().padding(.top, 8)
+                    HStack(spacing: 12) {
+                        AvatarView(avatarPath: person.avatarPath,
+                                   displayName: person.displayName, size: 36)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(person.displayName)
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(Theme.ink)
+                            Text("@\(person.handle) wants to connect")
+                                .font(Theme.footnote).foregroundStyle(Theme.muted)
+                        }
+                        Spacer()
+                        Button("ACCEPT") {
+                            Task { await social.respond(handle: person.handle, accept: true) }
+                        }
+                        .buttonStyle(UnderlineButtonStyle())
+                        Button("DECLINE") {
+                            Task { await social.respond(handle: person.handle, accept: false) }
+                        }
+                        .buttonStyle(UnderlineButtonStyle(color: Theme.muted))
                     }
-                    Spacer()
-                    Button("Accept") {
-                        Task { await social.respond(handle: person.handle, accept: true) }
-                    }
-                    .buttonStyle(.borderedProminent).tint(Theme.ink)
-                    Button("Decline") {
-                        Task { await social.respond(handle: person.handle, accept: false) }
-                    }
-                    .buttonStyle(.bordered).tint(Theme.muted)
+                    .padding(.vertical, 10)
                 }
-                .buttonStyle(.borderless)  // keep row tap from swallowing both
             }
             ForEach(social.requests.outgoing) { person in
-                HStack(spacing: 12) {
-                    AvatarView(avatarPath: person.avatarPath,
-                               displayName: person.displayName, size: 36)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(person.displayName)
-                        Text("asked · waiting").font(.footnote).foregroundStyle(Theme.muted)
+                VStack(alignment: .leading, spacing: 0) {
+                    HairRule().padding(.top, 8)
+                    HStack(spacing: 12) {
+                        AvatarView(avatarPath: person.avatarPath,
+                                   displayName: person.displayName, size: 36)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(person.displayName)
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(Theme.ink)
+                            Text("asked · waiting")
+                                .font(Theme.footnote).foregroundStyle(Theme.muted)
+                        }
+                        Spacer()
+                        Button("CANCEL") {
+                            Task { await social.cancelRequest(handle: person.handle) }
+                        }
+                        .buttonStyle(UnderlineButtonStyle(color: Theme.muted))
                     }
-                    Spacer()
-                    Button("Cancel") {
-                        Task { await social.cancelRequest(handle: person.handle) }
-                    }
-                    .buttonStyle(.borderless).tint(Theme.muted)
+                    .padding(.vertical, 10)
                 }
             }
-        } header: {
-            Text("Requests")
         }
     }
 
-    private var friendsSection: some View {
-        Section {
+    // MARK: - People
+
+    private var peopleBlock: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SectionLabel(text: "People").padding(.top, Theme.blockSpacing)
             if social.friends.isEmpty {
-                Text("Nobody yet. A friend is someone who'll notice when you keep your word — "
-                     + "add one by their handle.")
-                    .foregroundStyle(Theme.muted)
+                EmptyState(title: "NO FRIENDS YET",
+                           message: "Add someone who'll notice when you keep your word.")
+                    .padding(.top, 8)
+                Button("+ ADD A FRIEND") { showingAdd = true }
+                    .buttonStyle(UnderlineButtonStyle())
             } else {
                 ForEach(social.friends) { person in
                     NavigationLink {
                         FriendProfileView(handle: person.handle)
                     } label: {
-                        HStack(spacing: 12) {
-                            AvatarView(avatarPath: person.avatarPath,
-                                       displayName: person.displayName, size: 36)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(person.displayName)
-                                HStack(spacing: 6) {
-                                    Text("@\(person.handle)")
-                                    if let city = person.city { Text("· \(city)") }
+                        VStack(alignment: .leading, spacing: 0) {
+                            HairRule().padding(.top, 8)
+                            HStack(spacing: 12) {
+                                AvatarView(avatarPath: person.avatarPath,
+                                           displayName: person.displayName, size: 40)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(person.displayName)
+                                        .font(.system(size: 15, weight: .medium))
+                                        .foregroundStyle(Theme.ink)
+                                    HStack(spacing: 6) {
+                                        Text("@\(person.handle)")
+                                        if let city = person.city { Text("· \(city)") }
+                                    }
+                                    .font(Theme.footnote).foregroundStyle(Theme.muted)
+                                    // A fact Earned observed, never a motive it
+                                    // guessed (invariant 27).
+                                    if let days = person.quietDays {
+                                        Text("Hasn't checked in · \(days) "
+                                             + "day\(days == 1 ? "" : "s")")
+                                            .font(Theme.footnote)
+                                            .foregroundStyle(Theme.muted)
+                                    }
                                 }
-                                .font(.footnote).foregroundStyle(Theme.muted)
-                                // A fact Earned observed, never a motive it
-                                // guessed (invariant 27).
-                                if let days = person.quietDays {
-                                    Text("Hasn't checked in · \(days) day\(days == 1 ? "" : "s")")
-                                        .font(.footnote)
-                                        .foregroundStyle(Theme.muted)
-                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(Theme.muted)
                             }
+                            .padding(.vertical, 10)
                         }
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                 }
             }
-        } header: {
-            Text("Friends")
         }
     }
+
+    // MARK: - Recent
 
     /// The shelf: friends' recent, meaningful events, as the server curates
     /// them — bounded, 30 days, and then it ends. An empty shelf says so
     /// rather than inventing anything (docs/social-architecture.md §9).
-    private var recentSection: some View {
-        Section {
+    private var recentBlock: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SectionLabel(text: "Recent").padding(.top, Theme.blockSpacing)
             if social.activity.isEmpty {
                 Text("Nothing yet. When friends share commitments, what they keep — and "
                      + "what they choose to tell — shows up here.")
-                    .font(.footnote)
-                    .foregroundStyle(Theme.muted)
+                    .font(Theme.footnote).foregroundStyle(Theme.muted)
+                    .padding(.top, 8)
             } else {
                 ForEach(social.activity) { event in
-                    HStack(alignment: .top, spacing: 12) {
-                        AvatarView(avatarPath: event.avatarPath,
-                                   displayName: event.displayName, size: 32)
-                        VStack(alignment: .leading, spacing: 2) {
-                            (Text(event.displayName).fontWeight(.semibold)
-                             + Text(" \(event.phrase)"))
-                                .font(.subheadline)
-                                .foregroundStyle(Theme.ink)
-                            Text(Format.relative(event.occurredAt, from: store.now))
-                                .font(.footnote)
-                                .foregroundStyle(Theme.muted)
+                    VStack(alignment: .leading, spacing: 0) {
+                        HairRule().padding(.top, 8)
+                        HStack(alignment: .top, spacing: 12) {
+                            AvatarView(avatarPath: event.avatarPath,
+                                       displayName: event.displayName, size: 32)
+                            VStack(alignment: .leading, spacing: 2) {
+                                (Text(event.displayName).fontWeight(.semibold)
+                                 + Text(" \(event.phrase)"))
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(Theme.ink)
+                                Text(Format.relative(event.occurredAt, from: store.now))
+                                    .font(Theme.footnote)
+                                    .foregroundStyle(Theme.muted)
+                            }
                         }
+                        .padding(.vertical, 8)
                     }
-                    .padding(.vertical, 2)
                 }
             }
-        } header: {
-            Text("Recent")
         }
     }
 }

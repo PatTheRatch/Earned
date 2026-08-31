@@ -16,11 +16,17 @@ struct TodayView: View {
                     SectionLabel(text: "Earned", color: Theme.ink)
                         .padding(.top, 12)
 
+                    // The two-second answer. CLEAR. is the day's state;
+                    // EARNED. stays the brand's word for the unlock moment
+                    // itself, so the masthead never reads "EARNED / EARNED."
                     Button { showingLockScreen = true } label: {
-                        StateWord(word: store.isRestricted ? "LOCKED" : "EARNED")
+                        StateWord(word: store.isRestricted ? "LOCKED" : "CLEAR")
                     }
                     .buttonStyle(.plain)
                     .padding(.top, 2)
+                    .accessibilityLabel(store.isRestricted
+                                        ? "Locked. Show what is owed."
+                                        : "Clear. Every gate satisfied.")
 
                     if store.shielding != .approved {
                         EnforcementNotice(owing: !store.unenforceableGates.isEmpty)
@@ -58,20 +64,8 @@ struct TodayView: View {
                             Button("I DRANK SOME WATER") { store.acknowledgeWater() }
                                 .buttonStyle(PosterButtonStyle())
                         }
-                        Button {
-                            showingNewCommitment = true
-                        } label: {
-                            Text("+ NEW COMMITMENT")
-                                .font(.system(size: 13, weight: .bold))
-                                .tracking(1.5)
-                                .foregroundStyle(Theme.ink)
-                                .padding(.bottom, 2)
-                                .overlay(alignment: .bottom) {
-                                    Rectangle().fill(Theme.ink).frame(height: 2)
-                                }
-                        }
-                        .buttonStyle(.plain)
-                        .frame(minHeight: 44)
+                        Button("+ MAKE A COMMITMENT") { showingNewCommitment = true }
+                            .buttonStyle(UnderlineButtonStyle())
                     }
                     .padding(.top, 28)
                 }
@@ -172,27 +166,8 @@ struct TodayView: View {
     }
 
     private func row(label: String, line: Text, context: String? = nil) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ThickRule()
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 5) {
-                    SectionLabel(text: label)
-                    line.font(Theme.blocker())
-                    if let context {
-                        Text(context)
-                            .font(.system(size: 12))
-                            .foregroundStyle(Theme.muted)
-                    }
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Theme.muted)
-                    .padding(.top, 6)
-            }
-            .padding(.vertical, 14)
-        }
-        .contentShape(Rectangle())
+        PosterRow(label: label, line: { line.font(Theme.blocker()) },
+                  context: context, chevron: true)
     }
 
     private func dayLabel(_ date: Date) -> String {

@@ -1,62 +1,260 @@
 import SwiftUI
 import UIKit
+import AuthenticationServices
 import FamilyControls
 import EarnedKit
 
-/// Gate configuration and system controls (NORTHSTAR §30).
-struct SettingsView: View {
+/// You: identity first, then clear destinations. Configuration recedes into
+/// screens of its own — the app is a living system, not a control panel
+/// (docs/design-language.md v2). Every group here is a human job, not a
+/// database noun.
+struct YouView: View {
     @EnvironmentObject private var store: EarnedStore
-    @State private var showingWorkoutSheet = false
+    @EnvironmentObject private var account: AccountStore
+    @EnvironmentObject private var social: SocialStore
 
     var body: some View {
         NavigationStack {
-            List {
-                AccountSection()
-                hydrationSection
-                warningsSection
-                rewardsSection
-                restrictedSection
-                plansSection
-                testingSection
-                aboutSection
+            PosterPage {
+                PageHeader(title: "YOU")
+                identity
+                destinations
             }
-            .paperList()
-            .navigationTitle("Settings")
+            .toolbar(.hidden, for: .navigationBar)
             .rejectionAlert()
-            .sheet(isPresented: $showingWorkoutSheet) { LogWorkoutView() }
         }
     }
 
-    // MARK: - Hydration
+    // MARK: - Identity
 
     @ViewBuilder
-    private var hydrationSection: some View {
-        Section {
-            if let config = store.state.hydration {
-                Toggle("Hydration Gate", isOn: Binding(
-                    get: { config.enabled },
-                    set: { enabled in
-                        var updated = config
-                        updated.enabled = enabled
-                        store.configureHydration(updated)
-                    }))
+    private var identity: some View {
+        switch account.session {
+        case .notConfigured:
+            Text("No backend is configured for this build. Everything local works as normal.")
+                .font(Theme.body).foregroundStyle(Theme.muted)
+                .padding(.top, 16)
 
-                Stepper("Every \(Int(config.interval / 60)) min",
-                        onIncrement: { adjustInterval(config, by: 15) },
-                        onDecrement: { adjustInterval(config, by: -15) })
-
-                LabeledContent("Active hours",
-                               value: "\(Format.timeOfDay(config.activeHours.startMinuteOfDay)) – "
-                                    + "\(Format.timeOfDay(config.activeHours.endMinuteOfDay))")
-            } else {
-                Text("Not configured").foregroundStyle(.secondary)
+        case .signedOut, .failed:
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Sign in to use accountability partners and the social layer. "
+                     + "Everything else already works.")
+                    .font(Theme.body).foregroundStyle(Theme.muted)
+                SignInWithAppleButton(.signIn,
+                                      onRequest: account.prepareRequest,
+                                      onCompletion: { account.completeSignIn($0) })
+                    .signInWithAppleButtonStyle(.black)
+                    .frame(height: 46)
+                if case .failed(let message) = account.session {
+                    Text(message).font(Theme.footnote).foregroundStyle(Theme.signal)
+                }
             }
-        } header: {
-            Text("Hydration")
-        } footer: {
-            Text("Loosening this — a longer interval, narrower hours, turning it off — is only "
-                 + "allowed while the Gate is satisfied. Tightening is always allowed.")
+            .padding(.top, 16)
+
+        case .signingIn:
+            HStack(spacing: 10) { ProgressView(); Text("Signing in…") }
+                .padding(.top, 16)
+
+        case .signedIn(let name):
+            HStack(spacing: 14) {
+                AvatarView(avatarPath: social.profileState.profile?.avatarPath,
+                           displayName: social.profileState.profile?.displayName ?? name,
+                           size: 56)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(social.profileState.profile?.displayName ?? name)
+                        .font(Theme.blocker(18))
+                        .foregroundStyle(Theme.ink)
+                    if let profile = social.profileState.profile {
+                        Text("@\(profile.handle)")
+                            .font(Theme.footnote).foregroundStyle(Theme.muted)
+                    }
+                }
+            }
+            .padding(.top, 16)
         }
+    }
+
+    // MARK: - Destinations
+
+    @ViewBuilder
+    private var destinations: some View {
+        if case .signedIn = account.session {
+            SectionLabel(text: "You").padding(.top, Theme.blockSpacing)
+            Group {
+                if let profile = social.profileState.profile {
+                    NavigationLink { EditProfileView(profile: profile) } label: {
+                        DestinationRow(title: "Profile", detail: "@\(profile.handle)")
+                    }
+                } else if social.needsSetup {
+                    NavigationLink { ProfileSetupView() } label: {
+                        DestinationRow(title: "Set up your profile")
+                    }
+                }
+                NavigationLink { PartnersView() } label: {
+                    DestinationRow(title: "Accountability partners",
+                                   detail: partnerSummary,
+                                   detailColor: account.partnerRequests.isEmpty
+                                       ? Theme.muted : Theme.ink)
+                }
+                NavigationLink { AccountDetailView() } label: {
+                    DestinationRow(title: "Account")
+                }
+            }
+            .buttonStyle(.plain)
+        }
+
+        SectionLabel(text: "Gates").padding(.top, Theme.blockSpacing)
+        Group {
+            NavigationLink { HydrationSettingsView() } label: {
+                DestinationRow(title: "Hydration", detail: hydrationSummary)
+            }
+            NavigationLink { RestrictionsHomeView() } label: {
+                DestinationRow(title: "Restrictions",
+                               detail: restrictionsSummary,
+                               detailColor: store.shielding == .denied
+                                   ? Theme.signal : Theme.muted)
+            }
+            if !store.activePlans.isEmpty {
+                NavigationLink { PlansSettingsView() } label: {
+                    DestinationRow(title: "Repeating plans",
+                                   detail: "\(store.activePlans.count)")
+                }
+            }
+        }
+        .buttonStyle(.plain)
+
+        SectionLabel(text: "Escapes").padding(.top, Theme.blockSpacing)
+        NavigationLink { RewardSettingsView() } label: {
+            DestinationRow(title: "Free Overrides",
+                           detail: store.freeOverrides > 0
+                               ? "\(store.freeOverrides) banked" : nil)
+        }
+        .buttonStyle(.plain)
+
+        SectionLabel(text: "System").padding(.top, Theme.blockSpacing)
+        Group {
+            NavigationLink { WarningSettingsView() } label: {
+                DestinationRow(title: "Warnings", detail: warningsSummary,
+                               detailColor: store.warningDelivery == .denied
+                                   ? Theme.signal : Theme.muted)
+            }
+            NavigationLink { AdvancedView() } label: {
+                DestinationRow(title: "Advanced")
+            }
+        }
+        .buttonStyle(.plain)
+        HairRule()
+    }
+
+    private var partnerSummary: String {
+        if !account.partnerRequests.isEmpty {
+            return "\(account.partnerRequests.count) waiting on you"
+        }
+        let active = account.eligiblePartners.count
+        return active == 0 ? "None yet" : "\(active) active"
+    }
+
+    private var hydrationSummary: String {
+        guard let config = store.state.hydration, config.enabled else { return "Off" }
+        return "Every \(Int(config.interval / 60)) min"
+    }
+
+    private var restrictionsSummary: String {
+        if store.shielding == .denied { return "Screen Time off" }
+        let count = store.effectiveRestrictions.count
+        return count == 0 ? "Nothing blocked now" : "\(count) blocked now"
+    }
+
+    private var warningsSummary: String {
+        switch store.warningDelivery {
+        case .granted: return "On"
+        case .notDetermined: return "Will ask"
+        case .denied: return "Notifications off"
+        }
+    }
+}
+
+// MARK: - Account
+
+/// The account itself: what the server holds, and the way out.
+struct AccountDetailView: View {
+    @EnvironmentObject private var store: EarnedStore
+    @EnvironmentObject private var account: AccountStore
+
+    var body: some View {
+        List {
+            Section {
+                if case .signedIn(let name) = account.session {
+                    LabeledContent("Signed in", value: name)
+                }
+                registrationSummary
+            } header: {
+                Text("Account")
+            } footer: {
+                Text("Earned registers only a commitment's terms — what's due, when it "
+                     + "hardens, how many approvals. Never your workouts, never which "
+                     + "apps you block.")
+            }
+            if let failure = account.syncFailure {
+                Section { Text(failure).font(.footnote).foregroundStyle(Theme.signal) }
+            }
+            Section {
+                Button("Sign out", role: .destructive) { account.signOut() }
+            }
+        }
+        .paperList()
+        .navigationTitle("Account")
+    }
+
+    @ViewBuilder
+    private var registrationSummary: some View {
+        let live = store.allCommitments.filter { $0.resolution == nil }
+        let states = live.map { account.registration(of: $0.commitment) }
+        let registered = states.filter { $0 == .registered }.count
+        let late = states.filter { $0 == .late }.count
+
+        LabeledContent("Commitments registered", value: "\(registered) of \(states.count)")
+        if late > 0 {
+            Text("\(late) registered too late to use accountability partners. "
+                 + "The Solo Override still works for those.")
+                .font(.footnote).foregroundStyle(Theme.signal)
+        }
+    }
+}
+
+// MARK: - Hydration
+
+struct HydrationSettingsView: View {
+    @EnvironmentObject private var store: EarnedStore
+
+    var body: some View {
+        List {
+            Section {
+                if let config = store.state.hydration {
+                    Toggle("Hydration Gate", isOn: Binding(
+                        get: { config.enabled },
+                        set: { enabled in
+                            var updated = config
+                            updated.enabled = enabled
+                            store.configureHydration(updated)
+                        }))
+                    Stepper("Every \(Int(config.interval / 60)) min",
+                            onIncrement: { adjustInterval(config, by: 15) },
+                            onDecrement: { adjustInterval(config, by: -15) })
+                    LabeledContent("Active hours",
+                                   value: "\(Format.timeOfDay(config.activeHours.startMinuteOfDay)) – "
+                                        + "\(Format.timeOfDay(config.activeHours.endMinuteOfDay))")
+                } else {
+                    Text("Not configured").foregroundStyle(.secondary)
+                }
+            } footer: {
+                Text("Loosening this is only allowed while the Gate is satisfied. "
+                     + "Tightening is always allowed.")
+            }
+        }
+        .paperList()
+        .navigationTitle("Hydration")
+        .rejectionAlert()
     }
 
     private func adjustInterval(_ config: HydrationConfig, by minutes: Double) {
@@ -64,66 +262,64 @@ struct SettingsView: View {
         updated.interval = max(15 * 60, config.interval + minutes * 60)
         store.configureHydration(updated)
     }
+}
 
-    // MARK: - Warnings
+// MARK: - Warnings
 
-    /// Warnings are the one part of Earned that depends on a permission the
-    /// user can revoke elsewhere. Say so plainly rather than letting a
-    /// configured warning quietly never arrive.
-    @ViewBuilder
-    private var warningsSection: some View {
-        Section {
-            switch store.warningDelivery {
-            case .granted:
-                LabeledContent("Notifications", value: "On")
-                LabeledContent("Scheduled", value: "\(store.scheduledWarningCount)")
-            case .notDetermined:
-                Text("Earned will ask for permission the first time a warning is due.")
-                    .foregroundStyle(.secondary)
-            case .denied:
-                Text("Notifications are off, so no warning will arrive.")
-                    .foregroundStyle(Theme.signal)
-                Button("Open iOS Settings") { openSystemSettings() }
+struct WarningSettingsView: View {
+    @EnvironmentObject private var store: EarnedStore
+
+    var body: some View {
+        List {
+            Section {
+                switch store.warningDelivery {
+                case .granted:
+                    LabeledContent("Notifications", value: "On")
+                    LabeledContent("Scheduled", value: "\(store.scheduledWarningCount)")
+                case .notDetermined:
+                    Text("Earned will ask for permission the first time a warning is due.")
+                        .foregroundStyle(.secondary)
+                case .denied:
+                    Text("Notifications are off, so no warning will arrive.")
+                        .foregroundStyle(Theme.signal)
+                    Button("Open iOS Settings") { openSystemSettings() }
+                }
+            } footer: {
+                Text("A warning is information only — it never delays a deadline. "
+                     + "Turning notifications off makes Earned quieter, not more forgiving.")
             }
-        } header: {
-            Text("Warnings")
-        } footer: {
-            Text("A warning says a Gate is about to close. It is information only — it never "
-                 + "delays the deadline, and there is nothing to tap to buy more time. "
-                 + "Turning notifications off makes Earned quieter, not more forgiving.")
         }
+        .paperList()
+        .navigationTitle("Warnings")
     }
+}
 
-    private func openSystemSettings() {
-        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-        UIApplication.shared.open(url)
-    }
+// MARK: - Free Overrides
 
-    // MARK: - Rewards
+struct RewardSettingsView: View {
+    @EnvironmentObject private var store: EarnedStore
 
-    private var rewardsSection: some View {
-        Section {
-            let policy = store.state.rewardPolicy
-            Stepper("Earn one per \(policy.streakThreshold) completions",
-                    onIncrement: { updateRewards(streak: policy.streakThreshold + 1) },
-                    onDecrement: { updateRewards(streak: max(1, policy.streakThreshold - 1)) })
-            Stepper("Store at most \(policy.maxStored)",
-                    onIncrement: { updateRewards(maxStored: policy.maxStored + 1) },
-                    onDecrement: { updateRewards(maxStored: max(0, policy.maxStored - 1)) })
-            LabeledContent("Available now", value: "\(store.freeOverrides)")
-            LabeledContent("Eligible commitments", value: "\(eligibleCommitmentCount)")
-        } header: {
-            Text("Free Overrides")
-        } footer: {
-            Text("These numbers set the shared earning mechanics — how large a streak earns one, "
-                 + "and how many can be banked. Which commitments count toward that streak is "
-                 + "chosen per commitment, when you create it (not all commitments need to be "
-                 + "able to earn one) — Patrick's Hydration Gate, for instance, never has.")
+    var body: some View {
+        List {
+            Section {
+                let policy = store.state.rewardPolicy
+                Stepper("Earn one per \(policy.streakThreshold) completions",
+                        onIncrement: { updateRewards(streak: policy.streakThreshold + 1) },
+                        onDecrement: { updateRewards(streak: max(1, policy.streakThreshold - 1)) })
+                Stepper("Store at most \(policy.maxStored)",
+                        onIncrement: { updateRewards(maxStored: policy.maxStored + 1) },
+                        onDecrement: { updateRewards(maxStored: max(0, policy.maxStored - 1)) })
+                LabeledContent("Available now", value: "\(store.freeOverrides)")
+            } footer: {
+                Text("Which commitments count toward the streak is chosen per commitment, "
+                     + "at creation. Easing these rules needs Full Access and nothing "
+                     + "hardened outstanding — an easier reward policy is itself an escape "
+                     + "route.")
+            }
         }
-    }
-
-    private var eligibleCommitmentCount: Int {
-        store.allCommitments.filter { $0.commitment.rewardEligible }.count
+        .paperList()
+        .navigationTitle("Free Overrides")
+        .rejectionAlert()
     }
 
     private func updateRewards(streak: Int? = nil, maxStored: Int? = nil) {
@@ -131,108 +327,144 @@ struct SettingsView: View {
         store.configureRewards(RewardPolicy(streakThreshold: streak ?? current.streakThreshold,
                                             maxStored: maxStored ?? current.maxStored))
     }
+}
 
-    // MARK: - Restricted apps
+// MARK: - Plans
 
-    private var restrictedSection: some View {
-        Section {
-            NavigationLink {
-                GateRestrictionsView(gate: .hydration, title: "Hydration Gate")
-            } label: {
-                LabeledContent("Hydration Gate",
-                               value: "\(store.state.restrictions(of: .hydration).count) blocked")
-            }
-            NavigationLink {
-                DefaultRestrictionsView()
-            } label: {
-                LabeledContent("New commitments",
-                               value: "\(store.state.defaultCommitmentRestrictions.count) blocked")
-            }
-            LabeledContent("Blocked right now", value: "\(store.effectiveRestrictions.count)")
-            switch store.shielding {
-            case .approved:
-                LabeledContent("Enforcement", value: "On")
-            case .notDetermined:
-                Button("Grant Screen Time access") {
-                    Task { await store.requestShieldingAuthorization() }
-                }
-            case .denied:
-                Text("Screen Time is off — nothing is actually being blocked.")
-                    .foregroundStyle(Theme.signal)
-                Button("Open iOS Settings") { openSystemSettings() }
-            }
-            if let failure = store.shieldingFailure {
-                Text(failure).font(.footnote).foregroundStyle(Theme.signal)
-            }
-        } header: {
-            Text("Restrictions")
-        } footer: {
-            Text("Each Gate takes away its own things. What's actually blocked at any moment is "
-                 + "the union across every Gate that's currently unsatisfied — so an unmet "
-                 + "Hydration Gate can be far more severe than an unmet workout. Each "
-                 + "commitment's own profile lives on that commitment.\n\nWithout Screen Time "
-                 + "access Earned still tracks every Gate and tells you what would be locked — "
-                 + "it just can't take anything away.")
-        }
-    }
+struct PlansSettingsView: View {
+    @EnvironmentObject private var store: EarnedStore
 
-    // MARK: - Testing
-
-    private var plansSection: some View {
-        Section {
-            if store.activePlans.isEmpty {
-                Text("No repeating plans").foregroundStyle(.secondary)
-            }
-            ForEach(store.activePlans, id: \.plan.id) { record in
-                NavigationLink {
-                    PlanDetailView(planID: record.plan.id)
-                } label: {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(record.plan.title).font(.subheadline.weight(.medium))
-                        Text("\(Format.weekdays(record.plan.weekdays)) · "
-                             + "\(store.state.occurrences(ofPlan: record.plan.id).count) commitments")
-                            .font(.caption).foregroundStyle(.secondary)
+    var body: some View {
+        List {
+            Section {
+                ForEach(store.activePlans, id: \.plan.id) { record in
+                    NavigationLink {
+                        PlanDetailView(planID: record.plan.id)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(record.plan.title).font(.subheadline.weight(.medium))
+                            Text("\(Format.weekdays(record.plan.weekdays)) · "
+                                 + "\(store.state.occurrences(ofPlan: record.plan.id).count) commitments")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                 }
+                .onDelete { offsets in
+                    for index in offsets { store.cancelPlan(store.activePlans[index].plan.id) }
+                }
+            } footer: {
+                Text("A plan hardens as one thing shortly after you make it. Cancelling "
+                     + "withdraws the days that haven't started; days underway stand.")
             }
-            .onDelete { offsets in
-                for index in offsets { store.cancelPlan(store.activePlans[index].plan.id) }
+        }
+        .paperList()
+        .navigationTitle("Repeating plans")
+        .rejectionAlert()
+    }
+}
+
+// MARK: - Restrictions
+
+struct RestrictionsHomeView: View {
+    @EnvironmentObject private var store: EarnedStore
+
+    var body: some View {
+        List {
+            Section {
+                NavigationLink {
+                    GateRestrictionsView(gate: .hydration, title: "Hydration Gate")
+                } label: {
+                    LabeledContent("Hydration Gate",
+                                   value: "\(store.state.restrictions(of: .hydration).count) blocked")
+                }
+                NavigationLink {
+                    DefaultRestrictionsView()
+                } label: {
+                    LabeledContent("New commitments",
+                                   value: "\(store.state.defaultCommitmentRestrictions.count) blocked")
+                }
+                LabeledContent("Blocked right now", value: "\(store.effectiveRestrictions.count)")
+            } footer: {
+                Text("Each Gate takes away its own things; what's blocked at any moment is "
+                     + "the union across every unsatisfied Gate. Each commitment's own "
+                     + "profile lives on that commitment.")
             }
-        } header: {
-            Text("Repeating plans")
-        } footer: {
-            Text("A plan is one commitment to the whole schedule, so it hardens as one thing "
-                 + "shortly after you make it. Cancelling withdraws the days that haven't "
-                 + "started yet; days already underway stand on their own.")
-        }
-    }
 
-    private var testingSection: some View {
-        Section {
-            Button("Log a workout by hand") { showingWorkoutSheet = true }
-        } header: {
-            Text("Testing")
-        } footer: {
-            Text("Until Apple Health verification lands, this stands in for a real workout so the "
-                 + "loop can be exercised end to end.")
+            Section {
+                switch store.shielding {
+                case .approved:
+                    LabeledContent("Enforcement", value: "On")
+                case .notDetermined:
+                    Button("Grant Screen Time access") {
+                        Task { await store.requestShieldingAuthorization() }
+                    }
+                case .denied:
+                    Text("Screen Time is off — nothing is actually being blocked.")
+                        .foregroundStyle(Theme.signal)
+                    Button("Open iOS Settings") { openSystemSettings() }
+                }
+                if let failure = store.shieldingFailure {
+                    Text(failure).font(.footnote).foregroundStyle(Theme.signal)
+                }
+            } header: {
+                Text("Screen Time")
+            } footer: {
+                Text("Without Screen Time access Earned still tracks every Gate — "
+                     + "it just can't take anything away.")
+            }
         }
+        .paperList()
+        .navigationTitle("Restrictions")
+        .rejectionAlert()
     }
+}
 
-    private var aboutSection: some View {
-        Section("About") {
-            LabeledContent("Events recorded", value: "\(store.ledger.entries.count)")
-            LabeledContent("Commitments", value: "\(store.state.commitments.count)")
-            LabeledContent("Workouts", value: "\(store.state.workouts.count)")
+// MARK: - Advanced
+
+/// Diagnostics, and — in development builds only — the testing tools.
+/// Production never ships a "Testing" section (docs/design-language.md v2).
+struct AdvancedView: View {
+    @EnvironmentObject private var store: EarnedStore
+    #if DEBUG
+    @State private var showingWorkoutSheet = false
+    #endif
+
+    var body: some View {
+        List {
+            Section("Diagnostics") {
+                LabeledContent("Events recorded", value: "\(store.ledger.entries.count)")
+                LabeledContent("Commitments", value: "\(store.state.commitments.count)")
+                LabeledContent("Workouts", value: "\(store.state.workouts.count)")
+            }
+            #if DEBUG
+            Section {
+                Button("Log a workout by hand") { showingWorkoutSheet = true }
+            } header: {
+                Text("Testing (debug builds only)")
+            } footer: {
+                Text("Logged by hand counts as your word: it moves honor-system "
+                     + "commitments fully and app-verified ones not at all.")
+            }
+            #endif
         }
+        .paperList()
+        .navigationTitle("Advanced")
+        #if DEBUG
+        .sheet(isPresented: $showingWorkoutSheet) { LogWorkoutView() }
+        .rejectionAlert()
+        #endif
     }
+}
+
+func openSystemSettings() {
+    guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+    UIApplication.shared.open(url)
 }
 
 /// Editing one Gate's own restriction profile, using Apple's system picker.
 ///
 /// The picker runs in a separate process and hands back opaque tokens: Earned
-/// learns *that* something is blocked, never *what*. That is the Screen Time
-/// privacy guarantee, and it is why this screen can only ever say "3 apps"
-/// rather than naming them (NORTHSTAR §34).
+/// learns *that* something is blocked, never *what* (NORTHSTAR §34).
 struct GateRestrictionsView: View {
     @EnvironmentObject private var store: EarnedStore
     let gate: GateID
@@ -322,10 +554,7 @@ private struct RestrictionEditor: View {
                         HStack {
                             Text(token.rawValue).foregroundStyle(Theme.muted)
                             Spacer()
-                            Text("NOT BLOCKING")
-                                .font(.system(size: 10, weight: .bold))
-                                .tracking(1.5)
-                                .foregroundStyle(Theme.signal)
+                            StatusTag(text: "NOT BLOCKING", color: Theme.signal)
                         }
                     }
                     .onDelete { offsets in
@@ -334,8 +563,7 @@ private struct RestrictionEditor: View {
                 } header: {
                     Text("Typed before app picking existed")
                 } footer: {
-                    Text("These were placeholders and never blocked anything. They are kept "
-                         + "because they record what you said you wanted blocked — pick the "
+                    Text("These were placeholders and never blocked anything. Pick the "
                          + "real apps above, then delete these.")
                 }
             }
@@ -348,11 +576,6 @@ private struct RestrictionEditor: View {
             // Commit when the picker closes, not on every tap inside it.
             if wasPicking && !isPicking { commit(selection) }
         }
-    }
-
-    private func openSystemSettings() {
-        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-        UIApplication.shared.open(url)
     }
 
     private func beginPicking() {
@@ -368,17 +591,10 @@ private struct RestrictionEditor: View {
     }
 }
 
-/// Manual workout entry — the honor system's front door, now that HealthKit
-/// imports the vouched-for kind on its own.
-///
-/// Everything logged here is `.selfReported` evidence by definition: it moves
-/// honor-system commitments fully and app-verified ones not at all (NORTHSTAR
-/// §15). The form says so rather than letting someone discover it at the
-/// deadline.
-///
-/// Stays open across entries — backfilling usually means several sessions at
-/// once (a missed week, say), not one workout per visit to this screen. Each
-/// record resets the inputs and adds to a running list rather than dismissing.
+#if DEBUG
+/// Manual workout entry — debug builds only. Everything logged here is
+/// `.selfReported` evidence: it moves honor-system commitments fully and
+/// app-verified ones not at all (NORTHSTAR §15).
 private struct LogWorkoutView: View {
     @EnvironmentObject private var store: EarnedStore
     @Environment(\.dismiss) private var dismiss
@@ -474,3 +690,4 @@ private struct LogWorkoutView: View {
         endedMinutesAgo = 0
     }
 }
+#endif

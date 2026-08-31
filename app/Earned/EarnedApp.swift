@@ -127,18 +127,37 @@ struct MainTabView: View {
     @EnvironmentObject private var account: AccountStore
     @EnvironmentObject private var social: SocialStore
 
+    private enum Tab: String { case today, progress, social, you }
+    @State private var selection: Tab = {
+        #if DEBUG
+        // Dev-only: `simctl launch … -earnedTab progress` opens on a given
+        // tab, so screens can be captured headlessly. Never in release.
+        if let index = ProcessInfo.processInfo.arguments.firstIndex(of: "-earnedTab"),
+           index + 1 < ProcessInfo.processInfo.arguments.count,
+           let tab = Tab(rawValue: ProcessInfo.processInfo.arguments[index + 1]) {
+            return tab
+        }
+        #endif
+        return .today
+    }()
+
     var body: some View {
-        // Today stays the launch tab and the center of gravity; Social sits
-        // between History and Settings and is never the default (NORTHSTAR §45).
-        TabView {
+        // Four human jobs, not four database nouns: what do I owe, is it
+        // working, who can see me, who am I. Today stays the launch tab and
+        // the center of gravity (NORTHSTAR §45, docs/design-language.md v2).
+        TabView(selection: $selection) {
             TodayView()
                 .tabItem { Label("Today", systemImage: "checkmark.circle") }
-            HistoryView()
-                .tabItem { Label("History", systemImage: "calendar") }
+                .tag(Tab.today)
+            ProgressScreen()
+                .tabItem { Label("Progress", systemImage: "chart.line.uptrend.xyaxis") }
+                .tag(Tab.progress)
             SocialView()
                 .tabItem { Label("Social", systemImage: "person.2") }
-            SettingsView()
-                .tabItem { Label("Settings", systemImage: "gearshape") }
+                .tag(Tab.social)
+            YouView()
+                .tabItem { Label("You", systemImage: "person.crop.square") }
+                .tag(Tab.you)
         }
         // Offered once, right after a sign-in that found no profile — and only
         // offered: dismissing it costs nothing, and the Social tab repeats the
