@@ -1,10 +1,14 @@
 # Strava
 
-**Status: proposed, not built.** Nothing in this document exists in the repository.
+**Status: tabled, 31 Aug 2026.** Nothing in this document exists in the repository, and
+nothing is planned. Apple Health already covers the sources that matter (§1) and is built;
+Strava would be the harder path to a benefit the easier one mostly already delivers.
 
-Written because the question came up while testing, and because the obvious reason to do
-it turns out to be the wrong one. The interesting reason is real, and it is not the one
-most people would give.
+Kept rather than deleted because the analysis is the useful part, and because the one thing
+Strava *would* buy — server-authoritative completion (§2) — is still the largest honest gap
+in the product. When that gap becomes the thing worth closing, this is where the work
+starts: answer **T2**, then **T1** (§9), and the rest follows. Until then it is not an open
+question, and reopening it should require a reason that §1 does not already answer.
 
 ---
 
