@@ -427,6 +427,7 @@ Against the north star's MVP list (§35):
 | Guided onboarding, Today, lock explanation, history | Done |
 | Per-Gate warnings before a deadline (§20) | Done |
 | Apple Health workout verification | Done — with per-commitment verification tiers (§15) |
+| Direct Strava integration | Proposed, not recommended yet — see [`strava.md`](strava.md) |
 
 **The Developer Program enrollment landed, and enforcement went in with it.** Earned now
 takes apps away rather than describing what it would take away. What remains:

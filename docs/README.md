@@ -14,6 +14,11 @@ The two root documents outrank everything here: [NORTHSTAR.md](../NORTHSTAR.md) 
   palette, type, and the voice-restraint rules.
 - [`earnedkit-semantics.md`](earnedkit-semantics.md) — the rules the engine had to decide
   that the north star leaves open.
+- [`strava.md`](strava.md) — whether to integrate Strava, and how. **Proposed, not built**,
+  and the recommendation is *not yet*: the coverage argument is weak (almost every device
+  already reaches Apple Health, which Earned reads today), while the real prize —
+  server-authoritative completion, the largest honest gap left — is gated on two questions
+  a person has to answer first.
 - [`accountability-architecture.md`](accountability-architecture.md) — the design and threat
   model for networked Accountability Overrides, including the Contract Envelope that makes
   the server authoritative for a hardened commitment's accountability terms. **Proposed, not
