@@ -22,16 +22,15 @@ enum TrustAnchor {
     ///
     ///     openssl pkey -in root.pem -pubout -outform DER | tail -c 32 | openssl base64 -A
     ///
-    /// **Empty until a root key exists** (docs/deployment.md §5.3), and empty
-    /// means every grant is refused. That is the correct failure: an app that
-    /// trusts nothing still works — commitments, hardening, restrictions and
-    /// the Solo Override are all local and owe our servers nothing (§11, S8) —
-    /// whereas an app that trusts anything is worse than one with no
-    /// accountability route at all.
+    /// Empty would mean every grant is refused, which is the correct failure
+    /// for a build with no anchor: an app that trusts nothing still works —
+    /// commitments, hardening, restrictions and the Solo Override are all
+    /// local and owe our servers nothing (§11, S8) — whereas an app that
+    /// trusts anything is worse than one with no accountability route at all.
     ///
     /// Replacing this is an app release, deliberately. There is no in-band
     /// recovery from a compromised root key and never should be (§10.4).
-    static let rootPublicKeyBase64 = ""
+    static let rootPublicKeyBase64 = "B34GQSHMiPqHbYeA2eOMklYXKnKfykttSQ1Z0Sr+ADU="
 
     static var rootPublicKey: Data { Data(base64Encoded: rootPublicKeyBase64) ?? Data() }
 
