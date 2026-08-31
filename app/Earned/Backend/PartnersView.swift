@@ -20,6 +20,19 @@ struct PartnersView: View {
                 }
             }
 
+            if !account.partnerRequests.isEmpty {
+                Section {
+                    ForEach(account.partnerRequests) { request in
+                        PartnerRequestRow(request: request)
+                    }
+                } header: {
+                    Text("They're asking you")
+                } footer: {
+                    Text("These people want you as their accountability partner — able to "
+                         + "approve an Override when they ask. Nothing happens until you answer.")
+                }
+            }
+
             ForEach(Partner.State.allDisplayed, id: \.self) { state in
                 let group = account.partners.filter { $0.state == state }
                 if !group.isEmpty {
@@ -34,11 +47,11 @@ struct PartnersView: View {
             }
 
             Section {
-                Button("Invite someone") { showingAdd = true }
+                Button("Add accountability partner") { showingAdd = true }
             } footer: {
-                Text("Earned sends the invitation itself. The link never passes through your "
-                     + "phone — if it did, you could accept on their behalf, and the whole "
-                     + "thing would be for show.")
+                Text("A friend on Earned can be asked in-app. Anyone else gets one message "
+                     + "with a link — Earned sends it itself, so the link never passes "
+                     + "through your phone.")
             }
 
             if let failure = account.partnerFailure {
@@ -47,9 +60,39 @@ struct PartnersView: View {
         }
         .paperList()
         .navigationTitle("Partners")
-        .sheet(isPresented: $showingAdd) { InvitePartnerView() }
+        .sheet(isPresented: $showingAdd) { AddPartnerPickerView() }
         .task { await account.refreshPartners() }
         .refreshable { await account.refreshPartners() }
+    }
+}
+
+/// An incoming ask, answerable here as well as on the Social tab — consent is
+/// the whole decision, so it lives wherever the person is.
+struct PartnerRequestRow: View {
+    @EnvironmentObject private var account: AccountStore
+    let request: PartnerRequest
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("\(request.requesterDisplayName) wants you as an accountability partner.")
+                .font(.headline)
+            Text("@\(request.requesterHandle) may ask you to approve an Override on a "
+                 + "commitment. Being friends does not give you this role automatically — "
+                 + "saying yes here does.")
+                .font(.footnote).foregroundStyle(Theme.muted)
+            HStack(spacing: 12) {
+                Button("I'm in") {
+                    Task { await account.respondToPartnerRequest(request, accept: true) }
+                }
+                .buttonStyle(.borderedProminent).tint(Theme.ink)
+                Button("No thanks") {
+                    Task { await account.respondToPartnerRequest(request, accept: false) }
+                }
+                .buttonStyle(.bordered).tint(Theme.muted)
+            }
+            .buttonStyle(.borderless)
+        }
+        .padding(.vertical, 2)
     }
 }
 
@@ -67,7 +110,10 @@ private struct PartnerRow: View {
                     .tracking(1.2)
                     .foregroundStyle(partner.state == .active ? Theme.ink : Theme.muted)
             }
-            Text(partner.channel.label).font(.footnote).foregroundStyle(Theme.muted)
+            Text(partner.kind == .earnedUser
+                 ? "Earned user" + (partner.handle.map { " · @\($0)" } ?? "")
+                 : partner.channel.label)
+                .font(.footnote).foregroundStyle(Theme.muted)
 
             HStack(spacing: 16) {
                 if partner.canResend {
@@ -85,6 +131,116 @@ private struct PartnerRow: View {
             }
         }
         .padding(.vertical, 2)
+    }
+}
+
+/// The two first-class ways in: a friend on Earned, asked in-app by their
+/// authenticated identity — no number, no address — or anyone else, invited
+/// by one message with a secure link. Both end at the same place: an explicit
+/// yes, and only then a partner (invariant 22).
+///
+/// Deliberately not a search box: Social owns friend discovery, and the
+/// candidate pool here is exactly the accepted friends it already produced.
+struct AddPartnerPickerView: View {
+    @EnvironmentObject private var account: AccountStore
+    @EnvironmentObject private var social: SocialStore
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var showingExternal = false
+    @State private var confirming: SocialPerson?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    if social.profileState.profile == nil {
+                        Text("Set up your profile on the Social tab to ask friends in-app. "
+                             + "Anyone can still be invited by text or email below.")
+                            .foregroundStyle(Theme.muted)
+                    } else if social.friends.isEmpty {
+                        Text("No friends on Earned yet. Add some from the Social tab — or "
+                             + "invite anyone by text or email below.")
+                            .foregroundStyle(Theme.muted)
+                    } else {
+                        ForEach(social.friends) { friend in
+                            friendRow(friend)
+                        }
+                    }
+                } header: {
+                    Text("People you know on Earned")
+                } footer: {
+                    Text("Asked in-app, by who they are — no phone number, no email. "
+                         + "Being friends doesn't give anyone this authority; accepting does.")
+                }
+
+                Section {
+                    Button("Invite by text or email") { showingExternal = true }
+                } header: {
+                    Text("Someone else")
+                } footer: {
+                    Text("They don't need an Earned account or the app — they can consent "
+                         + "and approve from the web.")
+                }
+
+                if let failure = account.partnerFailure {
+                    Section { Text(failure).foregroundStyle(Theme.signal) }
+                }
+            }
+            .paperList()
+            .navigationTitle("Add partner")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .sheet(isPresented: $showingExternal) { InvitePartnerView() }
+            .confirmationDialog(
+                "Make \(confirming?.displayName ?? "this friend") an accountability partner?",
+                isPresented: Binding(get: { confirming != nil },
+                                     set: { if !$0 { confirming = nil } }),
+                titleVisibility: .visible
+            ) {
+                Button("Send request") {
+                    if let friend = confirming {
+                        Task { await account.nominateEarnedPartner(handle: friend.handle) }
+                    }
+                    confirming = nil
+                }
+            } message: {
+                Text("\(confirming?.displayName ?? "They") will be able to approve "
+                     + "Accountability Overrides when you ask. Being friends does not give "
+                     + "them this authority automatically.")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func friendRow(_ friend: SocialPerson) -> some View {
+        HStack(spacing: 12) {
+            AvatarView(avatarPath: friend.avatarPath,
+                       displayName: friend.displayName, size: 36)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(friend.displayName)
+                Text("@\(friend.handle) · Friend")
+                    .font(.footnote).foregroundStyle(Theme.muted)
+            }
+            Spacer()
+            switch account.earnedPartnerState(handle: friend.handle) {
+            case .active:
+                Text("PARTNER ✓")
+                    .font(.system(size: 11, weight: .bold)).tracking(1.2)
+                    .foregroundStyle(Theme.ink)
+            case .invited:
+                Text("REQUEST SENT")
+                    .font(.system(size: 11, weight: .bold)).tracking(1.2)
+                    .foregroundStyle(Theme.muted)
+            default:
+                // Never asked, declined, or revoked: a fresh ask is on offer.
+                Button("Ask") { confirming = friend }
+                    .buttonStyle(.borderedProminent).tint(Theme.ink)
+            }
+        }
+        .buttonStyle(.borderless)
     }
 }
 

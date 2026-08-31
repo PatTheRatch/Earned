@@ -29,6 +29,10 @@ final class AccountStore: ObservableObject {
     /// per-commitment. Cleared by the next successful pass.
     @Published private(set) var syncFailure: String?
     @Published private(set) var partners: [Partner] = []
+    /// Incoming asks: people who want this user as *their* partner.
+    @Published private(set) var partnerRequests: [PartnerRequest] = []
+    /// Override requests waiting on this user's decision, as an earned partner.
+    @Published private(set) var pendingApprovals: [PendingApproval] = []
     /// The server's own words when it refuses a nomination — "Earned can't send
     /// messages to this contact", "you have already invited this contact".
     /// Shown as written rather than flattened into a generic failure.
@@ -147,10 +151,57 @@ final class AccountStore: ObservableObject {
     /// reason a name is missing from the picker is visible rather than puzzling.
     var awaitingConsent: [Partner] { partners.filter { $0.state == .invited } }
 
+    /// Where a friend stands as an accountability partner, by handle. Nil
+    /// means no relationship has ever been asked for — the friend-picker's
+    /// "ask" state. This is the earned-partner lookup, and it works because
+    /// `my_partners()` carries the live handle for earned rows.
+    func earnedPartnerState(handle: String) -> Partner.State? {
+        partners.first { $0.kind == .earnedUser && $0.handle == handle }?.state
+    }
+
     func refreshPartners() async {
         guard let client, case .signedIn = session else { return }
-        do { partners = try await client.loadPartners() }
+        do {
+            partners = try await client.loadPartners()
+            // The two things other people may be waiting on this user for:
+            // asks to *be* a partner, and override approvals to decide.
+            partnerRequests = try await client.loadPartnerRequests()
+            pendingApprovals = try await client.loadPendingApprovals()
+        }
         catch { partnerFailure = error.localizedDescription }
+    }
+
+    /// Ask an accepted friend to be an accountability partner. Friendship is
+    /// the channel the ask travels through; it is never the consent
+    /// (invariant 24) — the friend answers in-app, or the ask stays pending.
+    func nominateEarnedPartner(handle: String) async {
+        guard let client, case .signedIn = session else { return }
+        partnerFailure = nil
+        do {
+            try await client.nominateEarnedPartner(handle: handle)
+            await refreshPartners()
+        } catch { partnerFailure = error.localizedDescription }
+    }
+
+    func respondToPartnerRequest(_ request: PartnerRequest, accept: Bool) async {
+        guard let client, case .signedIn = session else { return }
+        partnerFailure = nil
+        do {
+            try await client.respondToPartnerRequest(id: request.id, accept: accept)
+            partnerRequests.removeAll { $0.id == request.id }
+        } catch { partnerFailure = error.localizedDescription }
+    }
+
+    /// Decide someone else's override request, as their earned partner. The
+    /// same vote the web page casts, with the session as the credential.
+    func castVote(on approval: PendingApproval, approve: Bool) async {
+        guard let client, case .signedIn = session else { return }
+        partnerFailure = nil
+        do {
+            try await client.castOverrideVote(recipientID: approval.recipientID,
+                                              approve: approve)
+            pendingApprovals.removeAll { $0.recipientID == approval.recipientID }
+        } catch { partnerFailure = error.localizedDescription }
     }
 
     func nominatePartner(displayName: String, channel: Partner.Channel, contact: String) async {

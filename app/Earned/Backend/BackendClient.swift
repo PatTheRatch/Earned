@@ -145,14 +145,47 @@ actor BackendClient {
         _ = try await rpc("revoke_partner", ["p_partner_id": partnerID.uuidString])
     }
 
-    /// Reads the partner list from the table directly — the one place the app
-    /// has any table access at all, and it is SELECT-only on its own rows.
+    /// The partner list, through `my_partners()` since 0019: same fields the
+    /// old table read carried, plus the kind and — for earned partners — the
+    /// partner's live handle, which the table alone could not say without
+    /// exposing account ids.
     func loadPartners() async throws -> [Partner] {
-        guard accessToken != nil else { throw Failure.notSignedIn }
-        let query = "/rest/v1/partner?select=id,display_name,channel,status,consent_asked_at,"
-            + "consented_at,consent_resent_at&order=created_at.asc"
-        let rows: [[String: Any]] = try await get(path: query)
-        return rows.compactMap(Partner.init(row:))
+        (try await rpcValue("my_partners", [:]) as? [[String: Any]] ?? [])
+            .compactMap(Partner.init(row:))
+    }
+
+    /// Nominate an accepted friend as an accountability partner, by handle.
+    /// No contact address exists anywhere in this path; the ask is delivered
+    /// in-app and the consent credential is the friend's own session.
+    func nominateEarnedPartner(handle: String) async throws {
+        _ = try await rpc("nominate_earned_partner", ["p_handle": handle])
+    }
+
+    /// Nominations waiting on the current user — people who want *them* as a
+    /// partner.
+    func loadPartnerRequests() async throws -> [PartnerRequest] {
+        (try await rpcValue("my_partner_requests", [:]) as? [[String: Any]] ?? [])
+            .compactMap(PartnerRequest.init(json:))
+    }
+
+    func respondToPartnerRequest(id: UUID, accept: Bool) async throws {
+        _ = try await rpc("respond_to_partner_request",
+                          ["p_id": id.uuidString, "p_accept": accept])
+    }
+
+    /// Override approvals waiting on the current user as an earned partner —
+    /// the in-app counterpart of the web approval page, same snapshot.
+    func loadPendingApprovals() async throws -> [PendingApproval] {
+        (try await rpcValue("my_pending_approvals", [:]) as? [[String: Any]] ?? [])
+            .compactMap(PendingApproval.init(json:))
+    }
+
+    /// Vote on an override request as an earned partner. The session is the
+    /// credential; the recipient id alone is worthless in anyone else's hands.
+    func castOverrideVote(recipientID: UUID, approve: Bool) async throws {
+        _ = try await rpc("cast_override_vote_in_app",
+                          ["p_recipient_id": recipientID.uuidString,
+                           "p_vote": approve ? "approve" : "deny"])
     }
 
     // MARK: - Social: profile

@@ -5,6 +5,7 @@ import SwiftUI
 /// not choose to share.
 struct FriendProfileView: View {
     @EnvironmentObject private var social: SocialStore
+    @EnvironmentObject private var account: AccountStore
     @Environment(\.dismiss) private var dismiss
 
     let handle: String
@@ -13,6 +14,7 @@ struct FriendProfileView: View {
     @State private var loaded = false
     @State private var confirmingRemove = false
     @State private var confirmingBlock = false
+    @State private var confirmingNomination = false
 
     var body: some View {
         Group {
@@ -90,6 +92,8 @@ struct FriendProfileView: View {
                 .padding(.vertical, 8)
             }
 
+            accountabilitySection(profile)
+
             actions(profile)
         }
         .paperList()
@@ -104,6 +108,51 @@ struct FriendProfileView: View {
         case .pendingOutgoing: return "Asked · waiting"
         case .blocked: return "Blocked"
         case .none: return "Not connected"
+        }
+    }
+
+    /// Where this friend stands on the *other* axis. Friendship gives social
+    /// visibility; this block is about override authority, granted only by
+    /// their explicit yes (invariant 24) — so an ordinary friend is never
+    /// labelled a partner here, only offered as one.
+    @ViewBuilder
+    private func accountabilitySection(_ profile: PublicProfile) -> some View {
+        if profile.relationship == .friend {
+            Section {
+                switch account.earnedPartnerState(handle: profile.handle) {
+                case .active:
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("ACCOUNTABILITY PARTNER ✓").font(Theme.blocker(15))
+                        Text("Can approve your Overrides.")
+                            .font(.footnote).foregroundStyle(Theme.muted)
+                    }
+                case .invited:
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("REQUEST SENT").font(Theme.blocker(15))
+                        Text("\(profile.displayName) hasn't accepted yet.")
+                            .font(.footnote).foregroundStyle(Theme.muted)
+                    }
+                default:
+                    Button("Make accountability partner") { confirmingNomination = true }
+                        .confirmationDialog(
+                            "Make \(profile.displayName) an accountability partner?",
+                            isPresented: $confirmingNomination,
+                            titleVisibility: .visible
+                        ) {
+                            Button("Send request") {
+                                Task {
+                                    await account.nominateEarnedPartner(handle: profile.handle)
+                                }
+                            }
+                        } message: {
+                            Text("\(profile.displayName) will be able to approve "
+                                 + "Accountability Overrides when you ask. Being friends "
+                                 + "does not give them this authority automatically.")
+                        }
+                }
+            } header: {
+                Text("Accountability")
+            }
         }
     }
 

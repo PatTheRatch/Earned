@@ -40,6 +40,7 @@ struct SocialView: View {
             await social.refreshProfile()
             await social.refreshSocial()
             await social.refreshActivity()
+            await account.refreshPartners()
         }
     }
 
@@ -111,6 +112,10 @@ struct SocialView: View {
         } else {
             List {
                 myProfileSection
+                // Decisions someone is waiting on come before everything
+                // social: an override request has a clock on it.
+                if !account.pendingApprovals.isEmpty { approvalsSection }
+                if !account.partnerRequests.isEmpty { accountabilityRequestsSection }
                 if !social.requests.isEmpty { requestsSection }
                 friendsSection
                 recentSection
@@ -179,6 +184,65 @@ struct SocialView: View {
                      ? "Friends see these numbers."
                      : "Only you see these numbers. Sharing them is a switch on your profile.")
             }
+        }
+    }
+
+    /// Override requests waiting on this user, as someone's accountability
+    /// partner — the in-app counterpart of the web approval page, rendering
+    /// the same frozen snapshot and casting the same vote.
+    private var approvalsSection: some View {
+        Section {
+            ForEach(account.pendingApprovals) { approval in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("\(approval.requesterName) is asking to be let out of a commitment.")
+                        .font(.headline)
+                    Text(approval.title).font(Theme.blocker(16))
+                    if let achieved = approval.progressAchieved,
+                       let required = approval.progressRequired, required > 0 {
+                        Text("Progress: \(Int(achieved)) of \(Int(required)) "
+                             + (approval.progressUnit ?? ""))
+                            .font(.footnote).foregroundStyle(Theme.muted)
+                    }
+                    if let completed = approval.reliabilityCompleted,
+                       let of = approval.reliabilityOf, of > 0 {
+                        Text("\(completed) of their last \(of) commitments completed "
+                             + "(as reported by their phone).")
+                            .font(.footnote).foregroundStyle(Theme.muted)
+                    }
+                    if let reason = approval.reason {
+                        Text("“\(reason)”").font(.footnote).foregroundStyle(Theme.ink)
+                    }
+                    HStack(spacing: 12) {
+                        Button("Approve") {
+                            Task { await account.castVote(on: approval, approve: true) }
+                        }
+                        .buttonStyle(.borderedProminent).tint(Theme.ink)
+                        Button("Deny") {
+                            Task { await account.castVote(on: approval, approve: false) }
+                        }
+                        .buttonStyle(.bordered).tint(Theme.muted)
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .padding(.vertical, 4)
+            }
+        } header: {
+            Text("Approvals")
+        } footer: {
+            Text("You're an accountability partner; this is the job. A denial is final for "
+                 + "your vote, not a veto — and doing nothing lets the request expire.")
+        }
+    }
+
+    /// People who want this user as *their* accountability partner. Consent
+    /// is explicit and in-app — friendship never implied it (invariant 24).
+    private var accountabilityRequestsSection: some View {
+        Section {
+            ForEach(account.partnerRequests) { request in
+                PartnerRequestRow(request: request)
+            }
+        } header: {
+            Text("Accountability")
         }
     }
 
