@@ -1,6 +1,8 @@
 # Social Accountability — Architecture
 
-v0.1 · August 2026 · Milestone S1 built; everything past S1 is design, not code.
+v0.2 · August 2026 · Milestones S1 (profiles, friends, Social tab) and S2 (commitment
+sharing, the activity shelf, streak presentation) are built; everything past them is
+design, not code.
 
 The product intent lives in NORTHSTAR §45. This document is the working design: the
 relationship model, the profile/identity model, the privacy rules, the storage design, and
@@ -297,14 +299,14 @@ the field colour — the poster identity degrades to typography, not to a broken
 
 ### 7.1 Settings, designed now
 
-| Setting | Default | S1 |
+| Setting | Default | Status |
 |---|---|---|
-| Profile discoverability (`discoverable`) | on | **built** (column + enforcement; UI in profile editing) |
-| Default commitment visibility | **Private** | designed only — no sharing pipeline exists to apply it to |
-| Share streaks | off | designed only |
-| Share Override usage | off | designed only |
+| Profile discoverability (`discoverable`) | on | **built** (S1; UI in profile editing) |
+| Commitment visibility | **Private** | **built** (S2): per-commitment Private/Friends, chosen at creation or on the commitment, changeable any time in either direction — visibility is a privacy choice, not a contract term, and monotonicity never governs it |
+| Share streaks (`share_streaks`) | off | **built** (S2): off deletes the stored figures and their milestone events |
+| Share Override usage (`share_override_usage`) | off | **built** (S2): off stores and tells an Override as a quiet 'ended'; turning it off withdraws existing `override_used` events and quiets existing states |
 | Share inactivity / last-check-in | off | designed only |
-| Share missed commitments | off | designed only |
+| Share missed commitments | off | designed only — an overdue shared commitment simply stays 'open' in friends' view |
 
 Sharing is **chosen, never assumed**: every one of these defaults to the private side. A
 future "share my exercise commitments with friends by default" is an explicit choice a
@@ -316,9 +318,11 @@ user makes in settings, never a launch default.
   friendship or blocking removes friend-gated visibility immediately.
 - Privacy changes affect **future visibility honestly**: nothing is manufactured to
   cover a gap, and nothing already withdrawn is kept alive "because a friend once saw
-  it". When shared activity events exist (S2), an event whose owner withdraws sharing is
-  withdrawn with it, and events expire on a short fixed horizon (design target: 30 days)
-  rather than accumulating into a permanent timeline.
+  it". Built as designed (0016/0017): unsharing a commitment deletes it and every event
+  it generated; turning a sharing switch off withdraws server-side what it was sharing;
+  and events live behind a **30-day horizon** — `friend_activity` refuses to read past
+  it and `purge_social_events` deletes behind the same number, so the shelf cannot
+  quietly become a timeline.
 - Declined/cancelled requests keep no long-term record; removed friendships and unblocks
   delete their row outright.
 
@@ -336,9 +340,12 @@ every result, not just its row count.
 
 ---
 
-## 8. Streaks (semantics settled, not built)
+## 8. Streaks (built in S2, to the settled semantics)
 
-*Settled by Patrick, August 2026, ahead of S2 implementation.*
+*Semantics settled by Patrick, August 2026; implemented the same week.
+`EarnedState.socialStreaks(now:)` computes the figures from the ledger,
+`SocialStreakTests` holds the semantics below, and `social_streaks` (0017) carries them
+to friends only while `share_streaks` is on.*
 
 Two distinct concepts, deliberately not one gamified score, and no XP behind either:
 
@@ -370,42 +377,58 @@ language:
 6 since last Override         No Overrides this week
 ```
 
-What remains for S2 is presentation and plumbing, not semantics. Friends are never ranked
-by either number.
+Presentation, as built: the Social tab shows the owner their own two figures straight off
+the ledger (with a footer saying who else sees them), and a friend's profile shows theirs
+only while they share them. Milestone events fire when the kept count *rises onto* 5, 10,
+25, 50, 100 or 250 — once, however often the same figures are republished. Friends are
+never ranked by either number.
 
 ---
 
-## 9. Meaningful social events (designed, not built — S2)
+## 9. Meaningful social events (built in S2)
 
-The Recent area of the Social screen will carry a **bounded, recent** set of events, not a
-timeline. Candidate events, all gated on the owner's sharing choices:
+The Recent area carries a **bounded, recent** set of events, not a timeline: 30-day
+horizon, capped at 50, then it ends. The events that exist, all gated on the owner's
+sharing choices (`social_event`, 0016):
 
-- shared commitment created / completed on time / completed late
-- streak milestone
-- Override used (only if the owner shares Override activity; never the private reason text)
-- enforcement-integrity lapse (only under explicit sharing rules)
-- a friend has not checked in for a meaningful period (§10)
+- `commitment_shared` — a commitment shared while still open. One shared *after* it
+  resolved emits only its outcome, never a retroactive "committed".
+- `commitment_kept` / `commitment_kept_late` — the outcome of a shared commitment. Late
+  is stated as late; a kept promise is a kept promise either way.
+- `override_used` — only while the owner shares Override usage; never the private reason
+  text. With sharing off, the commitment quietly becomes `ended` and no event says more.
+- `streak_milestone` — the kept count rising onto a milestone, while streaks are shared.
+
+Every transition emits **at most one event**, and republishing the same state emits
+nothing — the app publishes on every foreground and the server is idempotent about it.
+The pipeline: the client's `SharingRegistry` records the choice, `publish_shared_commitment`
+distributes the story, and the ledger remains the only place the truth lives (§3).
+
+Designed but not built: enforcement-integrity-lapse events (needs its own sharing rule)
+and hasn't-checked-in events (§10, needs check-in sharing first).
 
 Explicitly never events: hydration acknowledgements, app opens, or anything at
-per-interaction granularity. A shared commitment exposes at most: title/requirement,
-deadline, completion state, on-time-ness, optionally progress, and Override usage if
-elected — never restricted-app selections, raw HealthKit data, unrelated commitments, or
+per-interaction granularity. A shared commitment exposes exactly: title (neutralised like
+every user text), deadline, state, and resolution time — never restricted-app selections,
+raw HealthKit data, progress (deferred as designed-optional), unrelated commitments, or
 hydration.
 
 Reactions (👏 🫡 👀 😂 — a small fixed set, no counts-as-status) may come later. **No
 comments** in the initial social design; there is nothing to moderate on a screen with no
 text entry.
 
-In S1 the Recent area ships as an honest empty state. It fabricates nothing.
+### S2 → S3 boundary
 
-### S1 → S2 boundary
+S2 shipped: per-commitment visibility (default Private; one-off commitments choose at
+creation, any commitment on its detail screen), the event backend with its retention
+window, the Recent shelf rendering real events, and streak presentation to the settled
+semantics. Plan occurrences are shareable individually from their detail screens; a
+whole-plan sharing choice at creation is deliberately deferred — twelve
+`commitment_shared` events in one tap is a feed, not a promise.
 
-S2, the intended next milestone, is: commitment-visibility choice at creation (default
-Private), the activity-event backend with its retention window, the Recent area rendering
-real events, streak presentation, and opt-in check-in sharing. Not in S2 either:
-push notifications for friends, reactions, comments, invite links (unless pulled in),
-leaderboards (never), XP (never), contact imports (never), follow model (never), public
-web profiles.
+Next (S3, not started): opt-in check-in sharing and the hasn't-checked-in surface (§10),
+possibly invite links and reactions. Still never: push notifications for friends,
+comments, leaderboards, XP, contact imports, follow model, public web profiles.
 
 ---
 
@@ -451,14 +474,17 @@ caller from the JWT, `anon` gets nothing. Reads that need cross-account shaping
 (search, friend profiles) go through functions too, so field exposure is decided in
 exactly one reviewed place per query rather than by policy arithmetic.
 
-Migrations: `0013_profiles.sql`, `0014_friendship.sql`, `0015_avatar_storage.sql` —
-appended after the existing 0001–0012, which are never rewritten. The storage migration
-guards on the `storage` schema existing so the plain-Postgres CI layout still applies
-cleanly; the visibility *rule* is a public function tested without Supabase.
+Migrations: `0013_profiles.sql`, `0014_friendship.sql`, `0015_avatar_storage.sql` (S1),
+`0016_commitment_sharing.sql`, `0017_streaks_and_activity.sql` (S2) — appended after the
+existing 0001–0012, which are never rewritten. The storage migration guards on the
+`storage` schema existing so the plain-Postgres CI layout still applies cleanly; the
+visibility *rule* is a public function tested without Supabase.
 
-Tests: `backend/tests/110_profiles.sql`, `120_friendship.sql`, `130_avatars.sql`, run by
-the same `run.sh` in both layouts. What they must cover is listed in the S1 task and
-mirrored in the files themselves — profile mutation isolation, case-insensitive handle
-uniqueness, malformed/reserved handles, block non-discoverability through every endpoint,
-idempotent and crossed requests, search field shape, removal revoking access, anon getting
-nothing, and no identifier leaks.
+Tests: `backend/tests/110_profiles.sql`, `120_friendship.sql`, `130_avatars.sql`,
+`140_sharing_and_activity.sql`, run by the same `run.sh` in both layouts. What they must
+cover is listed in the milestone tasks and mirrored in the files themselves — profile
+mutation isolation, case-insensitive handle uniqueness, malformed/reserved handles, block
+non-discoverability through every endpoint, idempotent and crossed requests, search and
+event field shape, removal revoking access, publish idempotency, the Override-sharing
+switch quieting states and withdrawing events, unshare withdrawing everything, the 30-day
+horizon on both read and purge, anon getting nothing, and no identifier leaks.

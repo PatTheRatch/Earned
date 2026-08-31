@@ -26,6 +26,7 @@ The two root documents outrank everything here: [NORTHSTAR.md](../NORTHSTAR.md) 
   (§21.2), with only its retention/legal half still under privacy review — and §20 lists
   the launch gates still to clear.
 - [`social-architecture.md`](social-architecture.md) — the Social Accountability layer
-  (NORTHSTAR §45): profiles, friendships, avatars, the privacy model, and the explicit
-  line between enforcement authority and social representation. Milestone S1 (profiles +
-  friends + Social tab) is built; everything past it is design.
+  (NORTHSTAR §45): profiles, friendships, avatars, commitment sharing, the activity
+  shelf, streaks, the privacy model, and the explicit line between enforcement authority
+  and social representation. Milestones S1 (profiles + friends + Social tab) and S2
+  (sharing + events + streak presentation) are built; everything past them is design.

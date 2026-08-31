@@ -32,7 +32,8 @@ trusted. Re-verify against the code when it drifts.
 | Custom shield screen (`NICE TRY.`) | **Missing** | Blocked apps show Apple's default shield; needs a `ShieldConfiguration` extension |
 | Sign in with Apple + Contract Envelopes | **Real** | `Backend/AccountStore.swift`: nonce-checked sign-in, `ensure_account`, idempotent envelope registration and re-sync on every foreground. Optional to everything local (S8) |
 | Accountability partners | **Real** (backend deployed per `deployment.md`; end-to-end device verification is the open item) | Nomination with server-sent consent links, partner list and roster eligibility in-app (`Backend/PartnersView.swift`), override requests with frozen snapshots, the partner approval page, concurrent-safe voting, Ed25519-signed grants verified on-device against a compiled-in root key (`Grants/`), applied to the ledger which may still refuse a stale grant |
-| Social — profiles, friends, Social tab | **Real** (Milestone S1) | Profile with unique handle + avatar, friend requests/accept/decline/remove/block, handle search, Social tab. No activity events yet — the Recent area says so rather than inventing any. See `docs/social-architecture.md` |
+| Social — profiles, friends, Social tab | **Real** (Milestone S1) | Profile with unique handle + avatar, friend requests/accept/decline/remove/block, handle search, Social tab. See `docs/social-architecture.md` |
+| Social — commitment sharing, activity, streaks | **Real** (Milestone S2) | Per-commitment Private/Friends choice (default Private), friends' Recent shelf (bounded, 30-day horizon, meaningful events only), and the two streak figures ("12 commitments kept · 6 since last Override"). Overrides are told only when the owner shares Override usage |
 
 **One-sentence version:** the contract machinery is real, the identity is real, Earned
 takes apps away when a Gate is closed, a partner's approval can genuinely unlock a phone,
@@ -470,13 +471,27 @@ handle, optional photo, optional city — ending on `WELCOME TO EARNED.` Nothing
 Gates, commitments, or the Solo Override waits on any of this (S8).
 
 With a profile, the screen is a printed roster, not a feed: **MY PROFILE** (avatar or
-initials, name, @handle), **REQUESTS** (incoming with accept/decline, outgoing with
-cancel — only when there are any), **FRIENDS** (or an honest empty state pointing at
-ADD FRIEND), and **RECENT** — which in S1 contains exactly one line explaining that
-activity from friends will appear when commitment sharing ships. It fabricates no events.
-Adding a friend is handle search; a friend's profile screen shows avatar, name, handle,
-city if they set one, and REMOVE FRIEND / BLOCK at the bottom. Blocking is mutual
-invisibility from that moment on.
+initials, name, @handle, and the two figures — `12 COMMITMENTS KEPT` over
+`6 since last Override`, or `No Overrides yet` — with a footer saying who else sees
+them), **REQUESTS** (incoming with accept/decline, outgoing with cancel — only when
+there are any), **FRIENDS** (or an honest empty state pointing at ADD FRIEND), and
+**RECENT** — friends' shared events, bounded to 50 and 30 days, or one line saying
+nothing has happened. Adding a friend is handle search; a friend's profile screen shows
+avatar, name, handle, city if they set one, their streak figures if they share them, and
+REMOVE FRIEND / BLOCK at the bottom. Blocking is mutual invisibility from that moment on.
 
-> Source: `app/Earned/Social/`, `app/Earned/Backend/SocialStore.swift`,
-> `backend/migrations/0013–0015`, `docs/social-architecture.md`
+### Sharing a commitment (Milestone S2)
+
+Every commitment is born private. A one-off commitment offers "Share with friends" on
+the override-rules step (only when a profile exists), and any commitment — plan
+occurrences included — has the same toggle on its detail screen, changeable any time in
+either direction: visibility is a privacy choice, not a contract term, so hardening
+never freezes it. Friends learn the title, the deadline, and how it ended — kept, kept
+late, or (only if Override sharing is on) overridden; with it off, an overridden
+commitment just quietly ends in their view. Unsharing withdraws the commitment and every
+event it generated. The app republishes on every foreground; the server emits at most
+one event per real transition, so nothing is minted per app-open, and hydration never
+appears at all.
+
+> Source: `app/Earned/Social/` (`SocialStore.swift`, `SharingRegistry.swift`),
+> `backend/migrations/0013–0017`, `docs/social-architecture.md`
