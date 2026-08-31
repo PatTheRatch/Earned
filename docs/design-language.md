@@ -1,96 +1,147 @@
 # Earned — Design Language
 
-Decided August 2026, after reviewing three directions (Receipt / Vault / Deadpan Poster).
-This is the brief every screen gets held against.
+v2 · August 2026 · the ground-up UI rebuild. v1 (Deadpan Poster, decided after the
+Receipt / Vault / Poster review) stands underneath this; v2 is what happened when the
+whole app — not just Today — was held to it. This is the brief every screen gets held
+against.
 
 ## The direction
 
-**Brand = Deadpan Poster. Information architecture = simple/native. Language = borrowed
-from the Receipt. Vault = discarded.**
+**Swiss editorial system + sports scoreboard + legal receipt.**
 
-It should feel like Apple Reminders got redesigned by someone who makes boxing posters:
-printed notice, gym poster, transit warning, legal document. The product is a contract,
-and the identity comes from the visual language of commitment documents — stamps, rules,
-balances, deadlines, tickets, notices — used as texture, not wallpaper.
+Not skeuomorphism, not paper textures, not retro cosplay. Deliberate, clear, slightly
+severe, factual, typographic, alive when state changes. Earned should feel like a product
+that remembers the deal. The failure mode v2 exists to kill: *Today looked like Earned;
+the rest looked like an app containing Earned.*
 
-## One loud voice
+## Principle 1 — poster for state, native for interaction
 
-The core discipline: **one loud voice, not five people yelling from different corners of
-the kitchen.** Poster typography is reserved for state changes and consequences only:
+Display typography (compressed heavy caps) is punctuation, not prose. It is for
+declarations only:
 
-> LOCKED. · EARNED. · OVERDUE. · NICE TRY.
+> CLEAR. · LOCKED. · OVERDUE. · KEPT. · THE DEAL · NICE TRY. · COMMIT
 
-Everything else is quiet and functional. Three levels, strictly:
+One per screen, or none. Questions in the creation flow count as that screen's one
+declaration. Everything a user *touches* — forms, pickers, names, helper copy — is calm
+system type with native iOS behaviour underneath. `Theme.metric` (condensed heavy, below
+display) is the scoreboard voice for headline figures: `87% KEPT`, `6 IN A ROW`.
 
-| Level | Role | Treatment |
-|---|---|---|
-| 1 | Current state | Huge. Compressed heavy caps, ~72–96pt. One per screen, or none. |
-| 2 | The thing stopping you | Medium-bold grotesk, ~20pt. "18 of 30. 12 to go." |
-| 3 | Context | Small. Muted gray. "due 10:00" / "42 min left" / "Saturday." |
+## Principle 2 — fewer cards
 
-If everything is 40-point condensed caps with a thick rule under it, the eyes stop knowing
-what matters. The brutality needs breathing room.
+No white rounded rectangle per conceptual block. Grouping comes from whitespace, thick
+rules (4pt, sparingly), hairlines, scale and alignment. The four top-level tabs are
+`PosterPage`s — no List chrome at all. Cards only where a container genuinely means
+something (the Free Override ticket).
 
-## Voice restraint rules
+## Principle 3 — more state, less configuration
 
-- The app's everyday lock state says **LOCKED.** — factual, not taunting.
-- **NICE TRY. / THE DEAL STILL STANDS.** is reserved for the shield — the moment the user
-  actually tries to open a restricted app (roadmap step 3). That's when it's funny.
-  Anywhere else it becomes exhausting.
-- Contract language stays second-person-ownership, softened from the Receipt draft:
-  "Your rules. Your deal." and, on a hard lock, "You set this one." — never
-  "NO REFUNDS. YOU WROTE THIS." in everyday UI (right idea, too aggressive).
-- The red period after the state word is the brand's full stop. It travels with
-  LOCKED./EARNED. everywhere.
+The app answers: what do I owe, am I clear, what happens next, how am I doing, who can
+see me. Configuration recedes into destinations under **You**; the app is a living
+system, not a control panel.
 
-## Palette
+## Principle 4 — progressive disclosure
+
+The product reasoning is good and must not all be visible at once. Primary UI carries
+one-line summaries; the paragraph lives behind `InfoButton` sheets, secondary screens,
+or the onboarding. The exception: contract semantics being agreed to right now (the
+hardening warning on THE DEAL) stay visible, in full, never truncated.
+
+## Principle 5 — color means something
 
 | Token | Value | Use |
 |---|---|---|
 | paper | `#F2EFE9` | Background everywhere. Off-white, warm. |
-| ink | `#141210` | Text, rules, filled buttons. Almost-black. |
-| signal | `#E8442E` | Consequences ONLY: overdue, balance due, the period. Never decoration. |
-| muted | `#6F6A61` | Level-3 context, secondary copy. |
-| field | `#EAE6DC` | Input fields, quiet fills. |
+| ink | `#141210` | Default authority: text, rules, filled buttons. |
+| signal | `#E8442E` | Consequence ONLY: overdue, locked, deadline risk, the brand's full stop. Never decoration. |
+| muted | `#6F6A61` | Context, secondary copy, non-consequence status. |
+| field | `#EAE6DC` | Input fields, quiet fills, avatar ground. |
+| divider | ink @ 15% | Hairlines. |
 
-No gradients. No glossy wellness UI. No decorative illustration. Light appearance only —
-a printed notice doesn't have a dark mode (revisit if it ever earns one).
+No gradients. No glossy wellness UI. Light appearance only — a printed notice doesn't
+have a dark mode.
 
-## Type
+## Information architecture
 
-- **Display** (Level 1 + creation-flow questions): SF Compressed, heavy, uppercase.
-  System font, so it costs nothing and respects Dynamic Type; a licensed condensed
-  grotesque can replace it later behind `Theme.display()`.
-- **Functional** (everything else): SF Pro, regular weights. Sentence case.
-- Small-caps labels: 11pt bold, +2.5 tracking, muted.
+Four human jobs, not four database nouns:
 
-## Texture
+| Tab | Job | Holds |
+|---|---|---|
+| **Today** | What do I owe right now? | State word, gates, obligations, the two actions. The emotional center; always the launch tab. |
+| **Progress** | Is this working? | `87% KEPT` headline, streak figures, escapes and misses at second weight, plans, the record. |
+| **Social** | Who sees me? | You + your figures, approvals waiting on you, accountability asks, requests, people, the Recent shelf. |
+| **You** | Who am I / how is this configured? | Identity header, then destinations: Profile, Accountability partners, Account · Hydration, Restrictions, Plans · Free Overrides · Warnings, Advanced. |
 
-- Thick ink rules (4pt) separate blocker rows — sparingly, one context per screen.
-- The Free Override is a physical-feeling ticket: `🎟 FREE OVERRIDE × 1 — EARNED, NOT
-  GIVEN.` with perforation notches. (The one emoji in the system; it's the brand's.)
-- Minimal iconography otherwise. A gray chevron for navigability is acceptable; nothing
-  decorative.
-- Buttons are square-cornered ink blocks with paper text.
+Navigation is the native TabView, ink-tinted: platform behaviour and accessibility are
+not up for reinvention.
 
-## Where the big words live
+## Component system (`Design/Theme.swift`, `Design/Components.swift`)
 
-- **Today**: EARNED. (full access) / LOCKED. (restricted) — the phone status IS the headline.
-- **Lock surface**: red flood + STILL LOCKED. and the itemized deal; "You set this one."
-- **Commitment detail, overdue**: OVERDUE.
-- **Shield (step 3)**: NICE TRY. / THE DEAL STILL STANDS.
+| Primitive | Job |
+|---|---|
+| `PosterPage` | Page scaffold: paper, left-aligned, one padding constant. |
+| `PageHeader` | Masthead: EARNED kicker + the page's declaration. |
+| `StateWord` | The declaration with the brand's red full stop. |
+| `ThickRule` / `HairRule` | Loud and quiet grouping. |
+| `Metric` | Scoreboard figure + quiet caption. |
+| `PosterRow` | Rule, small-caps label, one bold line, quiet context — the unit Today taught the rest of the app. |
+| `ReceiptRow` | One printed term of a contract: label column, bold value. |
+| `ChoiceRow` | Selectable answer with a square marker; replaces pickers dropped into poster layouts. |
+| `DestinationRow` | A navigation destination with its current value. |
+| `EmptyState` | Product explanation, never "no data available". |
+| `StatusTag` | KEPT / OVERDUE / REQUEST SENT; signal only for consequence. |
+| `InfoButton` | The ⓘ that opens the reasoning on demand. |
+| `PosterButtonStyle` / `UnderlineButtonStyle` | The one act per screen, and the quiet action beside it. |
+| `TicketView` | The Free Override — the one emoji in the system. |
+| `AvatarView` | Image or initials; identity degrades to typography. |
+
+Spacing: `Theme.pagePadding` 24 · `rowSpacing` 14 · `blockSpacing` 28. Buttons ≥44pt
+tap targets.
+
+## Voice restraint rules
+
+- Everyday lock state says **LOCKED.**; full access on Today says **CLEAR.** —
+  **EARNED.** is reserved for the unlock moment itself (the full-access notice), so the
+  masthead never reads "EARNED / EARNED."
+- **NICE TRY. / THE DEAL STILL STANDS.** stay reserved for the shield and the lock
+  notice — the moments they're earned.
+- Copy is deadpan, factual, concise, playful only when earned: "12 MIN LEFT." ·
+  "YOU SET THIS ONE." Never "You've got this!", never "Level up!".
+- Second-person ownership: "Your rules. Your deal."
+- The red period travels with every state word.
+
+## The Deal
+
+The strongest screen after Today: a printed receipt between two thick rules — DO /
+COUNTS / BY / VERIFIED BY / ESCAPE / VISIBLE TO / HARDENS (hardens in signal, the one
+consequence on the page) — the correction-window control, the full hardening sentence,
+and COMMIT. Sharing is a visibility question with its own step; escape mechanics are
+contract mechanics with theirs; the two never share a screen.
+
+## Motion
+
+Almost none. State flips, progress updates, the lock/unlock transition. No bouncing, no
+confetti, no celebratory spectacle — a completion feels satisfying because the
+typography changes what it declares.
+
+## Empty states
+
+Explain the product: `NO FRIENDS YET. / Add someone who'll notice when you keep your
+word.` · `NOT ENOUGH HISTORY YET. / Keep a few commitments and this starts telling a
+story.`
+
+## Developer surface
+
+No "Testing" section ships. Manual workout logging and other test tools are `#if DEBUG`
+under You → Advanced; diagnostics counts stay, quietly.
+
+## Accessibility
+
+Dynamic Type respected in body/system type; display faces carry `minimumScaleFactor`
+and combined VoiceOver labels; 44pt targets; native navigation semantics throughout.
+Contract language is never allowed to truncate.
 
 ## App icon
 
-The mark is **`E.`** — the poster lockup at its shortest. `Theme.StateWord`
-renders every state as the word plus a full stop in signal red, so the red dot
-already *is* the brand mark; the icon is that same lockup with the word cut to
-its first letter.
-
-The letterform is drawn as four rectangles rather than typeset. That keeps the
-square-cornered idiom, needs no font file, and stays crisp at 40px on a home
-screen — where a compressed display face would just turn to mush.
-
-Regenerate with `python3 tools/make-appicon.py`. The script is the source of
-truth; the PNG it writes is a build artefact that happens to be committed so
-Xcode can find it.
+The mark is **`E.`** — the poster lockup at its shortest, four drawn rectangles plus the
+signal-red stop. Regenerate with `python3 tools/make-appicon.py`; the script is the
+source of truth.

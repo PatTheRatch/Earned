@@ -11,6 +11,14 @@ trusted. Re-verify against the code when it drifts.
 > recurrence at all. All three have changed. See `docs/earnedkit-semantics.md` for the
 > decisions behind them, including the ones still marked open.
 
+> **v2 UI rebuild, September 2026:** the surfaces this document narrates were rebuilt to
+> `docs/design-language.md` v2. The tabs are now **Today · Progress · Social · You**
+> (History became Progress's record; Settings dissolved into You's destinations), the
+> creation flow asks visibility and escape as separate questions, THE DEAL prints as a
+> receipt, and manual workout logging is debug-only under You → Advanced. Capabilities
+> and semantics below remain accurate; screen-by-screen prose describes the v1 layouts
+> where it has not yet been re-traced.
+
 ---
 
 ## Status at a glance
