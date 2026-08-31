@@ -356,14 +356,23 @@ extension GrantTrust {
 /// Six fractional digits is also more than `ISO8601DateFormatter` will accept
 /// on every platform, so the fraction is separated out and applied by hand.
 enum PostgresTimestamp {
-    private static let whole: ISO8601DateFormatter = {
+    /// Built per call rather than held in a static. `ISO8601DateFormatter` is
+    /// a class and not `Sendable`, so a static one is a shared mutable box
+    /// that Swift 6 refuses outright — correctly, since `formatOptions` is
+    /// settable and one parser reaching in would change everyone's. The
+    /// alternatives are worse: `@MainActor` would make reading a key set a
+    /// main-thread-only operation, and `nonisolated(unsafe)` would be a claim
+    /// about synchronisation nobody is actually providing. A few allocations
+    /// per key set is not a cost worth being clever about.
+    private static func formatter() -> ISO8601DateFormatter {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
         return formatter
-    }()
+    }
 
     static func parse(_ text: String) -> Date? {
+        let whole = formatter()
         guard let dot = text.firstIndex(of: ".") else { return whole.date(from: text) }
 
         let digits = text[text.index(after: dot)...].prefix { $0.isNumber }
