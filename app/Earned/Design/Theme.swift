@@ -1,27 +1,45 @@
 import SwiftUI
 import UIKit
 
-/// The Deadpan Poster system (docs/design-language.md): printed notice, boxing
-/// poster, legal document. One loud voice — display type is reserved for state
-/// words (LOCKED. / EARNED. / OVERDUE.); everything else stays quiet.
+/// The Deadpan Poster system, v2 (docs/design-language.md): Swiss editorial +
+/// scoreboard + legal receipt. One loud voice — display type is reserved for
+/// declarations (LOCKED. / CLEAR. / THE DEAL); interaction stays native and
+/// quiet. Poster for state, native for everything you touch.
 enum Theme {
-    // Palette. Consequences get signal red; nothing else does.
+    // MARK: Palette. Black is authority; signal is consequence, never decoration.
     static let paper = Color(red: 0.949, green: 0.937, blue: 0.914)   // #F2EFE9
     static let ink = Color(red: 0.078, green: 0.071, blue: 0.063)     // #141210
     static let signal = Color(red: 0.910, green: 0.267, blue: 0.180)  // #E8442E
     static let muted = Color(red: 0.435, green: 0.416, blue: 0.380)   // #6F6A61
     static let field = Color(red: 0.918, green: 0.902, blue: 0.863)   // #EAE6DC
+    static let divider = Color(red: 0.078, green: 0.071, blue: 0.063).opacity(0.15)
 
-    /// Level 1: the state word. Compressed heavy caps — swap in a licensed
-    /// condensed face here later without touching call sites.
+    // MARK: Spacing scale. Screen padding is the page's one big constant.
+    static let pagePadding: CGFloat = 24
+    static let rowSpacing: CGFloat = 14
+    static let blockSpacing: CGFloat = 28
+
+    // MARK: Type roles.
+
+    /// Declarations only: state words, THE DEAL, one per screen or none.
     static func display(_ size: CGFloat) -> Font {
         Font.system(size: size, weight: .heavy).width(.compressed)
     }
 
-    /// Level 2: the thing stopping you.
+    /// Level 2: the thing stopping you, and headline numbers.
     static func blocker(_ size: CGFloat = 20) -> Font {
         Font.system(size: size, weight: .bold)
     }
+
+    /// A big factual figure — the scoreboard voice. Between display and
+    /// blocker: loud enough to carry a screen's answer, never the brand word.
+    static func metric(_ size: CGFloat = 44) -> Font {
+        Font.system(size: size, weight: .heavy).width(.condensed)
+    }
+
+    /// Quiet body copy and context lines.
+    static let body = Font.system(size: 14)
+    static let footnote = Font.system(size: 12)
 
     /// Small-caps section label (pair with .tracking(2.5) and uppercased text).
     static let label = Font.system(size: 11, weight: .bold)
