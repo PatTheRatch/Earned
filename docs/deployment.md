@@ -37,6 +37,24 @@ export DB="postgresql://postgres.<ref>@aws-1-<region>.pooler.supabase.com:5432/p
 printf 'DB password: '; read -rs PGPASSWORD; echo; export PGPASSWORD
 ```
 
+**Both of those are per-shell.** Open a new terminal tomorrow and `$DB` is empty, at which
+point `psql "$DB"` silently falls back to a local socket and reports
+`connection to server on socket "/tmp/.s.PGSQL.5432" failed` — which reads like the
+database is down rather than like a missing variable. `history | grep apply.sh` recovers
+the string you used last time.
+
+Worth doing once so it stops recurring: put the password in `~/.pgpass` and the prompt
+disappears for good.
+
+```sh
+echo 'aws-1-<region>.pooler.supabase.com:5432:postgres:postgres.<ref>:YOUR_PASSWORD' >> ~/.pgpass
+chmod 600 ~/.pgpass
+```
+
+After that only `export DB=...` is needed in a new shell, and it is safe to keep that line
+in `~/.zshrc` — a connection string with no password in it is not a secret. In `.pgpass`,
+only `:` and `\` in the password need a backslash before them; `%` and `@` are fine.
+
 Two traps, both of which will waste your afternoon:
 
 - **Use the session pooler, not the direct connection.** Direct is IPv6-only on newer
@@ -64,6 +82,20 @@ backend/apply.sh "$DB"
 Safe to re-run: every statement is written to converge, so a set that fails halfway can
 simply be applied again. On a first run you will see a page of `NOTICE ... does not exist,
 skipping` lines — that is the convergence working, not a problem.
+
+**Re-run this after every `git pull` that adds a migration.** It is not a one-time step.
+A missing migration does not announce itself: the edge function will deploy happily, then
+return 500 because the SQL function it calls does not exist yet. If something that worked
+in the repo does not work against your project, check this first:
+
+```sh
+psql "$DB" -c "select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                where n.nspname = 'public'
+                  and p.proname in ('approval_page','create_override_request','current_key_set')
+                order by 1;"
+```
+
+Three rows means you are current with the migrations in this repo as of step 7.
 
 **Check:**
 
