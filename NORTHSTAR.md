@@ -2,7 +2,7 @@
 
 **North Star Product Document**
 
-v0.5 · August 2026
+v0.6 · August 2026 · *v0.6 adds §45 (Social Accountability) and invariants 23–28. Sections are append-only — code and docs cite them by number.*
 
 > Do what matters first. Earn the rest.
 
@@ -1312,6 +1312,12 @@ These rules should survive feature debates.
 20. **A new identity must not be an easier way out than the Override system.**
 21. **Earned never claims to be inescapable.** Where the OS permits circumvention, the product says so plainly.
 22. **A contract may not be born impossible.** An accountability roster is drawn only from partners who have already consented, and a threshold may never exceed the roster it is a threshold of. A partner who withdraws *afterwards* is a different matter entirely: the deal was real when it hardened, the threshold stands, and the route becomes unavailable if too few remain. Earned refuses to author a way out that never worked; it does not rewrite one that reality made harder.
+23. **Social pressure should reinforce commitments, not become another source of engagement to consume.** No XP, no leaderboards, no follower counts, no infinite feed, no engagement metric as a goal, no social feature whose main purpose is keeping somebody inside Earned (§45).
+24. **A friend is not an accountability partner.** Being my friend gives you no authority over my contract; being my accountability partner gives you no access to my social activity. Either role is granted explicitly, never inferred from the other.
+25. **Social visibility never changes Gate truth.** Sharing, unsharing, blocking, or a social outage changes what other people see — never what the user owes, and never what the ledger decides.
+26. **Sharing is chosen, never assumed.** Every social visibility defaults to private; hydration stays private outright in v1.
+27. **Absence is observable; motive is not.** Earned may say a friend hasn't checked in and what was open when last seen. It never claims to know *why* — "deleted the app to escape" is a sentence the product cannot honestly render.
+28. **Social reputation is representation, not enforcement.** Socially shared completions are the client's own account of itself; nothing on the enforcement path may consume them as evidence.
 
 ---
 
@@ -1428,3 +1434,68 @@ You decide what you're willing to give up if you don't follow through.
 Then Earned remembers the deal when you would rather forget it.
 
 **Do what matters first. Earn the rest.**
+
+---
+
+## 45. Social Accountability
+
+*Added in v0.6, after §44, because sections are append-only. The working design is
+[docs/social-architecture.md](docs/social-architecture.md).*
+
+Earned may allow users to make selected commitments and reliability signals visible to
+people they choose.
+
+The purpose is not to turn Earned into another attention product. The purpose is:
+
+**Make promises visible enough that walking away from them has social weight.**
+
+Social accountability strengthens the existing loop by adding one ingredient — a witness:
+
+**Commit → someone knows → do the thing → keep the promise → build trust.**
+
+It must not create a second dopamine feed inside an app whose purpose is partly to reduce
+compulsive digital consumption. The governing principle (invariant 23):
+
+**Social pressure should reinforce commitments, not become another source of engagement to consume.**
+
+Which rules out, permanently: an XP economy, global leaderboards, ranking friends,
+follower-count status games, infinite-feed optimization, "engagement" as a product goal,
+and any social feature whose main purpose is keeping somebody inside Earned. Every social
+proposal faces the Earned Test (§42) with one extra question: does this make a kept
+promise weightier, or only the app stickier?
+
+### Friends and accountability partners are different relationships
+
+A **friend** is another Earned user who mutually agreed to connect and may see what the
+user chooses to share. An **accountability partner** is a person explicitly granted
+authority to approve an Accountability Override — usually not an Earned user at all. A
+person may be both, but neither role ever implies the other (invariant 24): being my
+friend gives you no authority over my contract, and being my accountability partner gives
+you no access to my social activity.
+
+### What the social surface is
+
+A fourth tab — Today · History · **Social** · Settings, with Today remaining the center of
+gravity — holding two lightweight things: **people** (my profile, my friends, requests)
+and, later, **meaningful recent activity** — a bounded, recent set of events that matter
+(a kept streak, a finished workout, a shared Override), not a home feed. It renders in the
+same deadpan receipt language as everything else.
+
+Identity is a minimal profile: display name, unique handle, optional photo, optional
+user-typed city. No birthdays, no gender, no GPS, no contact uploads, no bios — profile
+fields exist only when the product needs them.
+
+### What is shared
+
+Nothing, until chosen (invariant 26). Commitment visibility is Private by default;
+hydration is excluded from Social entirely in v1. Overrides are legitimate contract
+mechanisms — the UI never shames their use, and streak presentation distinguishes
+commitments kept from time since the last shared escape without turning either into a
+score. A friend's silence may be surfaced factually — *hasn't checked in; last seen two
+days ago* — but motive is never inferred (invariant 27): Earned cannot know why someone
+went quiet, so it never claims to.
+
+Social claims are the client's own account of itself. They are representation, never
+enforcement evidence (invariant 28); the Contract Envelope system remains the only
+authority for the things it governs, and social visibility never changes Gate truth
+(invariant 25).
