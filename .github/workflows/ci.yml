@@ -22,6 +22,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run tests
         run: swift test --package-path packages/EarnedKit
+      # EarnedMedia wraps ImageIO, so it tests on Apple platforms only — which
+      # is exactly why it is not part of EarnedKit.
+      - name: Run EarnedMedia tests
+        run: swift test --package-path packages/EarnedMedia
 
   backend:
     name: Backend schema + RLS (${{ matrix.layout }} layout)
