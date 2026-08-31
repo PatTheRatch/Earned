@@ -209,6 +209,18 @@ Two functions now want a schedule: `expire_override_requests()` and
 recomputed wherever they are read — so a daily `pg_cron` call keeps stored state tidy
 rather than keeping the system correct.
 
+## Seeing it work against a real project
+
+```sh
+DB="postgresql://postgres.<ref>@..." backend/tools/demo_request.sh
+```
+
+Builds a complete override request — account, two consented partners, a hardened
+commitment, a frozen snapshot — and prints the approval links a partner would be sent.
+Consent has no page until step 9 and requests are not in the app yet, so this does both
+the way the server will. Scoped to one demo account with `+1-555` numbers; `--clean`
+removes exactly what it made. See [`docs/deployment.md`](../docs/deployment.md) §5.4.
+
 ## Running the tests
 
 Any throwaway Postgres 16 will do; CI uses a service container.

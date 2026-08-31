@@ -373,18 +373,32 @@ the rate limit is what stops someone paying to find out.
 
 ### 5.4 End to end, for real
 
-With consent completed for at least one partner (see the note in §6 for how to do that by
-hand today), create an override request in the app, then:
-
 ```sh
-psql "$DB" -c "select body from public.message_outbox order by created_at desc limit 1;"
+backend/tools/demo_request.sh
 ```
 
-Copy the `https://earntherest.com/a/...` link out of that message body and open it in a
-browser. You should see the partner page: the commitment, the two labelled halves of the
-snapshot, and Approve / Deny. Tapping one records a real vote.
+It prints two links — one per partner, on a request with a threshold of 2 — and opening
+one in a browser is the whole mechanism working, minus delivery: the commitment, the two
+labelled halves of the snapshot, and Approve / Deny. Tapping one records a real vote and
+shows that partner's receipt. Tapping both resolves the request; a third partner would
+find it superseded.
 
-That is the whole mechanism working, minus delivery.
+Two steps of this flow have no interface yet — consent has no page until step 9, and
+override requests are not wired into the app — so the script does those the way the server
+will: it reads the consent token out of the outbox rather than being handed it, and it
+advances the commitment's *creation* time so the server recomputes hardening, rather than
+writing `hardens_at` (which a trigger would overwrite anyway, and that is the point of the
+trigger).
+
+Everything it writes belongs to one demo account under a fixed Apple subject no real
+sign-in can produce, with `+1-555` contact numbers. It never touches your account, and:
+
+```sh
+backend/tools/demo_request.sh --clean
+```
+
+removes only what it made. Re-running the setup cleans first, so it is safe to repeat —
+which also means the three-requests-per-day cap never gets in the way.
 
 ---
 
