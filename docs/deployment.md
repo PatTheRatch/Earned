@@ -228,13 +228,33 @@ openable by someone else.
 
 ### 5.1 Deploy the approval function
 
+You need the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started)
+(`brew install supabase/tap/supabase`), and the repo linked to your project once:
+
 ```sh
-supabase functions deploy approval --no-verify-jwt
+supabase login
+supabase link --project-ref <ref>
 ```
 
-`--no-verify-jwt` is required and correct: partners are strangers with no Earned account
-(**S4**), and the 256-bit token in the URL is the entire credential. The function reads
-`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from the environment Supabase injects.
+Then, from the repo root:
+
+```sh
+supabase functions deploy approval
+```
+
+No `--no-verify-jwt` flag: [`supabase/config.toml`](../supabase/config.toml) sets
+`verify_jwt = false` for this function, and that is deliberate. Partners are strangers with
+no Earned account (**S4**) and the 256-bit token in the URL is the entire credential, so
+JWT verification must be off — and a setting that must never be wrong belongs in a file
+under review rather than in a flag someone types from memory. That same config file also
+points the CLI at `backend/functions/approval/`, since the function lives with the rest of
+the backend rather than in the CLI's default `supabase/functions/` location.
+
+The function reads `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from the environment
+Supabase injects; there is nothing to configure for either.
+
+> If the deploy complains that Docker is not running, it is trying to bundle locally.
+> Recent CLI versions bundle without it; if yours insists, start Docker Desktop and retry.
 
 **Check** it is reachable, using the ugly URL for now:
 

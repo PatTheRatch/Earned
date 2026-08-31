@@ -1,0 +1,25 @@
+# Supabase CLI configuration.
+#
+# Deliberately minimal: this file exists so `supabase functions deploy` can
+# find code that does not live where the CLI would guess, and so the one
+# security-relevant deployment setting is checked in rather than typed from
+# memory. It is not a mirror of the project's dashboard settings, and nothing
+# here should be treated as the source of truth for auth, database or storage
+# configuration.
+
+project_id = "earned"
+
+# The partner page (docs/accountability-architecture.md §18).
+#
+# `entrypoint` because the function lives with the rest of the backend, in
+# backend/, rather than in the CLI's default supabase/functions/ location.
+#
+# `verify_jwt = false` is required and correct here, and it lives in this file
+# rather than in a `--no-verify-jwt` flag on purpose: partners are strangers
+# with no Earned account (S4), and the 256-bit token in the URL is the entire
+# credential. Forgetting the flag would deploy a page that demands a JWT from
+# people who have none — a break that only shows up when a real partner opens
+# a real link, which is the worst possible moment to find out.
+[functions.approval]
+entrypoint = "backend/functions/approval/index.ts"
+verify_jwt = false

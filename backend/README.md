@@ -191,10 +191,13 @@ tally anywhere).
 Deploying it:
 
 ```sh
-supabase functions deploy approval --no-verify-jwt
+supabase functions deploy approval
 ```
 
-`--no-verify-jwt` is required and correct here: partners are strangers without accounts
+[`supabase/config.toml`](../supabase/config.toml) sets `verify_jwt = false` for this
+function and points the CLI at `backend/functions/approval/`, since the code lives here
+rather than in the CLI's default location. Turning JWT verification off is required and
+correct: partners are strangers without accounts
 (S4), and the 256-bit token in the URL is the entire credential. The function reads
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from the environment Supabase injects.
 Point `consent_base_url`'s `/a/<token>` links at it (a redirect or rewrite from your
