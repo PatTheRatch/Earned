@@ -155,6 +155,165 @@ actor BackendClient {
         return rows.compactMap(Partner.init(row:))
     }
 
+    // MARK: - Social: profile
+
+    /// The caller's own account id — needed only to address their avatar
+    /// folder in Storage. Read from the one table the app can SELECT its own
+    /// row of; no other user's id is ever learnable this way.
+    func myAccountID() async throws -> String {
+        let rows: [[String: Any]] = try await get(path: "/rest/v1/account?select=id")
+        guard let id = rows.first?["id"] as? String else {
+            throw Failure.refused(status: 200, message: "No account row for this session.")
+        }
+        return id.lowercased()
+    }
+
+    /// The caller's profile, or nil when setup hasn't happened — which is the
+    /// profile-completion check itself (docs/social-architecture.md §4.2).
+    func myProfile() async throws -> SocialProfile? {
+        SocialProfile(json: try await rpc("my_profile", [:]))
+    }
+
+    @discardableResult
+    func upsertProfile(handle: String, displayName: String,
+                       city: String?, timezone: String?) async throws -> SocialProfile? {
+        var params: [String: Any] = ["p_handle": handle, "p_display_name": displayName]
+        if let city { params["p_city"] = city }
+        if let timezone { params["p_timezone"] = timezone }
+        return SocialProfile(json: try await rpc("upsert_my_profile", params))
+    }
+
+    func setDiscoverability(_ discoverable: Bool) async throws {
+        _ = try await rpc("set_my_discoverability", ["p_discoverable": discoverable])
+    }
+
+    // MARK: - Social: friends
+
+    func sendFriendRequest(handle: String) async throws {
+        _ = try await rpc("send_friend_request", ["p_handle": handle])
+    }
+
+    func respondToFriendRequest(handle: String, accept: Bool) async throws {
+        _ = try await rpc("respond_to_friend_request",
+                          ["p_handle": handle, "p_accept": accept])
+    }
+
+    func cancelFriendRequest(handle: String) async throws {
+        _ = try await rpc("cancel_friend_request", ["p_handle": handle])
+    }
+
+    func removeFriend(handle: String) async throws {
+        _ = try await rpc("remove_friend", ["p_handle": handle])
+    }
+
+    func blockUser(handle: String) async throws {
+        _ = try await rpc("block_user", ["p_handle": handle])
+    }
+
+    func unblockUser(handle: String) async throws {
+        _ = try await rpc("unblock_user", ["p_handle": handle])
+    }
+
+    func loadFriends() async throws -> [SocialPerson] {
+        (try await rpcValue("my_friends", [:]) as? [[String: Any]] ?? [])
+            .compactMap(SocialPerson.init(json:))
+    }
+
+    func loadFriendRequests() async throws -> FriendRequests {
+        let json = try await rpc("my_friend_requests", [:])
+        var requests = FriendRequests()
+        requests.incoming = (json["incoming"] as? [[String: Any]] ?? [])
+            .compactMap(SocialPerson.init(json:))
+        requests.outgoing = (json["outgoing"] as? [[String: Any]] ?? [])
+            .compactMap(SocialPerson.init(json:))
+        return requests
+    }
+
+    func loadBlocked() async throws -> [SocialPerson] {
+        (try await rpcValue("my_blocked", [:]) as? [[String: Any]] ?? [])
+            .compactMap(SocialPerson.init(json:))
+    }
+
+    func searchProfiles(query: String) async throws -> [SocialPerson] {
+        (try await rpcValue("search_profiles", ["p_query": query]) as? [[String: Any]] ?? [])
+            .compactMap(SocialPerson.init(json:))
+    }
+
+    /// A profile as the caller may see it. Nil is an answer, not an error:
+    /// not found, blocked, and undiscoverable are one indistinguishable nil.
+    func loadProfile(handle: String) async throws -> PublicProfile? {
+        PublicProfile(json: try await rpc("get_profile", ["p_handle": handle]))
+    }
+
+    // MARK: - Social: avatar storage
+
+    /// Uploads the re-encoded derivative under the caller's own folder, then
+    /// points the profile at it. Returns the replaced object's path, which the
+    /// caller should delete — its visibility already died with the repoint.
+    func uploadAvatar(path: String, jpeg: Data) async throws -> String? {
+        try await storage(method: "POST", path: path,
+                          body: jpeg, contentType: "image/jpeg")
+        let json = try await rpc("set_my_avatar", ["p_path": path])
+        return json["previous"] as? String
+    }
+
+    func clearAvatar() async throws -> String? {
+        (try await rpc("clear_my_avatar", [:]))["previous"] as? String
+    }
+
+    func deleteAvatarObject(path: String) async throws {
+        try await storage(method: "DELETE", path: path, body: nil, contentType: nil)
+    }
+
+    /// Fetches an avatar through the authenticated route; RLS decides whether
+    /// this caller may see this object.
+    func fetchAvatar(path: String) async throws -> Data {
+        guard accessToken != nil else { throw Failure.notSignedIn }
+        guard let url = URL(string: "/storage/v1/object/authenticated/avatars/\(path)",
+                            relativeTo: config.url) else {
+            throw Failure.transport("Bad backend path.")
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 20
+        request.setValue(config.anonKey, forHTTPHeaderField: "apikey")
+        if let accessToken {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+        let (data, response) = try await session.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            throw Failure.refused(status: status, message: "The avatar could not be fetched.")
+        }
+        return data
+    }
+
+    private func storage(method: String, path: String,
+                         body: Data?, contentType: String?) async throws {
+        guard accessToken != nil else { throw Failure.notSignedIn }
+        guard let url = URL(string: "/storage/v1/object/avatars/\(path)",
+                            relativeTo: config.url) else {
+            throw Failure.transport("Bad backend path.")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.timeoutInterval = 30
+        request.setValue(config.anonKey, forHTTPHeaderField: "apikey")
+        if let accessToken {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+        if let contentType {
+            request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        }
+        request.httpBody = body
+        let (data, response) = try await session.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+            throw Failure.refused(status: status,
+                                  message: Self.failureMessage(json, status: status))
+        }
+    }
+
     // MARK: - Overrides and grants
 
     /// Ask the roster. Everything that decides the answer — the threshold, who
@@ -262,6 +421,13 @@ actor BackendClient {
         return try await post(path: "/rest/v1/rpc/\(name)", body: params, authorized: true)
     }
 
+    /// For functions that return something other than a JSON object — an
+    /// array, a scalar, or SQL null (which arrives as NSNull).
+    private func rpcValue(_ name: String, _ params: [String: Any]) async throws -> Any {
+        guard accessToken != nil else { throw Failure.notSignedIn }
+        return try await postValue(path: "/rest/v1/rpc/\(name)", body: params, authorized: true)
+    }
+
     private func get<T>(path: String) async throws -> [T] {
         guard let url = URL(string: path, relativeTo: config.url) else {
             throw Failure.transport("Bad backend path.")
@@ -288,6 +454,10 @@ actor BackendClient {
     }
 
     private func post(path: String, body: Any, authorized: Bool) async throws -> [String: Any] {
+        try await postValue(path: path, body: body, authorized: authorized) as? [String: Any] ?? [:]
+    }
+
+    private func postValue(path: String, body: Any, authorized: Bool) async throws -> Any {
         guard let url = URL(string: path, relativeTo: config.url) else {
             throw Failure.transport("Bad backend path.")
         }
@@ -311,11 +481,13 @@ actor BackendClient {
             throw Failure.transport(error.localizedDescription)
         }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+        let value = (try? JSONSerialization.jsonObject(with: data,
+                                                       options: [.fragmentsAllowed])) ?? [:] as Any
         guard (200..<300).contains(status) else {
+            let json = value as? [String: Any] ?? [:]
             throw Failure.refused(status: status,
                                   message: Self.failureMessage(json, status: status))
         }
-        return json
+        return value
     }
 }

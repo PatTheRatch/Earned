@@ -10,6 +10,7 @@ import SwiftUI
 struct AccountSection: View {
     @EnvironmentObject private var store: EarnedStore
     @EnvironmentObject private var account: AccountStore
+    @EnvironmentObject private var social: SocialStore
 
     var body: some View {
         Section {
@@ -31,6 +32,13 @@ struct AccountSection: View {
 
             case .signedIn(let name):
                 LabeledContent("Signed in", value: name)
+                if let profile = social.profileState.profile {
+                    NavigationLink {
+                        EditProfileView(profile: profile)
+                    } label: {
+                        LabeledContent("My profile", value: "@\(profile.handle)")
+                    }
+                }
                 NavigationLink {
                     PartnersView()
                 } label: {
@@ -96,6 +104,9 @@ struct AccountSection: View {
 
     private func handle(_ result: Result<ASAuthorization, Error>) {
         account.completeSignIn(result)
+        // The profile-setup offer rides the session change itself, watched in
+        // MainTabView — sign-in resolves asynchronously, so acting here would
+        // race it.
         Task {
             await account.refreshPartners()
             await account.syncEnvelopes(for: store.allCommitments, now: store.now)

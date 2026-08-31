@@ -49,7 +49,9 @@ final class AccountStore: ObservableObject {
     @Published private(set) var lastRequest: OverrideRequestReceipt?
     @Published private(set) var requestFailure: String?
 
-    private let client: BackendClient?
+    /// Shared with `SocialStore`, which rides the same session rather than
+    /// holding a second one. Internal, not private, for exactly that reader.
+    let client: BackendClient?
     private let storage: EnvelopeRegistryStorage
     private let grants: GrantStore
     private var currentNonce: String?

@@ -3,15 +3,25 @@ import SwiftUI
 @main
 struct EarnedApp: App {
     @StateObject private var store = EarnedStore()
-    @StateObject private var account = AccountStore()
+    @StateObject private var account: AccountStore
+    @StateObject private var social: SocialStore
     @StateObject private var health = HealthImporter()
     @Environment(\.scenePhase) private var scenePhase
+
+    init() {
+        // SocialStore rides AccountStore's session and transport, so the two
+        // are created together rather than discovering each other later.
+        let account = AccountStore()
+        _account = StateObject(wrappedValue: account)
+        _social = StateObject(wrappedValue: SocialStore(account: account))
+    }
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(store)
                 .environmentObject(account)
+                .environmentObject(social)
                 .environmentObject(health)
         }
         .onChange(of: scenePhase) { _, phase in
@@ -33,6 +43,11 @@ struct EarnedApp: App {
             // that changes which commitments have a working way out.
             Task {
                 await account.refreshPartners()
+                // Social is a passenger here, never a dependency: profile and
+                // friends refresh on the same foreground pass, and failure
+                // changes what the Social tab shows, nothing else.
+                await social.refreshProfile()
+                await social.refreshSocial()
                 await account.syncEnvelopes(for: store.allCommitments, now: store.now)
                 // Grants last, and only after envelopes: a grant is checked
                 // against the contract digest the server gave us, so a
@@ -98,14 +113,34 @@ struct RootView: View {
 }
 
 struct MainTabView: View {
+    @EnvironmentObject private var account: AccountStore
+    @EnvironmentObject private var social: SocialStore
+
     var body: some View {
+        // Today stays the launch tab and the center of gravity; Social sits
+        // between History and Settings and is never the default (NORTHSTAR §45).
         TabView {
             TodayView()
                 .tabItem { Label("Today", systemImage: "checkmark.circle") }
             HistoryView()
                 .tabItem { Label("History", systemImage: "calendar") }
+            SocialView()
+                .tabItem { Label("Social", systemImage: "person.2") }
             SettingsView()
                 .tabItem { Label("Settings", systemImage: "gearshape") }
+        }
+        // Offered once, right after a sign-in that found no profile — and only
+        // offered: dismissing it costs nothing, and the Social tab repeats the
+        // invitation. Nothing local ever waits on this.
+        .sheet(isPresented: $social.setupOffered) { ProfileSetupView() }
+        // Sign-in resolves asynchronously wherever it was started (Settings or
+        // Social), so the moment the session actually lands is watched here.
+        .onChange(of: account.session) { _, session in
+            guard case .signedIn = session else { return }
+            Task {
+                await social.refreshProfile(offeringSetup: true)
+                await social.refreshSocial()
+            }
         }
     }
 }

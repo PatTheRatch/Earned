@@ -8,6 +8,8 @@ options:
 packages:
   EarnedKit:
     path: ../packages/EarnedKit
+  EarnedMedia:
+    path: ../packages/EarnedMedia
 
 targets:
   Earned:
@@ -21,6 +23,8 @@ targets:
     dependencies:
       - package: EarnedKit
         product: EarnedKit
+      - package: EarnedMedia
+        product: EarnedMedia
     info:
       path: Earned/Info.plist
       properties:
