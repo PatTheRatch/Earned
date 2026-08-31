@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Earned — Privacy</title>
+<meta name="robots" content="noindex">
+<style>
+  :root {
+    --paper: #F2EFE9; --ink: #141210; --signal: #E8442E;
+    --muted: #6F6A61; --field: #EAE6DC;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  main { max-width: 38rem; margin: 0 auto; padding: 3.5rem 1.5rem 5rem; }
+  h1 { font-size: 2rem; letter-spacing: -0.01em; margin: 0 0 0.5rem; }
+  h2 {
+    font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--muted); font-weight: 700; margin: 2.5rem 0 0.6rem;
+  }
+  p { margin: 0 0 1rem; }
+  ul { padding-left: 1.2rem; } li { margin-bottom: 0.4rem; }
+  .quiet { color: var(--muted); font-size: 0.95rem; }
+  .draft {
+    border: 3px solid var(--signal); padding: 1rem 1.2rem; margin: 0 0 2rem;
+    font-size: 0.95rem;
+  }
+  .draft strong { color: var(--signal); }
+  a { color: var(--ink); text-underline-offset: 3px; }
+  footer {
+    margin-top: 3.5rem; padding-top: 1.5rem; border-top: 1px solid #d9d4c8;
+    color: var(--muted); font-size: 0.9rem;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Privacy</h1>
+  <p class="quiet">Last updated: 31 August 2026</p>
+
+  <div class="draft">
+    <strong>Draft — not yet reviewed by a lawyer.</strong> This page describes accurately
+    what the software does today, because that is knowable. It is not yet a legal notice,
+    and it must be reviewed before Earned is offered to anyone outside development —
+    particularly the retention and deletion sections, which turn on questions
+    (UK/EU GDPR Article 17) that are not the author's to answer.
+  </div>
+
+  <h2>The short version</h2>
+  <p>Earned is built to know as little as possible. The parts that decide what you owe run
+  on your phone. The server holds only what has to be shared with another person: who you
+  are, who you asked to hold you accountable, and the terms of a commitment you cannot be
+  trusted to enforce against yourself.</p>
+
+  <h2>What the server holds</h2>
+  <ul>
+    <li><strong>Your account.</strong> An opaque identifier from Sign in with Apple, and a
+    display name — a first name is enough. Not your email address.</li>
+    <li><strong>Your accountability partners' contact details</strong>, encrypted, plus a
+    keyed one-way index used to recognise a contact without being able to read it. A
+    contact reaches the server once, at nomination, and is never returned to any app.</li>
+    <li><strong>The terms of a hardened commitment</strong> — its title, deadline, how many
+    approvals would release you, and when it locked in. These live on the server precisely
+    because you must not be able to edit them later.</li>
+    <li><strong>Override requests</strong>, and a snapshot frozen at the moment you asked:
+    your progress figure, a 30-day reliability count, and an optional reason you wrote.</li>
+    <li><strong>An audit log</strong> of requests and votes, holding hashed network
+    addresses under a rotating salt — no message contents, no readable addresses.</li>
+  </ul>
+
+  <h2>What the server never holds</h2>
+  <ul>
+    <li><strong>Which apps you block.</strong> Apple hands Earned opaque tokens; Earned
+    itself cannot read which apps they are, and cannot tell anyone.</li>
+    <li><strong>Your health data.</strong> Beyond the single progress figure for a
+    commitment you have chosen to ask about, nothing from HealthKit leaves your phone.</li>
+    <li><strong>Your location, your device details, your other commitments</strong>, or
+    anything about what you did on your phone.</li>
+    <li><strong>Your history of completions and failures.</strong> That lives in a file on
+    your phone and is not uploaded.</li>
+  </ul>
+
+  <h2>If someone named you as their partner</h2>
+  <p>You are not an Earned user, and Earned treats you accordingly.</p>
+  <ul>
+    <li>You are asked once. There is at most one reminder, and never sooner than three days
+    later.</li>
+    <li>Saying no is <strong>final and global</strong>. It stops every future request to
+    you, from every Earned user — not just the person who asked. The record kept to
+    enforce that is a one-way index of your contact detail and nothing else: it cannot be
+    reversed into your number or address, and it is not linked to who asked.</li>
+    <li>If you approve or decline a request, you see only what is on that page: a first
+    name, what they committed to, a deadline, a progress figure, and any reason they wrote.
+    You never see their other commitments, their contact details, or who else was asked.</li>
+    <li>Other partners never learn that you were asked, how you voted, or that you exist.</li>
+  </ul>
+
+  <h2>How long things are kept</h2>
+  <ul>
+    <li>The snapshot a partner saw is deleted 30 days after the request resolves, and the
+    link stops showing anything at the same moment.</li>
+    <li>Records of how each partner answered are reduced to a status on the same schedule.</li>
+    <li>A partner's contact details are deleted when they are removed, or when the account
+    is deleted.</li>
+    <li>A global opt-out is kept indefinitely, because forgetting it would mean contacting
+    someone who has already refused.</li>
+  </ul>
+  <p class="quiet">Account deletion is the open question flagged at the top of this page.
+  The intended separation is that deleting your personal data is a privacy right and is not
+  conditional on your commitments; what happens to a live commitment when you leave is a
+  separate, product question. Both need review before launch.</p>
+
+  <h2>Who else sees any of this</h2>
+  <p>Earned uses Supabase to host its database and server code, and a messaging provider to
+  deliver invitations and approval links. No data is sold, and none is used for
+  advertising or shared with anyone else.</p>
+
+  <h2>Contact</h2>
+  <p class="quiet">A contact address will be published here before Earned is offered
+  outside development.</p>
+
+  <footer>
+    <p><a href="/">Earned</a></p>
+  </footer>
+</main>
+</body>
+</html>

@@ -13,4 +13,7 @@ Read the full product vision in [NORTHSTAR.md](NORTHSTAR.md), and the technical 
 - [`app/`](app/) — iOS app + Screen Time extensions (SwiftUI, Xcode)
 - [`packages/EarnedKit/`](packages/EarnedKit/) — pure Swift domain engine (event-ledger gate logic)
 - [`backend/`](backend/) — Supabase schema and edge functions
+- [`web/`](web/) — earntherest.com: the site, and the partner-link proxy
 - [`docs/`](docs/) — design notes and decision records
+
+Deploying it for the first time: [`docs/deployment.md`](docs/deployment.md).

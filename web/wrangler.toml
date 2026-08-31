@@ -1,0 +1,25 @@
+# earntherest.com — the marketing site, and a proxy for the two token paths.
+#
+# Deploy with `npx wrangler deploy` from this directory. See
+# ../docs/deployment.md §5 for the full walk-through, including the DNS and
+# rate-limiting steps that live in the dashboard rather than in this file.
+
+name = "earned-web"
+main = "src/index.ts"
+compatibility_date = "2026-08-31"
+
+# The static site. Anything the router does not recognise as a token path is
+# served from here.
+assets = { directory = "./public", binding = "ASSETS" }
+
+# Public, not a secret: it is the origin of your project's edge functions, and
+# the token in the URL is the credential. Replace <ref> with your project ref.
+[vars]
+SUPABASE_FUNCTIONS_URL = "https://<ref>.functions.supabase.co"
+
+# Custom domain routing is configured in the Cloudflare dashboard (Workers &
+# Pages → the worker → Settings → Domains & Routes), because it depends on the
+# zone being active. Both of these are needed:
+#
+#   earntherest.com/*
+#   www.earntherest.com/*

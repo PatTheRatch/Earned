@@ -53,7 +53,7 @@ jobs:
         run: backend/tests/run.sh
 
   partner-page:
-    name: Partner page renderer
+    name: Partner page and link router
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,6 +64,10 @@ jobs:
         run: deno check backend/functions/approval/index.ts
       - name: Test the renderer
         run: deno test backend/functions/approval/
+      - name: Typecheck the web worker
+        run: deno check web/src/index.ts
+      - name: Test the link router
+        run: deno test web/src/
 
   app-build:
     name: iOS app builds

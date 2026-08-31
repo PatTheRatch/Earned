@@ -6,6 +6,8 @@ The two root documents outrank everything here: [NORTHSTAR.md](../NORTHSTAR.md) 
 
 ## What's here
 
+- [`deployment.md`](deployment.md) — the ordered runbook: an empty Supabase project to a
+  partner opening a real approval link, with something to verify after every step.
 - [`walkthrough.md`](walkthrough.md) — every screen from fresh install to a live
   commitment, traced against the code that runs it. The honest state-of-the-build.
 - [`design-language.md`](design-language.md) — the Deadpan Poster visual system: hierarchy,

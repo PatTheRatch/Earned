@@ -232,6 +232,11 @@ without RLS or if anyone adds an INSERT/UPDATE/DELETE policy.
 
 ## Applying to a real project
 
+**The full walk-through is [`docs/deployment.md`](../docs/deployment.md)** — an empty
+Supabase project to a partner opening a real approval link, in order, with something to run
+after each step. What follows is the schema-specific detail that runbook links back to.
+
+
 Migrations run in filename order and are written to **converge on re-run**, so a set that
 failed halfway can simply be applied again.
 
@@ -256,7 +261,7 @@ without these, and `private.secret()` raises rather than falling back quietly in
 |---|---|
 | `contact_pepper` | HMAC key for the blind index. A long random string. **Changing it later invalidates every stored lookup**, so generate it once and keep it |
 | `contact_key` | Symmetric key for contact ciphertext |
-| `consent_base_url` | Origin of the consent and approval pages, e.g. `https://earned.app` — both the invitation link (`/c/<token>`) and the approval link (`/a/<token>`) are built from it |
+| `consent_base_url` | Origin of the consent and approval pages, e.g. `https://earntherest.com` — both the invitation link (`/c/<token>`) and the approval link (`/a/<token>`) are built from it |
 
 A fourth kind arrives with key rotation rather than setup: `grant_key_<kid>`, the private
 half of each grant signing key, created when that key is introduced (see the runbook in

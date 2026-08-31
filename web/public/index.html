@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Earned — Do what matters first. Earn the rest.</title>
+<meta name="description" content="Earned is a commitment system that makes access to distracting technology conditional on doing what you said you would do.">
+<style>
+  /* docs/design-language.md — Deadpan Poster. Light only: a printed notice
+     does not have a dark mode. */
+  :root {
+    --paper: #F2EFE9; --ink: #141210; --signal: #E8442E;
+    --muted: #6F6A61; --field: #EAE6DC;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 38rem; margin: 0 auto; padding: 4.5rem 1.5rem 5rem; }
+  /* Level 1: one loud voice per page, and this is it. */
+  h1 {
+    font-size: clamp(3rem, 13vw, 5.5rem); line-height: 0.92;
+    font-weight: 800; letter-spacing: -0.02em; text-transform: uppercase;
+    margin: 0 0 1.5rem;
+  }
+  h1 .stop { color: var(--signal); }
+  /* Level 2 */
+  .lede { font-size: 1.2rem; font-weight: 500; margin: 0 0 2rem; }
+  h2 {
+    font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--muted); font-weight: 700; margin: 3rem 0 0.75rem;
+  }
+  hr { border: 0; border-top: 4px solid var(--ink); margin: 2.5rem 0; }
+  p { margin: 0 0 1rem; }
+  /* Level 3 */
+  .quiet { color: var(--muted); font-size: 0.95rem; }
+  ol { padding-left: 1.2rem; margin: 0 0 1rem; }
+  li { margin-bottom: 0.4rem; }
+  a { color: var(--ink); text-underline-offset: 3px; }
+  footer {
+    margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid #d9d4c8;
+    color: var(--muted); font-size: 0.9rem;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Earn the<br>rest<span class="stop">.</span></h1>
+
+  <p class="lede">Earned makes access to distracting technology conditional on doing what
+  you said you would do.</p>
+
+  <p>You commit while thinking clearly. Earned enforces the deal later, when you are not.
+  A commitment can be corrected for a short window after you make it — after that it can
+  get harder, never easier.</p>
+
+  <h2>The loop</h2>
+  <ol>
+    <li><strong>Commit</strong> — name what is due, and by when.</li>
+    <li><strong>Restrict</strong> — the apps you chose come off the table.</li>
+    <li><strong>Complete</strong> — do the thing.</li>
+    <li><strong>Verify</strong> — Earned checks, rather than taking your word for it.</li>
+    <li><strong>Unlock</strong> — you get the rest back.</li>
+  </ol>
+
+  <hr>
+
+  <h2>Were you sent a link?</h2>
+  <p>Someone named you as an accountability partner, which means they trust you to decide
+  whether they get let out of a commitment early. Open the link they sent you and it will
+  show you exactly what they committed to and how far they got.</p>
+  <p class="quiet">Earned never shares your phone number or email address with anyone, and
+  never contacts you again if you say no. Saying no to one person stops every future
+  request, from anyone.</p>
+
+  <h2>Status</h2>
+  <p class="quiet">In development. Not yet available on the App Store.</p>
+
+  <footer>
+    <p><a href="/privacy.html">Privacy</a></p>
+  </footer>
+</main>
+</body>
+</html>
