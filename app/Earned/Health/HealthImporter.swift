@@ -40,8 +40,18 @@ final class HealthImporter: ObservableObject {
         if HKHealthStore.isHealthDataAvailable() {
             let store = HKHealthStore()
             self.store = store
-            self.access = store.authorizationStatus(for: .workoutType()) == .notDetermined
-                ? .notDetermined : .requested
+            self.access = .notDetermined
+            // authorizationStatus is a synchronous XPC round-trip to healthd,
+            // and this init runs during app launch on the main thread. On a
+            // freshly booted simulator healthd can take minutes to answer,
+            // which held the first frame hostage — so the status resolves off
+            // the launch path and the UI corrects itself when it lands.
+            Task.detached { [weak self] in
+                let status = store.authorizationStatus(for: .workoutType())
+                await MainActor.run {
+                    self?.access = status == .notDetermined ? .notDetermined : .requested
+                }
+            }
         } else {
             self.store = nil
             self.access = .unavailable
