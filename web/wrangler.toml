@@ -12,10 +12,10 @@ compatibility_date = "2026-08-31"
 # served from here.
 assets = { directory = "./public", binding = "ASSETS" }
 
-# Public, not a secret: it is the origin of your project's edge functions, and
-# the token in the URL is the credential. Replace <ref> with your project ref.
+# Public, not a secret: it is the origin of the project's edge functions, and
+# the token in the URL is the credential (S1, S2).
 [vars]
-SUPABASE_FUNCTIONS_URL = "https://<ref>.functions.supabase.co"
+SUPABASE_FUNCTIONS_URL = "https://xqdobukkwqjgbpykwoxk.functions.supabase.co"
 
 # Custom domain routing is configured in the Cloudflare dashboard (Workers &
 # Pages → the worker → Settings → Domains & Routes), because it depends on the
