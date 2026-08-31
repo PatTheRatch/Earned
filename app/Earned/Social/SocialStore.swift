@@ -311,14 +311,25 @@ final class SocialStore: ObservableObject {
                                            sinceLastOverride: streaks.sinceLastOverride)
     }
 
-    func setSharing(shareStreaks: Bool? = nil, shareOverrideUsage: Bool? = nil) async {
+    func setSharing(shareStreaks: Bool? = nil, shareOverrideUsage: Bool? = nil,
+                    shareLastCheckin: Bool? = nil) async {
         guard let client else { return }
         do {
             try await client.setSocialSharing(shareStreaks: shareStreaks,
-                                              shareOverrideUsage: shareOverrideUsage)
+                                              shareOverrideUsage: shareOverrideUsage,
+                                              shareLastCheckin: shareLastCheckin)
             await refreshProfile()
             failure = nil
         } catch { failure = error.localizedDescription }
+    }
+
+    /// Tell the server Earned heard from this phone. Called on every
+    /// foreground pass; the server records it only while the owner shares
+    /// check-ins, so this is safe to call unconditionally. A failure is
+    /// silence about silence — there is nothing useful to surface.
+    func checkIn() async {
+        guard let client, case .ready = profileState else { return }
+        try? await client.recordCheckin()
     }
 
     func refreshActivity() async {

@@ -34,6 +34,7 @@ trusted. Re-verify against the code when it drifts.
 | Accountability partners | **Real** (backend deployed per `deployment.md`; end-to-end device verification is the open item) | Nomination with server-sent consent links, partner list and roster eligibility in-app (`Backend/PartnersView.swift`), override requests with frozen snapshots, the partner approval page, concurrent-safe voting, Ed25519-signed grants verified on-device against a compiled-in root key (`Grants/`), applied to the ledger which may still refuse a stale grant |
 | Social — profiles, friends, Social tab | **Real** (Milestone S1) | Profile with unique handle + avatar, friend requests/accept/decline/remove/block, handle search, Social tab. See `docs/social-architecture.md` |
 | Social — commitment sharing, activity, streaks | **Real** (Milestone S2) | Per-commitment Private/Friends choice (default Private), friends' Recent shelf (bounded, 30-day horizon, meaningful events only), and the two streak figures ("12 commitments kept · 6 since last Override"). Overrides are told only when the owner shares Override usage |
+| Social — check-ins and the quiet surface | **Real** (Milestone S3) | Opt-in: friends see "Hasn't checked in · 4 days" (whole days, only past 72 hours, never a live status) and how many shared commitments were open at the last check-in. Facts only — motive is never claimed |
 
 **One-sentence version:** the contract machinery is real, the identity is real, Earned
 takes apps away when a Gate is closed, a partner's approval can genuinely unlock a phone,
@@ -493,5 +494,16 @@ event it generated. The app republishes on every foreground; the server emits at
 one event per real transition, so nothing is minted per app-open, and hydration never
 appears at all.
 
+### Going quiet (Milestone S3)
+
+With "Share check-ins with friends" on (off by default, like every switch), the app tells
+the server it was heard from on each foreground pass. Friends see nothing until three
+whole days of silence, then a factual line on the roster — `Hasn't checked in · 4 days` —
+and, on the profile, `HASN'T CHECKED IN / Last seen by Earned 4 days ago`, plus how many
+shared commitments were still open at that last check-in. No live presence, no raw
+timestamp, and no guessed motive — a deleted app, a dead battery and a good week offline
+all read identically, because to Earned they are identical. Turning the switch off
+deletes the stored fact; turning it back on starts from now.
+
 > Source: `app/Earned/Social/` (`SocialStore.swift`, `SharingRegistry.swift`),
-> `backend/migrations/0013–0017`, `docs/social-architecture.md`
+> `backend/migrations/0013–0018`, `docs/social-architecture.md`

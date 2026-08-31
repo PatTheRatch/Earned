@@ -48,6 +48,10 @@ struct EarnedApp: App {
                 // friends refresh on the same foreground pass, and failure
                 // changes what the Social tab shows, nothing else.
                 await social.refreshProfile()
+                // The check-in is the fact the quiet surface is built on:
+                // "Earned heard from this phone." Recorded only while the
+                // owner shares check-ins; the server no-ops otherwise.
+                await social.checkIn()
                 await social.refreshSocial()
                 // Sharing runs after the health import above, so a run that
                 // just resolved its Gate is the story that gets published —

@@ -1,8 +1,8 @@
 # Social Accountability — Architecture
 
-v0.2 · August 2026 · Milestones S1 (profiles, friends, Social tab) and S2 (commitment
-sharing, the activity shelf, streak presentation) are built; everything past them is
-design, not code.
+v0.3 · August 2026 · Milestones S1 (profiles, friends, Social tab), S2 (commitment
+sharing, the activity shelf, streak presentation) and S3 (check-in sharing, the
+hasn't-checked-in surface) are built; everything past them is design, not code.
 
 The product intent lives in NORTHSTAR §45. This document is the working design: the
 relationship model, the profile/identity model, the privacy rules, the storage design, and
@@ -305,7 +305,7 @@ the field colour — the poster identity degrades to typography, not to a broken
 | Commitment visibility | **Private** | **built** (S2): per-commitment Private/Friends, chosen at creation or on the commitment, changeable any time in either direction — visibility is a privacy choice, not a contract term, and monotonicity never governs it |
 | Share streaks (`share_streaks`) | off | **built** (S2): off deletes the stored figures and their milestone events |
 | Share Override usage (`share_override_usage`) | off | **built** (S2): off stores and tells an Override as a quiet 'ended'; turning it off withdraws existing `override_used` events and quiets existing states |
-| Share inactivity / last-check-in | off | designed only |
+| Share inactivity / last-check-in (`share_last_checkin`) | off | **built** (S3): off means the fact is not even stored, and turning it off deletes it; turning it on starts the clock at now — an old silence is never retroactively surfaced |
 | Share missed commitments | off | designed only — an overdue shared commitment simply stays 'open' in friends' view |
 
 Sharing is **chosen, never assumed**: every one of these defaults to the private side. A
@@ -417,7 +417,7 @@ Reactions (👏 🫡 👀 😂 — a small fixed set, no counts-as-status) may c
 comments** in the initial social design; there is nothing to moderate on a screen with no
 text entry.
 
-### S2 → S3 boundary
+### Where the milestones stand
 
 S2 shipped: per-commitment visibility (default Private; one-off commitments choose at
 creation, any commitment on its detail screen), the event backend with its retention
@@ -426,13 +426,17 @@ semantics. Plan occurrences are shareable individually from their detail screens
 whole-plan sharing choice at creation is deliberately deferred — twelve
 `commitment_shared` events in one tap is a feed, not a promise.
 
-Next (S3, not started): opt-in check-in sharing and the hasn't-checked-in surface (§10),
-possibly invite links and reactions. Still never: push notifications for friends,
-comments, leaderboards, XP, contact imports, follow model, public web profiles.
+S3 shipped: opt-in check-in sharing and the hasn't-checked-in surface (§10). A quiet
+friend is a state on the roster and the profile, deliberately **not** an event on the
+shelf — silence is not content, and an event would let it outlive the silence.
+
+Next, when warranted: invite links, possibly reactions, enforcement-integrity-lapse
+sharing. Still never: push notifications for friends, comments, leaderboards, XP,
+contact imports, follow model, public web profiles.
 
 ---
 
-## 10. Absence, silence, and what Earned may claim
+## 10. Absence, silence, and what Earned may claim (built in S3)
 
 A friend going silent is exactly the useful social friction this feature exists for — and
 exactly where honest language matters most, because **Earned cannot distinguish** app
@@ -454,8 +458,19 @@ app. Therefore:
   same reason).
 - Presence sharing is **opt-in** (§7.1), coarse ("last seen by Earned", day-level), and
   never a live online indicator.
-- Design target for "interesting": silence becomes surfaceable after **72 hours**, and
-  only to friends, and only when the owner opted in. Below that it is noise.
+- Silence becomes surfaceable after **72 hours**, and only to friends, and only when the
+  owner opted in. Below that it is noise.
+
+As built (0018): the app calls `record_checkin` on every foreground pass, and the server
+stores one timestamp — only while `share_last_checkin` is on; with it off the fact is not
+stored at all, and turning it off deletes it. Friends never see the timestamp: they see a
+**whole-day count**, present only past the 72-hour threshold, on the friend list and the
+friend profile. Its absence deliberately means "recently active *or* not sharing" — the
+ambiguity is what makes this not a presence indicator. "Open at last check-in" is
+computed from the `shared_commitment` rows still marked open, which by construction
+cannot have been updated since the server last heard from that client. Turning the switch
+back on starts the clock at now — a silence the owner never agreed to show is never
+retroactively surfaced.
 - The product half of account deletion is now settled (accountability-architecture
   §21.2): deletion is never blocked by outstanding commitments, and it removes the
   user's social identity and visibility entirely — no tombstone describing what was
@@ -475,13 +490,15 @@ caller from the JWT, `anon` gets nothing. Reads that need cross-account shaping
 exactly one reviewed place per query rather than by policy arithmetic.
 
 Migrations: `0013_profiles.sql`, `0014_friendship.sql`, `0015_avatar_storage.sql` (S1),
-`0016_commitment_sharing.sql`, `0017_streaks_and_activity.sql` (S2) — appended after the
-existing 0001–0012, which are never rewritten. The storage migration guards on the
+`0016_commitment_sharing.sql`, `0017_streaks_and_activity.sql` (S2),
+`0018_checkin_sharing.sql` (S3) — appended after the existing 0001–0012, which are never
+rewritten. The storage migration guards on the
 `storage` schema existing so the plain-Postgres CI layout still applies cleanly; the
 visibility *rule* is a public function tested without Supabase.
 
 Tests: `backend/tests/110_profiles.sql`, `120_friendship.sql`, `130_avatars.sql`,
-`140_sharing_and_activity.sql`, run by the same `run.sh` in both layouts. What they must
+`140_sharing_and_activity.sql`, `150_checkins.sql`, run by the same `run.sh` in both
+layouts. What they must
 cover is listed in the milestone tasks and mirrored in the files themselves — profile
 mutation isolation, case-insensitive handle uniqueness, malformed/reserved handles, block
 non-discoverability through every endpoint, idempotent and crossed requests, search and

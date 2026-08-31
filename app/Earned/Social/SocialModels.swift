@@ -12,9 +12,10 @@ struct SocialProfile: Equatable, Sendable {
     let city: String?
     let timezone: String?
     let discoverable: Bool
-    /// The sharing switches, both born off (invariant 26).
+    /// The sharing switches, all born off (invariant 26).
     let shareStreaks: Bool
     let shareOverrideUsage: Bool
+    let shareLastCheckin: Bool
 
     init?(json: [String: Any]) {
         guard let handle = json["handle"] as? String,
@@ -27,6 +28,7 @@ struct SocialProfile: Equatable, Sendable {
         self.discoverable = json["discoverable"] as? Bool ?? true
         self.shareStreaks = json["share_streaks"] as? Bool ?? false
         self.shareOverrideUsage = json["share_override_usage"] as? Bool ?? false
+        self.shareLastCheckin = json["share_last_checkin"] as? Bool ?? false
     }
 }
 
@@ -39,6 +41,12 @@ struct SocialPerson: Identifiable, Equatable, Sendable {
     let displayName: String
     let avatarPath: String?
     let city: String?
+    /// The quiet block (docs/social-architecture.md §10): whole days since
+    /// Earned last heard from this friend, present only when they share
+    /// check-ins *and* the silence has passed the server's threshold. Its
+    /// absence deliberately means "recently active OR not sharing".
+    let quietDays: Int?
+    let openSharedCommitments: Int?
 
     init?(json: [String: Any]) {
         guard let handle = json["handle"] as? String,
@@ -47,6 +55,8 @@ struct SocialPerson: Identifiable, Equatable, Sendable {
         self.displayName = name
         self.avatarPath = json["avatar_path"] as? String
         self.city = json["city"] as? String
+        self.quietDays = json["quiet_days"] as? Int
+        self.openSharedCommitments = json["open_shared_commitments"] as? Int
     }
 }
 
@@ -73,6 +83,9 @@ struct PublicProfile: Equatable, Sendable {
     /// from zero, and the server preserves the distinction.
     let commitmentsKept: Int?
     let sinceLastOverride: Int?
+    /// The quiet block, friends only, same semantics as `SocialPerson`.
+    let quietDays: Int?
+    let openSharedCommitments: Int?
 
     init?(json: [String: Any]) {
         guard let handle = json["handle"] as? String,
@@ -85,6 +98,8 @@ struct PublicProfile: Equatable, Sendable {
             .flatMap(Relationship.init(rawValue:)) ?? .none
         self.commitmentsKept = json["commitments_kept"] as? Int
         self.sinceLastOverride = json["since_last_override"] as? Int
+        self.quietDays = json["quiet_days"] as? Int
+        self.openSharedCommitments = json["open_shared_commitments"] as? Int
     }
 }
 

@@ -245,6 +245,13 @@ struct SocialView: View {
                                     if let city = person.city { Text("· \(city)") }
                                 }
                                 .font(.footnote).foregroundStyle(Theme.muted)
+                                // A fact Earned observed, never a motive it
+                                // guessed (invariant 27).
+                                if let days = person.quietDays {
+                                    Text("Hasn't checked in · \(days) day\(days == 1 ? "" : "s")")
+                                        .font(.footnote)
+                                        .foregroundStyle(Theme.muted)
+                                }
                             }
                         }
                     }

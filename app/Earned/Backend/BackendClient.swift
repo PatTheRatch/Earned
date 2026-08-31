@@ -270,12 +270,21 @@ actor BackendClient {
 
     /// Flip the sharing switches. Nil leaves a switch alone; false withdraws
     /// what that switch was sharing, server-side, immediately.
-    func setSocialSharing(shareStreaks: Bool?, shareOverrideUsage: Bool?) async throws {
+    func setSocialSharing(shareStreaks: Bool?, shareOverrideUsage: Bool?,
+                          shareLastCheckin: Bool? = nil) async throws {
         var params: [String: Any] = [:]
         if let shareStreaks { params["p_share_streaks"] = shareStreaks }
         if let shareOverrideUsage { params["p_share_override_usage"] = shareOverrideUsage }
+        if let shareLastCheckin { params["p_share_last_checkin"] = shareLastCheckin }
         guard !params.isEmpty else { return }
         _ = try await rpc("set_social_sharing", params)
+    }
+
+    /// "Earned heard from this account." Recorded server-side only while the
+    /// owner shares check-ins — a quiet no-op otherwise — and never exposed
+    /// finer than whole days of silence past the server's threshold.
+    func recordCheckin() async throws {
+        _ = try await rpc("record_checkin", [:])
     }
 
     /// Publish the ledger's streak figures. A quiet no-op server-side while

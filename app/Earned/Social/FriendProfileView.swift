@@ -66,6 +66,25 @@ struct FriendProfileView: View {
                             .font(.subheadline)
                             .foregroundStyle(Theme.muted)
                     }
+                    // The quiet block: what Earned observed, and nothing about
+                    // why. "Deleted the app to escape" is a sentence this
+                    // screen cannot honestly render, so it never will
+                    // (docs/social-architecture.md §10).
+                    if let days = profile.quietDays {
+                        ThickRule()
+                        Text("HASN'T CHECKED IN")
+                            .font(Theme.blocker(16))
+                            .foregroundStyle(Theme.ink)
+                        Text("Last seen by Earned \(days) day\(days == 1 ? "" : "s") ago.")
+                            .font(.subheadline)
+                            .foregroundStyle(Theme.muted)
+                        if let open = profile.openSharedCommitments, open > 0 {
+                            Text("\(open) shared commitment\(open == 1 ? " was" : "s were") "
+                                 + "still open at their last check-in.")
+                                .font(.subheadline)
+                                .foregroundStyle(Theme.muted)
+                        }
+                    }
                     SectionLabel(text: relationshipLabel(profile.relationship))
                 }
                 .padding(.vertical, 8)
