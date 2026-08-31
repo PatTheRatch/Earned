@@ -151,13 +151,23 @@ kept when offered, reused from UserDefaults after). Setup prefills from whatever
 full-stop — name, handle, optional photo, optional city — then `WELCOME TO EARNED.` No
 questionnaire.
 
-The `.email` scope is currently **not** requested. Evaluated for S1: adding it would let
-the server fill `account.verified_email_lookup`, which is the blind index that refuses
-self-nomination as your own accountability partner (accountability-architecture §2.2) —
-a real improvement to an existing protection, but one that belongs to the accountability
-flow, changes `ensure_account`'s contract, and needs the pepper-keyed HMAC path exercised.
-Deferred as its own small change rather than smuggled in with Social; email would in any
-case never be public profile data.
+The `.email` scope is **adopted** alongside `.fullName` (settled by Patrick for S2; S1
+ships without it). The verified Apple-associated email exists for private
+identity/security purposes only — concretely, deriving `account.verified_email_lookup`,
+the blind index that refuses self-nomination as your own accountability partner
+(accountability-architecture §2.2, S17). The boundaries are explicit:
+
+- never exposed on a profile, and never usable for friend search or any discovery;
+- never treated as proof the user controls no *other* addresses — the self-nomination
+  refusal catches the honest mistake, not the determined spare-alias (§2.2 already says
+  so of the whole mechanism);
+- never required of existing accounts — an account without one simply keeps a null
+  `verified_email_lookup`, as today;
+- an Apple private-relay address is handled normally, as the verified address Apple
+  supplied — it is exactly as good a blind-index input as any other.
+
+The implementation rides the accountability flow (it changes `ensure_account`'s contract
+and exercises the pepper-keyed HMAC path), not the social one.
 
 ---
 

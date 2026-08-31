@@ -1208,6 +1208,7 @@ Decided by review, and recorded so they are not silently re-opened.
 | **S14** | The `unverified_contact` / `earned_user` partner-tier distinction (§2.2) is **built into the schema now**; no verified partner is required at MVP |
 | **S15** | The receipt window is **30 days** after resolution: a resolved request's link keeps rendering the snapshot for that long, then goes permanently generic and the snapshot purges |
 | **S16** | A partner **suppressed or revoked after their token was minted but before they voted** still has a valid vote if they use it. They were legitimately asked before withdrawing; suppression governs future contact, not a decision already placed in their hands. (This is why §8's vote transaction checks recipient `status`, never live partner consent state, at the moment of voting) |
+| **S17** | Sign in with Apple requests the **`.email` scope** alongside `.fullName`. The verified address is used for private identity/security purposes only — deriving `verified_email_lookup` so §2.2's self-nomination refusal has something to check against. Never shown on a profile, never a search key, never required of existing accounts, never read as proof the user controls no other addresses. Private-relay addresses count normally as the verified address Apple supplied. (Settled August 2026; ships with the accountability flow, not Social S1) |
 
 ### 21.2 Open — this needs you
 
