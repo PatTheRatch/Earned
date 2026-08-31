@@ -37,6 +37,8 @@ no authority over anything above and is read by nothing above.
 | `migrations/0013` | `profile`: handle, optional city, private timezone, discoverability. `account.display_name` stays the one canonical name |
 | `migrations/0014` | `friendship`: one row per pair, crossed-request resolution, per-member block flags, handle search, and every RPC the Social tab calls |
 | `migrations/0015` | Avatars: the visibility rule as testable functions, and the `avatars` bucket + storage policies where Supabase Storage exists |
+| `migrations/0016` | Commitment sharing: `shared_commitment`, `social_event`, the sharing switches on `profile`, and publish/unshare with one-event-per-transition idempotency |
+| `migrations/0017` | Streak figures (`social_streaks`), the sharing-switch RPC that withdraws what it stops sharing, `friend_activity` behind its 30-day horizon, and the purge that deletes behind the same number |
 | [`supabase/functions/approval/`](../supabase/functions/approval/) | The partner page: a server-rendered edge function over those two functions (§18). It lives beside `supabase/config.toml` because that is where the CLI looks |
 | [`supabase/functions/grants/`](../supabase/functions/grants/) | Signs grants with the Ed25519 key, because Postgres cannot (§9) |
 

@@ -545,16 +545,24 @@ create extension if not exists pg_cron with schema extensions;
 select cron.schedule('expire-override-requests', '*/15 * * * *',
                      \$\$select public.expire_override_requests()\$\$);
 select cron.schedule('purge-override-receipts', '17 3 * * *',
-                     \$\$select public.purge_override_receipts()\$\$);"
+                     \$\$select public.purge_override_receipts()\$\$);
+select cron.schedule('purge-social-events', '23 3 * * *',
+                     \$\$select public.purge_social_events()\$\$);"
 ```
+
+(`purge_social_events`, from migration 0017, is the same not-load-bearing shape:
+`friend_activity` already refuses to read past the 30-day horizon; the purge keeps
+storage honest about the retention promise.)
 
 ---
 
 ## 8. Social (Milestone S1)
 
-Migrations `0013`–`0015` apply through the same `backend/apply.sh` pass as everything
+Migrations `0013`–`0017` apply through the same `backend/apply.sh` pass as everything
 else. `0015` also creates the `avatars` Storage bucket and its policies when it runs
-against a real Supabase project (on a plain Postgres it skips them, loudly).
+against a real Supabase project (on a plain Postgres it skips them, loudly); `0016`/`0017`
+add commitment sharing, the activity shelf and streak figures, and want the
+`purge-social-events` cron from §7.
 
 Verify after applying:
 
