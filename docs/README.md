@@ -22,8 +22,9 @@ The two root documents outrank everything here: [NORTHSTAR.md](../NORTHSTAR.md) 
   model for networked Accountability Overrides, including the Contract Envelope that makes
   the server authoritative for a hardened commitment's accountability terms. **Built**
   through signed grants (backend milestones A–F, `backend/README.md`) and wired into the
-  app; every product decision is settled except account deletion (§21.2), which waits on
-  privacy/legal review, and §20 lists the launch gates still to clear.
+  app; every product decision is settled — account deletion's product half included
+  (§21.2), with only its retention/legal half still under privacy review — and §20 lists
+  the launch gates still to clear.
 - [`social-architecture.md`](social-architecture.md) — the Social Accountability layer
   (NORTHSTAR §45): profiles, friendships, avatars, the privacy model, and the explicit
   line between enforcement authority and social representation. Milestone S1 (profiles +

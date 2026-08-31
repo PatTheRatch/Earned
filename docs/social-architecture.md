@@ -433,8 +433,13 @@ app. Therefore:
   never a live online indicator.
 - Design target for "interesting": silence becomes surfaceable after **72 hours**, and
   only to friends, and only when the owner opted in. Below that it is noise.
-- This feature deliberately does **not** settle account deletion (D10). What deletion
-  does to social visibility inherits whatever D10 decides; nothing here forecloses it.
+- The product half of account deletion is now settled (accountability-architecture
+  §21.2): deletion is never blocked by outstanding commitments, and it removes the
+  user's social identity and visibility entirely — no tombstone describing what was
+  outstanding, when they left, their streaks, or apparent motive. A deleted friend
+  simply ceases to appear; they do not become a cautionary tale. The retention/legal
+  half of D10 (suppression, abuse records, lawful basis) stays open under privacy/legal
+  review, and nothing social encodes an answer to it.
 
 ---
 

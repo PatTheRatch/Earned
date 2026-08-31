@@ -1210,11 +1210,38 @@ Decided by review, and recorded so they are not silently re-opened.
 | **S16** | A partner **suppressed or revoked after their token was minted but before they voted** still has a valid vote if they use it. They were legitimately asked before withdrawing; suppression governs future contact, not a decision already placed in their hands. (This is why §8's vote transaction checks recipient `status`, never live partner consent state, at the moment of voting) |
 | **S17** | Sign in with Apple requests the **`.email` scope** alongside `.fullName`. The verified address is used for private identity/security purposes only — deriving `verified_email_lookup` so §2.2's self-nomination refusal has something to check against. Never shown on a profile, never a search key, never required of existing accounts, never read as proof the user controls no other addresses. Private-relay addresses count normally as the verified address Apple supplied. (Settled August 2026; ships with the accountability flow, not Social S1) |
 
-### 21.2 Open — this needs you
+### 21.2 D10 — half settled, half open
 
-| # | Decision | Status |
-|---|---|---|
-| **D10** | Account deletion and outstanding obligations | **Deliberately left open.** Patrick chose not to have a placeholder manufactured for this — it is a privacy/legal question (UK/EU GDPR Article 17 and the deletion right, weighed against the product's anti-circumvention intent), not a product preference, and nothing here should be built against a guessed answer. Deletion of personal data and the product semantics of abandoning a live commitment must be decided as two separate questions once real legal review has happened. Suppression retention (§14.4) is part of the same review |
+D10 was always two questions wearing one number, and they are now formally separated.
+
+**Settled — the product semantics** (Patrick, August 2026):
+
+- **Deletion is never blocked because commitments are outstanding.** A live obligation is
+  not a lien on the delete button.
+- **Deletion removes the user's social identity and visibility.** No public or social
+  tombstone survives it: nothing that describes outstanding commitments, deletion timing,
+  streaks, or apparent motive. "Patrick deleted his account owing a run" is a sentence
+  the product will never render, for the same reason NORTHSTAR §45 refuses motive claims
+  about silence.
+- **Anti-circumvention is not solved by holding profile or social data hostage.** The
+  answer to delete-and-recreate lives in account-authoritative state and the invariants
+  of §33 — never in making deletion costly, slow, or embarrassing.
+
+**Still open — retention and lawful basis.** This is the privacy/legal half (UK/EU GDPR
+Article 17 weighed against legitimate interests), and it still needs real review before
+launch, not a guessed answer:
+
+| What | Why it may outlive deletion |
+|---|---|
+| Suppression records (§14.4) | They protect the person who refused, not the account that asked |
+| Abuse/security records | Rate limits and block-evasion defence |
+| Any future server-authoritative commitment state | The §33 anti-circumvention intent |
+| Retention periods and lawful basis for each | The actual legal question |
+
+Until that review lands, **retention decisions are not silently encoded into cascade
+constraints** — which is why `account.auth_user_id` remains deliberately un-FK'd to
+`auth.users` (migration 0001 says so in place) and why nothing new should add a cascade
+that quietly decides what deletion does.
 
 Worth confirming rather than assuming: **partner approvals stay valid after the Solo window
 opens.** The window unlocks Solo as an *additional* route; it does not close the

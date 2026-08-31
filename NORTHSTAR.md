@@ -2,7 +2,7 @@
 
 **North Star Product Document**
 
-v0.6 · August 2026 · *v0.6 adds §45 (Social Accountability) and invariants 23–28. Sections are append-only — code and docs cite them by number.*
+v0.7 · August 2026 · *v0.6 added §45 (Social Accountability) and invariants 23–28; v0.7 settles the product half of account deletion (§33, §45). Sections are append-only — code and docs cite them by number.*
 
 > Do what matters first. Earn the rest.
 
@@ -1112,6 +1112,12 @@ verification is intended. The requirement is narrower and sufficient:
 
 Account-authoritative state and device-local enforcement state both help.
 
+Two things anti-circumvention must never become (settled with the social layer's
+deletion semantics, §45): **deletion is never blocked because commitments are
+outstanding**, and the inconvenience of leaving is never manufactured from the user's own
+data — profile, photos, and social standing are not hostages. The legitimate tools are
+state and friction of re-entry, not a lock on the exit.
+
 ### Hardening your own escape routes
 
 Earned should teach users to make their own bypass deliberate rather than
@@ -1499,3 +1505,14 @@ Social claims are the client's own account of itself. They are representation, n
 enforcement evidence (invariant 28); the Contract Envelope system remains the only
 authority for the things it governs, and social visibility never changes Gate truth
 (invariant 25).
+
+### Leaving
+
+The product half of account deletion is settled. Deletion is never blocked because
+commitments are outstanding, and it removes the user's social identity and visibility
+entirely — no tombstone survives describing what they owed, when they left, what their
+streaks were, or why they might have gone. Absence rules (invariant 27) apply to the
+departed most of all. What data may lawfully outlive deletion — suppression records,
+abuse defences, any future server-authoritative state — remains a privacy/legal question
+under review (accountability-architecture §21.2), decided by counsel rather than encoded
+by accident.

@@ -592,7 +592,8 @@ And two gates that are neither code nor configuration:
 
 - **Family Controls (Distribution)** — free, but Apple reviews it by hand, per bundle ID
   and separately for each Screen Time extension. Needed before TestFlight. Start early.
-- **D10 — account deletion and outstanding obligations.** Deliberately unresolved: a
-  privacy and legal question, not a product preference, and
-  [§21.2](accountability-architecture.md) says so at length. Needs counsel before Earned is
-  offered to anyone outside development.
+- **D10, the retention half.** The product semantics of deletion are settled
+  ([§21.2](accountability-architecture.md): never blocked by outstanding commitments, no
+  social tombstone), but what may lawfully outlive deletion — suppression, abuse records,
+  retention periods and their basis — is a privacy and legal question that needs counsel
+  before Earned is offered to anyone outside development.

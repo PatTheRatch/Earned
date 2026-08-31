@@ -4,8 +4,11 @@ Supabase project: schema, migrations, and the tests that hold them to the design
 
 The design and threat model is
 [`docs/accountability-architecture.md`](../docs/accountability-architecture.md) (v0.3).
-Every product decision in it is settled except account deletion (§21.2), which waits on
-privacy/legal review — nothing here should be built against a guessed answer to that one.
+Every product decision in it is settled — including, now, the product half of account
+deletion (§21.2: never blocked by outstanding commitments, no social tombstone). What
+remains open there is retention and lawful basis, which waits on privacy/legal review —
+nothing here should be built against a guessed answer to that half, and no cascade
+constraint should quietly encode one.
 
 ## What exists (Milestones A–F, and Social S1)
 
