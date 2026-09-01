@@ -37,6 +37,26 @@ targets:
         # on notifications and in Settings, with no build error to explain it.
         CFBundleIconName: AppIcon
         UILaunchScreen: {}
+        # Stated rather than left to XcodeGen's defaults, because the app now
+        # *reads* them: You → About shows "0.1 (1)" so a tester can say which
+        # binary they were holding. A key that silently stopped being written
+        # would turn that screen into "? (?)".
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # Export compliance, declared once here instead of answered by hand on
+        # every TestFlight upload — where the honest answer is the same every
+        # time and a mis-click costs a day.
+        #
+        # Earned's only cryptography is HTTPS to Supabase (the OS's own) and
+        # Ed25519 *verification* of grant signatures via CryptoKit. Both are
+        # exempt uses: encryption provided by the platform, and authentication.
+        # Earned implements no algorithm of its own and offers no encryption
+        # feature to the user.
+        #
+        # Patrick should confirm this reading once against Apple's current
+        # questionnaire before the first upload (docs/release.md §2); it is
+        # recorded here so the answer is reviewable rather than remembered.
+        ITSAppUsesNonExemptEncryption: false
         # Shown on the Health permission sheet. Written to say exactly what is
         # read and why, because that sheet is the entire consent conversation.
         NSHealthShareUsageDescription: >-
@@ -94,8 +114,17 @@ targets:
       # contract between the two processes, and two copies of a format that
       # must agree forever is how they stop agreeing.
       - path: Earned/Enforcement/ShieldPlan.swift
-    entitlements:
-      path: EarnedMonitor/EarnedMonitor.entitlements
+    # No `entitlements:` block here, for the reason spelled out on the app
+    # target above — and this target had exactly the bug that comment warns
+    # about. XcodeGen's FileWriter does `writePlist(plist.properties, path:)`
+    # for any target declaring one, so a block with no `properties` deletes the
+    # checked-in file and writes `<dict/>` over it. Every `xcodegen generate`
+    # therefore stripped the monitor's Family Controls entitlement and its App
+    # Group, and nothing said so: the build succeeds, the extension signs, the
+    # system wakes it on time — and it has no shield authority and a nil
+    # container URL, so it shields nothing. The exact bypass EarnedMonitor
+    # exists to close, reopened by the build system on every regeneration.
+    # CODE_SIGN_ENTITLEMENTS below is the only reference the build needs.
     info:
       path: EarnedMonitor/Info.plist
       properties:
