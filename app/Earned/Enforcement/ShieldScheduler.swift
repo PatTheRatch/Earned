@@ -85,6 +85,54 @@ enum ShieldScheduler {
         SharedContainer.save(ShieldPlan(generatedAt: now, windows: planned))
     }
 
+    /// Write what the shield should say about the Gates that are closed *now*.
+    ///
+    /// Separate from `reschedule` on purpose. The plan describes the future and
+    /// only changes when the ledger does; this describes the present and is
+    /// rewritten on every pass, because it is what a stranger process will read
+    /// at an hour of the user's choosing.
+    ///
+    /// Nothing here counts down. Progress figures are safe to state because the
+    /// only route by which they can change is a Health import, which happens
+    /// inside the app — so while the app is closed these numbers are frozen and
+    /// still true. A remaining-time figure would not be: it would keep shrinking
+    /// in the user's head while the file said otherwise.
+    static func publishCopy(for access: AccessState) {
+        guard SharedContainer.isAvailable else { return }
+        SharedContainer.save(ShieldCopy(generatedAt: Date(),
+                                        lines: access.lockReasons.map(line(for:))))
+    }
+
+    private static func line(for reason: LockReason) -> String {
+        switch reason.gate {
+        case .hydration:
+            // No progress figure and no negotiation: a glass of water is the
+            // only way out of hydration, so the line is the instruction.
+            return "Drink some water."
+        case .commitment:
+            guard let progress = reason.progress, progress.required > 0 else {
+                return "\(reason.headline)."
+            }
+            return "\(reason.headline) — \(measure(progress))."
+        }
+    }
+
+    /// The same arithmetic the locked notice shows, in sentence case: this
+    /// screen is a sentence, not a row in a table.
+    private static func measure(_ progress: CommitmentProgress) -> String {
+        switch progress.unit {
+        case .workouts:
+            return progress.achieved >= progress.required ? "done" : "still owed"
+        case .seconds:
+            return "\(Int(progress.achieved / 60)) of \(Int(progress.required / 60)) min"
+        case .meters:
+            return String(format: "%.1f of %.1f km", progress.achieved / 1000,
+                          progress.required / 1000)
+        case .kilocalories:
+            return "\(Int(progress.achieved)) of \(Int(progress.required)) cal"
+        }
+    }
+
     /// Give up every scheduled wake-up and empty the plan.
     ///
     /// For when Screen Time authorization has gone away. The app's own shield
@@ -100,6 +148,10 @@ enum ShieldScheduler {
         let existing = center.activities.filter { $0.rawValue.hasPrefix(prefix) }
         if !existing.isEmpty { center.stopMonitoring(existing) }
         SharedContainer.save(ShieldPlan(generatedAt: Date(), windows: []))
+        // And the copy with it. Authorization is gone, so nothing of Earned's
+        // is shielding anything; leaving lines behind would mean a shield
+        // raised by some other app one day could show Earned's obligations.
+        SharedContainer.save(ShieldCopy(generatedAt: Date(), lines: []))
     }
 
     private static func encode<T: Encodable>(_ token: T) -> Data? {

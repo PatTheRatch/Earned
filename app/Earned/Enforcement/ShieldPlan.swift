@@ -42,6 +42,34 @@ struct ShieldPlan: Codable, Equatable {
     func window(named id: String) -> Window? { windows.first { $0.id == id } }
 }
 
+/// What the shield says when somebody actually tries to open a blocked app.
+///
+/// A third process again, and the same rule as `ShieldPlan`: the answer is
+/// worked out by the app, in advance, and crosses the boundary as text. A
+/// shield configuration extension is handed an opaque token and given a few
+/// milliseconds to describe a screen; it cannot replay a ledger, and it must
+/// not try.
+///
+/// **Every line here has to survive being stale.** The app rewrites this
+/// whenever enforcement changes, but the shield can be raised at 2am by a
+/// process the app has not spoken to since yesterday. So the copy states
+/// obligations and absolute times — "Cycle 45 minutes, by 19:00" — and never
+/// anything that counts down. A shield that says "12 min left" three hours
+/// after the deadline is worse than one that says nothing: it is the app
+/// lying about the deal on the one screen where the deal is being enforced.
+struct ShieldCopy: Codable, Equatable {
+    var generatedAt: Date
+    /// One line per closed Gate, already rendered, in the order the user
+    /// should read them — the same order as `AccessState.lockReasons`.
+    var lines: [String]
+
+    /// What the shield falls back to when there is no copy to read: a fresh
+    /// install whose app has never scheduled anything, a cleared plan, or a
+    /// container that has gone away. It says the true thing that needs no
+    /// state to know.
+    static let fallbackLine = "Open Earned to see what's still owed."
+}
+
 /// The shared container both processes reach through.
 ///
 /// An App Group is the only route between them, and it has to be created in
@@ -60,6 +88,13 @@ enum SharedContainer {
     static var isAvailable: Bool { url != nil }
 
     private static var planURL: URL? { url?.appendingPathComponent("shield-plan.json") }
+
+    /// Deliberately a second file rather than a field on the plan. The plan is
+    /// read by the monitor at a scheduled moment and the copy by the shield at
+    /// an unpredictable one; keeping them apart means the copy can be rewritten
+    /// on every foreground pass without touching the bytes the monitor depends
+    /// on to shield correctly.
+    private static var copyURL: URL? { url?.appendingPathComponent("shield-copy.json") }
 
     private static var encoder: JSONEncoder {
         let encoder = JSONEncoder()
@@ -82,5 +117,16 @@ enum SharedContainer {
     static func save(_ plan: ShieldPlan) -> Bool {
         guard let planURL, let data = try? encoder.encode(plan) else { return false }
         return (try? data.write(to: planURL, options: .atomic)) != nil
+    }
+
+    static func loadCopy() -> ShieldCopy? {
+        guard let copyURL, let data = try? Data(contentsOf: copyURL) else { return nil }
+        return try? decoder.decode(ShieldCopy.self, from: data)
+    }
+
+    @discardableResult
+    static func save(_ copy: ShieldCopy) -> Bool {
+        guard let copyURL, let data = try? encoder.encode(copy) else { return false }
+        return (try? data.write(to: copyURL, options: .atomic)) != nil
     }
 }

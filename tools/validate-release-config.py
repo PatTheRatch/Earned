@@ -30,12 +30,30 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 APP = ROOT / "app"
 
-# The two Screen Time bundle identifiers. Family Controls is granted per bundle
-# id and reviewed separately for each extension, so this list is also the list
-# of Apple approvals TestFlight waits on (docs/family-controls-request.md).
+# The three Screen Time bundle identifiers. Family Controls is granted per
+# bundle id and reviewed separately for each extension, so this list is also the
+# list of Apple approvals TestFlight waits on (docs/family-controls-request.md).
 APP_BUNDLE_ID = "com.pattheratch.earned"
 MONITOR_BUNDLE_ID = "com.pattheratch.earned.monitor"
+SHIELD_BUNDLE_ID = "com.pattheratch.earned.shield"
 APP_GROUP = "group.com.pattheratch.earned"
+
+# Every Screen Time extension, checked by the same rules rather than by name.
+# The monitor was checked individually and the shield was added later; a second
+# hand-written block is how the second extension ends up with the first one's
+# bugs and none of its guards.
+#
+#   (target, label, bundle id, entitlements file, extension point, what breaks)
+EXTENSIONS = (
+    ("EarnedMonitor", "the monitor", MONITOR_BUNDLE_ID,
+     "EarnedMonitor/EarnedMonitor.entitlements",
+     "com.apple.deviceactivity.monitor-extension",
+     "nothing applies a shield while the app is closed"),
+    ("EarnedShield", "the shield", SHIELD_BUNDLE_ID,
+     "EarnedShield/EarnedShield.entitlements",
+     "com.apple.ManagedSettings.shield-configuration-service",
+     "a blocked app shows Apple's default grey card instead of the deal"),
+)
 
 FAMILY_CONTROLS = "com.apple.developer.family-controls"
 APP_GROUPS = "com.apple.security.application-groups"
@@ -68,52 +86,57 @@ def main() -> int:
     targets = spec.get("targets", {})
 
     check("Earned" in targets, "project.yml has no Earned target")
-    check("EarnedMonitor" in targets,
-          "project.yml has no EarnedMonitor target — nothing applies a shield "
-          "while the app is closed")
+    for target_name, label, _, _, _, consequence in EXTENSIONS:
+        check(target_name in targets,
+              f"project.yml has no {target_name} target — {consequence}")
 
     app = targets.get("Earned", {})
-    monitor = targets.get("EarnedMonitor", {})
     app_settings = app.get("settings", {}).get("base", {})
-    monitor_settings = monitor.get("settings", {}).get("base", {})
     info = app.get("info", {}).get("properties", {})
-    monitor_info = monitor.get("info", {}).get("properties", {})
+    extensions = [
+        (label, targets.get(name, {}), bundle_id, entitlements_path, point)
+        for name, label, bundle_id, entitlements_path, point, _ in EXTENSIONS
+    ]
 
     # --- Bundle identifiers -------------------------------------------------
-    # The monitor must be a child of the app's identifier: iOS refuses to embed
-    # an extension whose bundle id is not prefixed by its host's.
+    # Each extension must be a child of the app's identifier: iOS refuses to
+    # embed one whose bundle id is not prefixed by its host's.
     check(app_settings.get("PRODUCT_BUNDLE_IDENTIFIER") == APP_BUNDLE_ID,
           f"the app's bundle id is not {APP_BUNDLE_ID}; Family Controls and the "
           "App ID's capabilities are registered against that exact string")
-    check(monitor_settings.get("PRODUCT_BUNDLE_IDENTIFIER") == MONITOR_BUNDLE_ID,
-          f"the monitor's bundle id is not {MONITOR_BUNDLE_ID}")
-    check(str(monitor_settings.get("PRODUCT_BUNDLE_IDENTIFIER", "")).startswith(
-              APP_BUNDLE_ID + "."),
-          "the monitor's bundle id is not prefixed by the app's; iOS refuses to "
-          "embed the extension")
+    for label, target, bundle_id, _, _ in extensions:
+        settings = target.get("settings", {}).get("base", {})
+        check(settings.get("PRODUCT_BUNDLE_IDENTIFIER") == bundle_id,
+              f"{label}'s bundle id is not {bundle_id}")
+        check(str(settings.get("PRODUCT_BUNDLE_IDENTIFIER", "")).startswith(
+                  APP_BUNDLE_ID + "."),
+              f"{label}'s bundle id is not prefixed by the app's; iOS refuses to "
+              "embed the extension")
 
     # --- Versioning --------------------------------------------------------
     # You → About reads these at runtime. A build a tester cannot name is a bug
     # report nobody can act on.
     for key in ("MARKETING_VERSION", "CURRENT_PROJECT_VERSION"):
         check(app_settings.get(key), f"the app has no {key}")
-        check(monitor_settings.get(key),
-              f"the monitor has no {key}; an extension whose version disagrees "
-              "with its host is rejected at upload")
-    check(app_settings.get("MARKETING_VERSION")
-          == monitor_settings.get("MARKETING_VERSION"),
-          "app and monitor MARKETING_VERSION disagree; App Store Connect "
-          "rejects the upload")
-    check(app_settings.get("CURRENT_PROJECT_VERSION")
-          == monitor_settings.get("CURRENT_PROJECT_VERSION"),
-          "app and monitor CURRENT_PROJECT_VERSION disagree; App Store Connect "
-          "rejects the upload")
+        for label, target, _, _, _ in extensions:
+            settings = target.get("settings", {}).get("base", {})
+            check(settings.get(key),
+                  f"{label} has no {key}; an extension whose version disagrees "
+                  "with its host is rejected at upload")
+            check(app_settings.get(key) == settings.get(key),
+                  f"app and {label} {key} disagree; App Store Connect rejects "
+                  "the upload")
     # A build setting only reaches the bundle if the plist asks for it by name.
-    # Both targets must ask, for opposite reasons: the app so You → About can
-    # name the build, the monitor so its version matches its host. Checking the
-    # settings alone is what let the monitor ship XcodeGen's default 1.0/1
-    # against the app's own version — green here, refused at upload.
-    for label, properties in (("the app", info), ("the monitor", monitor_info)):
+    # Every target must ask, for opposite reasons: the app so You → About can
+    # name the build, the extensions so their versions match their host.
+    # Checking the settings alone is what let the monitor ship XcodeGen's
+    # default 1.0/1 against the app's own version — green here, refused at
+    # upload.
+    plists = [("the app", info)] + [
+        (label, target.get("info", {}).get("properties", {}))
+        for label, target, _, _, _ in extensions
+    ]
+    for label, properties in plists:
         check(properties.get("CFBundleShortVersionString") == "$(MARKETING_VERSION)",
               f"{label}'s Info.plist does not carry CFBundleShortVersionString: "
               "$(MARKETING_VERSION); the setting above is inert and XcodeGen "
@@ -130,15 +153,18 @@ def main() -> int:
     check(app_settings.get("CODE_SIGN_ENTITLEMENTS") == "Earned/Earned.entitlements",
           "the app's CODE_SIGN_ENTITLEMENTS is not set to its checked-in "
           "entitlements file; the signed binary would claim nothing")
-    check(monitor_settings.get("CODE_SIGN_ENTITLEMENTS")
-          == "EarnedMonitor/EarnedMonitor.entitlements",
-          "the monitor's CODE_SIGN_ENTITLEMENTS is not set to its entitlements "
-          "file")
-    # Both targets, not just the app: the monitor had this exact bug, and it is
-    # the worse place to have it — a stripped app entitlement fails Screen Time
-    # authorization loudly on the next launch, while a stripped *monitor*
-    # entitlement fails only in the one situation nobody is watching.
-    for name, target in (("Earned", app), ("EarnedMonitor", monitor)):
+    for label, target, _, entitlements_path, _ in extensions:
+        settings = target.get("settings", {}).get("base", {})
+        check(settings.get("CODE_SIGN_ENTITLEMENTS") == entitlements_path,
+              f"{label}'s CODE_SIGN_ENTITLEMENTS is not set to its entitlements "
+              "file")
+    # Every target, not just the app: the monitor had this exact bug, and an
+    # extension is the worse place to have it — a stripped app entitlement fails
+    # Screen Time authorization loudly on the next launch, while a stripped
+    # *extension* entitlement fails only in the situations nobody is watching.
+    for name, target in [("Earned", app)] + [
+        (name, targets.get(name, {})) for name, *_ in EXTENSIONS
+    ]:
         check("entitlements" not in target,
               f"the {name} target declares an `entitlements:` block. XcodeGen "
               "treats that as 'generate this file', so with no `properties` it "
@@ -148,15 +174,20 @@ def main() -> int:
               "build either side of it. Use CODE_SIGN_ENTITLEMENTS alone")
 
     app_ent = load_plist(APP / "Earned" / "Earned.entitlements")
-    monitor_ent = load_plist(APP / "EarnedMonitor" / "EarnedMonitor.entitlements")
+    extension_ents = [
+        (label, load_plist(APP / entitlements_path))
+        for label, _, _, entitlements_path, _ in extensions
+    ]
 
     check(app_ent.get(FAMILY_CONTROLS) is True,
           "the app is missing the Family Controls entitlement; Screen Time "
           "authorization fails with a sandbox error")
-    check(monitor_ent.get(FAMILY_CONTROLS) is True,
-          "the monitor is missing the Family Controls entitlement. It shields "
-          "on its own, so it needs the capability on its own — granted per "
-          "bundle id, and reviewed separately for distribution")
+    for label, entitlements in extension_ents:
+        check(entitlements.get(FAMILY_CONTROLS) is True,
+              f"{label} is missing the Family Controls entitlement. It runs as "
+              "its own process against Screen Time, so it needs the capability "
+              "on its own — granted per bundle id, and reviewed separately for "
+              "distribution")
     check(app_ent.get(HEALTHKIT) is True,
           "the app is missing the HealthKit entitlement; no workout can "
           "complete a commitment")
@@ -169,12 +200,13 @@ def main() -> int:
     # plan is never read, and the monitor wakes on time to shield nothing.
     check(app_ent.get(APP_GROUPS) == [APP_GROUP],
           f"the app's App Group is not exactly [{APP_GROUP}]")
-    check(monitor_ent.get(APP_GROUPS) == [APP_GROUP],
-          f"the monitor's App Group is not exactly [{APP_GROUP}]; the shield "
-          "plan never crosses between the two processes and closed-app "
-          "enforcement silently does nothing")
-    check(app_ent.get(APP_GROUPS) == monitor_ent.get(APP_GROUPS),
-          "the app and the monitor list different App Groups")
+    for label, entitlements in extension_ents:
+        check(entitlements.get(APP_GROUPS) == [APP_GROUP],
+              f"{label}'s App Group is not exactly [{APP_GROUP}]; nothing the "
+              "app writes ever reaches it, and the failure is silent — the "
+              "extension loads, runs, and reads an empty container")
+        check(app_ent.get(APP_GROUPS) == entitlements.get(APP_GROUPS),
+              f"the app and {label} list different App Groups")
 
     source = (APP / "Earned" / "Enforcement" / "ShieldPlan.swift").read_text()
     check(f'"{APP_GROUP}"' in source,
@@ -207,16 +239,25 @@ def main() -> int:
 
     # --- Wiring ------------------------------------------------------------
     dependencies = app.get("dependencies", [])
-    check(any(d.get("target") == "EarnedMonitor" for d in dependencies),
-          "the app does not depend on EarnedMonitor, so the extension is never "
-          "embedded and closed-app enforcement ships as dead code")
-    extension_point = (monitor.get("info", {}).get("properties", {})
-                       .get("NSExtension", {}).get("NSExtensionPointIdentifier"))
-    check(extension_point == "com.apple.deviceactivity.monitor-extension",
-          "the monitor's NSExtensionPointIdentifier is not the DeviceActivity "
-          "monitor point; the system will never wake it")
-    check(monitor.get("type") == "app-extension",
-          "EarnedMonitor is not declared as an app-extension")
+    for target_name, label, _, _, point, consequence in EXTENSIONS:
+        target = targets.get(target_name, {})
+        check(any(d.get("target") == target_name for d in dependencies),
+              f"the app does not depend on {target_name}, so the extension is "
+              f"never embedded and ships as dead code — {consequence}")
+        declared = (target.get("info", {}).get("properties", {})
+                    .get("NSExtension", {}).get("NSExtensionPointIdentifier"))
+        check(declared == point,
+              f"{label}'s NSExtensionPointIdentifier is not {point}; the system "
+              "will never load it for the job it exists to do")
+        check(target.get("type") == "app-extension",
+              f"{target_name} is not declared as an app-extension")
+
+    # The shield reads its lines out of the App Group, so the file name has to
+    # agree across the two processes the same way the group identifier does.
+    check("shield-copy.json" in source,
+          "SharedContainer no longer names shield-copy.json; the app would "
+          "write the shield's copy somewhere the shield does not read, and the "
+          "shield would fall back to its stateless line without saying so")
 
     # --- Report ------------------------------------------------------------
     if failures:

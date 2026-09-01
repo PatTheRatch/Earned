@@ -24,6 +24,7 @@ targets:
       - package: EarnedKit
         product: EarnedKit
       - target: EarnedMonitor
+      - target: EarnedShield
       - package: EarnedMedia
         product: EarnedMedia
     info:
@@ -149,4 +150,50 @@ targets:
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_ENTITLEMENTS: EarnedMonitor/EarnedMonitor.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+
+  # The screen a blocked app actually shows. Without this target iOS draws its
+  # own grey "restricted" card, which says nothing about the deal and offers no
+  # sign that it was the user's own decision doing it.
+  #
+  # A third bundle identifier using Screen Time, so a third Family Controls
+  # review before TestFlight. That is the real cost of this target and the
+  # reason it belongs in the same request as the other two rather than a month
+  # later (docs/family-controls-request.md).
+  EarnedShield:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: EarnedShield
+        excludes:
+          - "EarnedShield.entitlements"
+      # Shared with the app for the same reason the plan is: the copy is a
+      # format two processes must agree on forever, and two implementations of
+      # it is how they stop agreeing.
+      - path: Earned/Enforcement/ShieldPlan.swift
+    # No `entitlements:` block, for the reason spelled out on both targets
+    # above: XcodeGen writes an empty plist over the checked-in file for any
+    # target that declares one without `properties`, and the symptom is an
+    # extension that signs, loads, and quietly has no Screen Time authority.
+    info:
+      path: EarnedShield/Info.plist
+      properties:
+        CFBundleDisplayName: Earned Shield
+        # Stated for the reason the monitor's are: with GENERATE_INFOPLIST_FILE
+        # off, an extension that does not ask for these by name gets
+        # XcodeGen's 1.0/1 defaults, and App Store Connect refuses an upload
+        # whose extension disagrees with its host.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.ManagedSettings.shield-configuration-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShieldConfigurationExtension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.pattheratch.earned.shield
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_ENTITLEMENTS: EarnedShield/EarnedShield.entitlements
         GENERATE_INFOPLIST_FILE: NO

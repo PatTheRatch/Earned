@@ -118,6 +118,10 @@ final class EarnedStore: ObservableObject {
         // the schedule below covers it being closed, which is the case that
         // actually matters — nobody opens a commitment app to be restricted.
         ShieldScheduler.reschedule(for: state, now: now)
+        // And what the shield should say when one of those restrictions is
+        // actually met. Written here rather than in `reschedule` because it
+        // describes the Gates closed right now, not the ones closing later.
+        ShieldScheduler.publishCopy(for: access)
     }
 
     /// Re-reads Screen Time permission, which can be revoked in iOS Settings

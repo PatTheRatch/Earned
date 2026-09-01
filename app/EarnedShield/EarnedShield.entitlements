@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- A third bundle identifier using Screen Time, and so a third Family
+	     Controls capability: (Development) self-serve now, (Distribution)
+	     reviewed by hand before TestFlight. Apple grants it per App ID, so the
+	     app's approval and the monitor's do not cover this one.
+	     See docs/family-controls-request.md. -->
+	<key>com.apple.developer.family-controls</key>
+	<true/>
+	<!-- How the lines on the shield get here. The app writes them; this
+	     process only reads. Without the group the container URL is nil and the
+	     shield falls back to its stateless line — still red, still refusing,
+	     just less specific. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.pattheratch.earned</string>
+	</array>
+</dict>
+</plist>
