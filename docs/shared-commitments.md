@@ -4,7 +4,7 @@ v0.2 · September 2026 · Milestone SC1 (create → invite → accept/decline �
 Gate → shared progress → Social surfacing → block/friendship rules → backend + RLS +
 tests), plus the four follow-up decisions Patrick settled the same week: a session-count
 metric in EarnedKit (§2), creator deletion orphaning rather than dissolving (§9), roster
-moments on the Recent shelf (§13), and the revised push rule (§11; migration 0021). The
+moments on the Recent shelf (§13), and the revised push rule (§11; migration 0022). The
 durable product principle lives in NORTHSTAR §46 and invariants 30–32. This document is
 the working design: every state, rule, edge case, and the storage model. Where this
 document and the code disagree, one of them is a bug — fix whichever is wrong.
@@ -364,7 +364,7 @@ report and still confers nothing (§7, invariant 28).
   stale honestly: their last reported progress with no fabricated freshness; absence is
   observable, motive is not (invariant 27).
 - **The creator's deletion orphans the agreement, never dissolves it** (settled by
-  Patrick; 0021). The roster belongs to everyone bound to it: the agreement survives
+  Patrick; 0022). The roster belongs to everyone bound to it: the agreement survives
   with a null author, the departed creator's line ceases to appear like any deleted
   participant's, and every personal commitment stands untouched. An orphaned agreement
   is closed in practice — no author remains to edit, cancel, or invite into it, and its
@@ -379,8 +379,8 @@ report and still confers nothing (§7, invariant 28).
 Same posture as everything in `backend/` (social-architecture §11): **default deny**, RLS
 on, no client table writes, every mutation a SECURITY DEFINER function that re-derives
 the caller from the JWT, cross-account reads shaped by functions, `anon` gets nothing.
-Migration `0020_shared_commitments.sql`, appended after 0001–0019, never rewriting
-history; tests in `backend/tests/170_shared_commitments.sql` run by the same `run.sh`.
+Migration `0021_shared_commitments.sql`, appended after 0001–0019, never rewriting
+history; tests in `backend/tests/180_shared_commitments.sql` run by the same `run.sh`.
 
 The server is authoritative for: invitation existence and state, the roster, the
 canonical shared terms and their version, acceptance timestamps, and which personal
@@ -388,7 +388,7 @@ commitment id belongs to which participant. The server is **not** authoritative 
 participant's Gate resolution — sharedness never promotes Social into an enforcement
 source of truth (§3 of social-architecture stands unchanged).
 
-### 10.1 Tables (0020)
+### 10.1 Tables (0021)
 
 `shared_commitment` (0016) was already taken — it is the *witnessing* projection, one
 account showing one of its own commitments to friends. Doing-it-together therefore lives
@@ -444,7 +444,7 @@ never announces itself.
 Default deny; direct SELECT is own-perspective only (`shared_participant_select_own`,
 `shared_agreement_select_participant`); no client write path exists on either table;
 `anon` gets nothing. Dials as functions: 8 participants per agreement, 10 creations and
-30 invitations per creator per day. Tests: `backend/tests/170_shared_commitments.sql`
+30 invitations per creator per day. Tests: `backend/tests/180_shared_commitments.sql`
 (both CI layouts).
 
 ### 10.4 Client shape
@@ -476,7 +476,7 @@ Never a notification: progress ticks, partial workouts, app opens, reactions rec
 declines (quiet, §4.2). The push stance was revisited on purpose with the follow-ups and
 the rule is now (social-architecture §9): **no social-engagement push; commitment-relevant
 push allowed** — a shared-commitment invitation, an accountability-partner request, an
-override approval request. Migration 0021 builds the groundwork: a `push_device` token
+override approval request. Migration 0022 builds the groundwork: a `push_device` token
 registry (session-bound registration; a re-registered token follows the new account) and
 a `push_outbox` the server enqueues into at exactly those three transitions, via
 triggers, with the kind check constraint as the allow-list. Delivery — the APNs sender
@@ -513,7 +513,7 @@ deadline warnings are the existing local notifications, unchanged and authoritat
 ## 13. Social activity events
 
 *Settled by Patrick with the follow-ups: the roster's meaningful moments belong on the
-Recent shelf.* Migration 0021 grows the `social_event` vocabulary by five kinds, all
+Recent shelf.* Migration 0022 grows the `social_event` vocabulary by five kinds, all
 riding the existing shelf machinery — 30-day horizon, cap of 50, the same purge:
 
 - `shared_accepted` — emitted once, at the acceptor's real acceptance (the idempotent

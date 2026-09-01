@@ -44,7 +44,7 @@ trusted. Re-verify against the code when it drifts.
 | Social — commitment sharing, activity, streaks | **Real** (Milestone S2) | Per-commitment Private/Friends choice (default Private), friends' Recent shelf (bounded, 30-day horizon, meaningful events only), and the two streak figures ("12 commitments kept · 6 since last Override"). Overrides are told only when the owner shares Override usage |
 | Social — check-ins and the quiet surface | **Real** (Milestone S3) | Opt-in: friends see "Hasn't checked in · 4 days" (whole days, only past 72 hours, never a live status) and how many shared commitments were open at the last check-in. Facts only — motive is never claimed |
 | Earned-user accountability partners | **Real** (migration 0019; not yet on the hosted project) | An accepted friend can be nominated by identity — no number, no email — and consents in-app; their approval requests arrive in-app through the same snapshot and vote transaction as the web page. External partners keep the full no-account web flow. Block revokes accountability both ways; unblock restores nothing |
-| Shared Commitments — doing it together | **Real** (Milestone SC1; migration 0020, not yet on the hosted project) | "With friends" at creation invites accepted Earned friends; each accepts through their own Deal and gets their own ordinary commitment — own Gate, own rules, own hardening clock from their own acceptance. The roster shows everyone's self-reported line against the shared target; no ranking, no shared consequence. See `docs/shared-commitments.md` |
+| Shared Commitments — doing it together | **Real** (Milestone SC1; migration 0021, not yet on the hosted project) | "With friends" at creation invites accepted Earned friends; each accepts through their own Deal and gets their own ordinary commitment — own Gate, own rules, own hardening clock from their own acceptance. The roster shows everyone's self-reported line against the shared target; no ranking, no shared consequence. See `docs/shared-commitments.md` |
 
 **One-sentence version:** the contract machinery is real, the identity is real, Earned
 takes apps away when a Gate is closed, a partner's approval can genuinely unlock a phone,
@@ -548,7 +548,7 @@ unstarted future, which expires unanswered invitations and takes nothing from an
 bound. Blocking withdraws pending asks between the pair and severs their mutual roster
 visibility — obligations stand untouched.
 
-The follow-up pass (migration 0021, ledger schema v6) made "Run 3× this week" literal:
+The follow-up pass (migration 0022, ledger schema v6) made "Run 3× this week" literal:
 **A number of times** is a first-class completion choice — each qualifying workout counts
 once, accumulating like any metric, harder-only after hardening. Roster moments (joined,
 finished, finished late, the window opening, everyone made it) now appear on friends'
@@ -559,8 +559,8 @@ push, commitment-relevant push allowed), with APNs delivery itself a deployment 
 
 > Source: `app/Earned/Social/SharedCommitmentViews.swift`, `SharedCommitmentModels.swift`,
 > `SharedCommitmentRegistry.swift`, `app/Earned/Commitment/NewCommitmentView.swift`,
-> `backend/migrations/0020_shared_commitments.sql`,
-> `backend/migrations/0021_shared_commitment_followups.sql`,
+> `backend/migrations/0021_shared_commitments.sql`,
+> `backend/migrations/0022_shared_commitment_followups.sql`,
 > `packages/EarnedKit/Sources/EarnedKit/Activity.swift`, `docs/shared-commitments.md`
 
 ### Going quiet (Milestone S3)

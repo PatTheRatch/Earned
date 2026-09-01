@@ -1314,7 +1314,7 @@ a boundary clarification, not a design change.*
 
 Doing the same challenge grants no override authority. A shared-commitment participant is
 a third relationship concept beside friend and accountability partner (invariant 24,
-extended): nothing in migration 0020 is consulted by `register_contract_envelope`,
+extended): nothing in migration 0021 is consulted by `register_contract_envelope`,
 `create_override_request`, `cast_override_vote`, or anything else on the enforcement
 path, and a roster of people running together is never an accountability roster. If a
 participant should also be able to approve Overrides, that is a separate nomination

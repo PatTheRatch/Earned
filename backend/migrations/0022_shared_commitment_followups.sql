@@ -110,7 +110,7 @@ alter table public.social_event
 alter table public.shared_commitment_agreement
   add column if not exists start_announced_at timestamptz;
 
--- Recreated from 0020 with one change: a window already open at creation is
+-- Recreated from 0021 with one change: a window already open at creation is
 -- marked announced, so announce_shared_starts never re-tells it.
 create or replace function public.create_shared_commitment(
   p_commitment_id uuid,
@@ -200,7 +200,7 @@ begin
 end;
 $$;
 
--- Recreated from 0020: a real acceptance now also tells the acceptor's
+-- Recreated from 0021: a real acceptance now also tells the acceptor's
 -- friends, once. The idempotent early returns emit nothing, so a retried
 -- acceptance stays one event.
 create or replace function public.respond_to_shared_invitation(
@@ -275,7 +275,7 @@ begin
 end;
 $$;
 
--- Recreated from 0020: a real completion transition now emits its event —
+-- Recreated from 0021: a real completion transition now emits its event —
 -- late stated as late — and, when it was the last open line on the roster,
 -- the everyone-made-it moment, told once, by the person who closed it.
 -- Suppressed when the same commitment is also friend-shared through the
