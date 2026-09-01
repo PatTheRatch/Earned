@@ -213,6 +213,27 @@ def main() -> int:
           f"SharedContainer.identifier is not {APP_GROUP}; the entitlement and "
           "the code that uses it have drifted apart")
 
+    # --- Onboarding asks for nothing it has not explained ------------------
+    # The app target has no test bundle, so this is the only place the rule can
+    # be enforced automatically. It is worth enforcing: asking for a health
+    # permission because somebody installed a commitment app is asking before
+    # there is anything to justify it, and the regression is a one-line import
+    # away (docs/onboarding.md).
+    onboarding = APP / "Earned" / "Onboarding"
+    onboarding_source = "\n".join(
+        path.read_text() for path in sorted(onboarding.glob("*.swift"))
+    )
+    check(onboarding_source != "", "no onboarding sources found to check")
+    for forbidden, why in (
+        ("HealthKit", "imports HealthKit"),
+        ("HealthImporter", "reaches for the Health importer"),
+        ("requestAccess", "requests Health access"),
+    ):
+        check(forbidden not in onboarding_source,
+              f"onboarding {why}. HealthKit is requested at the first verified "
+              "commitment, where the permission has a visible job — not at "
+              "install, where nobody has mentioned a workout yet")
+
     # --- Privacy strings ---------------------------------------------------
     # A missing usage description is not a warning: iOS kills the process the
     # moment the API is touched.

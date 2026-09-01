@@ -49,13 +49,24 @@ enum Theme {
 struct StateWord: View {
     let word: String
     var size: CGFloat = 84
+    /// How many lines the declaration may take.
+    ///
+    /// One, for the state words this was built for: LOCKED. is a word, and a
+    /// word that wraps is a word that has stopped being a poster. But onboarding
+    /// declares things that are genuinely two lines long — DO WHAT MATTERS
+    /// FIRST — and forcing those onto one line does not shrink them, it
+    /// truncates them: `minimumScaleFactor` gives up at 0.6 and iOS renders
+    /// "DO WHAT…", which is the headline saying nothing at all.
+    var lines: Int = 1
 
     var body: some View {
         (Text(word) + Text(".").foregroundStyle(Theme.signal))
             .font(Theme.display(size))
             .foregroundStyle(Theme.ink)
-            .lineLimit(1)
+            .lineLimit(lines)
+            .lineSpacing(-size * 0.08)
             .minimumScaleFactor(0.6)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

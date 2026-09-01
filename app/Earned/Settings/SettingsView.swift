@@ -548,6 +548,7 @@ struct RestrictionsHomeView: View {
 struct AdvancedView: View {
     @EnvironmentObject private var store: EarnedStore
     #if DEBUG
+    @EnvironmentObject private var teachings: Teachings
     @State private var showingWorkoutSheet = false
     #endif
 
@@ -589,11 +590,17 @@ struct AdvancedView: View {
             #if DEBUG
             Section {
                 Button("Log a workout by hand") { showingWorkoutSheet = true }
+                // The just-in-time cards each fire once and are then remembered
+                // forever, which makes them almost impossible to review without
+                // wiping the app. Debug builds can forget them.
+                Button("Forget one-time explanations") { teachings.forgetEverything() }
             } header: {
                 Text("Testing (debug builds only)")
             } footer: {
                 Text("Logged by hand counts as your word: it moves honor-system "
-                     + "commitments fully and app-verified ones not at all.")
+                     + "commitments fully and app-verified ones not at all. Forgetting "
+                     + "explanations re-arms the Gate, Overdue, Ways out and passcode "
+                     + "cards.")
             }
             #endif
         }

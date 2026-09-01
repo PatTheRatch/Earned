@@ -166,7 +166,9 @@ struct LockScreenView: View {
 struct OverrideMenu: View {
     @EnvironmentObject private var store: EarnedStore
     @EnvironmentObject private var account: AccountStore
+    @EnvironmentObject private var teachings: Teachings
     let record: CommitmentRecord
+    @State private var explainingWaysOut = false
 
     private var request: OverrideRequest? {
         store.state.activeOverrideRequest(forCommitment: record.commitment.id)
@@ -240,6 +242,25 @@ struct OverrideMenu: View {
             }
 
             partnerStatus
+        }
+        // The ladder, once, the first time somebody comes looking for a way
+        // out. Onboarding says only that Overrides exist and that none of them
+        // depend on another person or our servers; which three they are, and
+        // what each costs, is a question nobody has until they are asking it.
+        .sheet(isPresented: $explainingWaysOut) {
+            TeachingSheet(
+                word: "WAYS OUT",
+                lines: ["FREE OVERRIDE — spend one you earned by keeping commitments on time.",
+                        "ASK SOMEONE — request approval from an accountability partner.",
+                        "SOLO — wait, then complete the friction yourself. Needs nobody, "
+                            + "and works with no signal.",
+                        "Only the ones available to you right now are shown below."])
+            .presentationDetents([.medium])
+        }
+        .onAppear {
+            guard !teachings.hasSeen(.waysOut) else { return }
+            explainingWaysOut = true
+            teachings.markSeen(.waysOut)
         }
     }
 

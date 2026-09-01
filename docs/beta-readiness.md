@@ -546,29 +546,33 @@ Health is asked for, and that a workout is the only thing that completes a commi
 "Ways out" (the three overrides, and that Solo needs nobody). The activation page now says
 the authorization is voluntary and that withdrawing it stops enforcement.
 
-**And onboarding now leaves a working app rather than an inert one.** It used to configure
-the Hydration Gate and stop: Screen Time was never asked for, no apps were ever picked, so
-the first Today said LOCKED while blocking nothing, and the only route to a functioning
-product was for the user to guess that two settings screens existed. A commitment app whose
-first impression is "nothing is owed and nothing is blocked" has argued against itself
-before it starts.
+**Rebuilt to six screens, with the rest taught just in time.** Full design in
+[`docs/onboarding.md`](onboarding.md). It had grown to ten pages, four of them pure
+explanation delivered to somebody who had not yet watched a single app go dark — and before
+that it configured hydration and stopped, so the first Today read LOCKED while blocking
+nothing.
 
-Two pages now *do* something instead of explaining something — the Screen Time ask, and
-Apple's app picker — placed immediately after the page that explains restriction, because a
-permission asked before its reason is a permission refused. What is picked becomes both the
-Hydration Gate's own restriction profile and the default for new commitments; asking twice
-for a decision just made once would read as the app not having listened. Hydration itself
-became a toggle rather than an assumption, on by default.
+Phase 1 is six screens that leave Earned genuinely functional: the promise, what gets
+blocked, the real Screen Time request, Apple's picker, optional water checks, and the
+contract. Phase 2 is the product teaching itself — the word "Gate" at the first open Gate,
+`OVERDUE.` at the first missed deadline, the Override ladder the first time somebody looks
+for a way out, and passcode advice only once enforcement has been felt to work.
 
-Both pages are skippable and say so, and the navigation button yields to `Not now` /
-`Skip for now` in underline style while a page is still asking — so the loud button on
-screen is always the grant, never the way past it. Skipping leaves precisely the app that
-shipped before, with an honest line about what that costs.
+Consent did not shrink. All seven consent-critical facts are still seen before activation;
+what left was vocabulary, and vocabulary learned against nothing is vocabulary forgotten.
 
-**Still open:** onboarding does not offer a first *commitment*. Hydration plus a real
-restriction profile is enough for the first day to have a locked state that means something,
-but the empty Today still says "Nothing owed" until the user makes one. Whether the first
-commitment belongs inside onboarding is a product decision, not an oversight.
+Onboarding **never requests HealthKit** — nobody has mentioned a workout yet. Choosing "an
+app has to vouch" during commitment creation now opens an explanation with
+`ALLOW HEALTH ACCESS` and `Use my word instead` before Apple's sheet, so the permission is
+explained at the moment it is bought.
+
+Skipping stays honest: a skipped step surfaces on Today as `FINISH SETUP`, opening a sheet
+with the two steps in dependency order (Restrictions disabled until Screen Time is on, so
+the picker is never dead). Nobody is marched back through completed screens.
+
+**Still open, and a product call rather than an oversight:** onboarding does not create a
+first commitment. Today's first-use state makes **MAKE YOUR FIRST DEAL** the dominant
+button instead.
 
 **Verify:** hand the phone to someone who has heard nothing about Earned and ask them,
 afterwards, what the app does and what happens if they want out. Their answer is the test.

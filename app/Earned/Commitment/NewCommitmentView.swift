@@ -92,6 +92,7 @@ struct NewCommitmentView: View {
     @State private var preset: TimePreset = .morning
     @State private var customTime = Date()
     @State private var approvals = 2
+    @State private var explainingHealth = false
     /// Who this commitment's accountability route runs through. Only
     /// partners who have already accepted can be picked (invariant 22).
     @State private var roster: Set<UUID> = []
@@ -202,11 +203,17 @@ struct NewCommitmentView: View {
                     }
                 }
                 .onChange(of: verification) { _, chosen in
-                    // Asking for Health access the moment it becomes relevant,
-                    // not at launch: the permission dialog should arrive while
-                    // the user is looking at the sentence that explains it.
-                    guard chosen == .appVerified else { return }
-                    Task { await health.requestAccess() }
+                    // Explain, then ask — never the other way round. Health is
+                    // requested the moment it becomes relevant rather than at
+                    // launch, and the user meets a sentence saying what the
+                    // permission buys them *before* Apple's sheet appears,
+                    // with a way to decline that is not a dead end.
+                    guard chosen == .appVerified,
+                          health.access == .notDetermined else { return }
+                    explainingHealth = true
+                }
+                .sheet(isPresented: $explainingHealth) {
+                    healthExplanation.presentationDetents([.medium])
                 }
 
                 switch kind {
@@ -450,6 +457,48 @@ struct NewCommitmentView: View {
                     .padding(.top, 10)
             }
         }
+    }
+
+    // MARK: - Health, explained where it is bought
+
+    /// The Health ask, at the only moment it is legible: the user has just said
+    /// a workout must be vouched for by another app, so the permission has an
+    /// obvious job. Onboarding no longer mentions Health at all — asking for a
+    /// health permission because somebody installed a commitment app is asking
+    /// for it before there is anything to justify it (docs/onboarding.md).
+    private var healthExplanation: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SectionLabel(text: "Earned", color: Theme.ink).padding(.top, 36)
+            StateWord(word: "APPLE HEALTH", size: 44).padding(.top, 4)
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Earned reads finished workouts so it can verify this commitment.")
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("It reads that one type and nothing else, only while something "
+                     + "unresolved could be moved by it, and writes nothing back.")
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .font(.system(size: 15))
+            .foregroundStyle(Theme.muted)
+            .padding(.top, 20)
+            Spacer()
+            VStack(alignment: .leading, spacing: 14) {
+                Button("ALLOW HEALTH ACCESS") {
+                    explainingHealth = false
+                    Task { await health.requestAccess() }
+                }
+                .buttonStyle(PosterButtonStyle())
+                // Declining is a real choice with a real consequence, so it
+                // changes the commitment rather than just closing a sheet.
+                Button("Use my word instead") {
+                    verification = .selfReported
+                    explainingHealth = false
+                }
+                .buttonStyle(UnderlineButtonStyle())
+            }
+        }
+        .padding(Theme.pagePadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.paper)
     }
 
     // MARK: - Navigation

@@ -172,6 +172,17 @@ final class EarnedStore: ObservableObject {
         }
     }
 
+    /// Whether setup got far enough for Earned to actually enforce anything.
+    ///
+    /// Both halves of it are skippable during onboarding and both stay genuinely
+    /// optional afterwards — but an app that can only remember commitments must
+    /// never present itself as one that is holding apps closed, so Today reads
+    /// this rather than assuming (NORTHSTAR §33).
+    var setup: SetupStatus {
+        SetupStatus(screenTimeOn: screenTime.authorization.canShield,
+                    restrictionCount: state.defaultCommitmentRestrictions.count)
+    }
+
     /// Unsatisfied Gates that Earned currently cannot act on. Non-empty only
     /// when something is owed *and* enforcement is gone.
     var unenforceableGates: [LockReason] {

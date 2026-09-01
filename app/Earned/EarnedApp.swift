@@ -7,6 +7,9 @@ struct EarnedApp: App {
     @StateObject private var account: AccountStore
     @StateObject private var social: SocialStore
     @StateObject private var health = HealthImporter()
+    /// The lessons onboarding stopped giving up front, each waiting for the
+    /// moment it first means something (docs/onboarding.md).
+    @StateObject private var teachings = Teachings()
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -24,6 +27,7 @@ struct EarnedApp: App {
                 .environmentObject(account)
                 .environmentObject(social)
                 .environmentObject(health)
+                .environmentObject(teachings)
                 .task {
                     // Before anything that needs a session, and once per
                     // launch. `scenePhase` may already have gone active by

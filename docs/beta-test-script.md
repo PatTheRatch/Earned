@@ -43,25 +43,38 @@ thing worth an extra message.
 
 Tap the TestFlight link, install, open.
 
-**Expected:** a series of short screens explaining Gates, water, restrictions, how you prove
-you did a workout, and the ways out of a commitment. Read them — but also tell us if any
-of them confused you. That is a real bug, not a nitpick.
+**Expected:** six short setup screens. Two of them ask you to *do* something — turn on
+Screen Time, and choose which apps get blocked — and the rest explain what you are agreeing
+to. There is a thin progress line above the button.
 
-**Tell us if:** any screen's wording made you unsure what you were agreeing to, or you
-reached the end still not knowing what the app does.
+Read them properly, once. The single most useful thing you can tell us is what you thought
+the app did when you reached the end.
+
+**Tell us if:** any screen's wording made you unsure what you were agreeing to, you felt the
+setup was longer than it needed to be, or you reached the end still not knowing what Earned
+does.
 
 ## Step 2 — Let it block things
 
-Somewhere in setup, iOS will ask to allow **Screen Time** access.
+Screen 3 of setup is **TURN ON BLOCKING**. Nothing pops up on its own: iOS only asks after
+you tap the button.
 
-**Expected:** an Apple system sheet asking permission. Tap Allow.
+**Expected:** you tap **TURN ON SCREEN TIME**, then an Apple system sheet asks permission.
+Tap Allow. The screen should then say blocking is on.
 
-**Expected if you tap Don't Allow:** the app keeps working and says plainly that it cannot
-block anything. It should never claim a restriction is active when it isn't. If it does,
-that is a serious bug — screenshot it.
+**Expected if you tap Don't Allow:** the screen says Screen Time is off and offers to open
+iOS Settings. Setup continues — you can finish without it, and the app should then say
+plainly on Today that it cannot block anything. It must never claim a restriction is active
+when it isn't. If it does, that is a serious bug — screenshot it.
 
-**Tell us if:** the sheet doesn't appear at all, or you get an error mentioning "sandbox" or
-"FamilyControlsAgent". Screenshot the error text.
+**Please also try skipping it once,** on a second clean install: choose **Continue without
+blocking**, finish setup, and check that Today shows **FINISH SETUP** with a way to turn it
+on afterwards. Confirm that finishing setup from there actually works and does not make you
+repeat the whole introduction.
+
+**Tell us if:** the sheet appears *before* you tapped the button, the skip path hides what
+it costs, or you get an error mentioning "sandbox" or "FamilyControlsAgent". Screenshot the
+error text.
 
 ## Step 3 — Sign in and pick a name
 
@@ -77,10 +90,14 @@ or you saw a raw error message full of technical words.
 
 ## Step 4 — Let it read your workouts
 
-**Expected:** at some point — probably when you make your first commitment — iOS asks to let
-Earned read workouts from Apple Health. **Please allow it.** Apple Health is the only way a
-finished workout gets into Earned, so if you refuse, nothing you do can complete a
-commitment and the only way out is an Override.
+**Setup never asks for this,** deliberately — at that point you haven't mentioned a workout.
+
+**Expected:** when you make your first commitment and choose **an app has to vouch**, Earned
+shows a short screen headed **APPLE HEALTH** explaining what it reads, with **ALLOW HEALTH
+ACCESS** and a quieter **Use my word instead**. Apple's own sheet appears only after you tap
+Allow. **Please allow it.** Apple Health is the only way a finished workout gets into
+Earned, so if you refuse, nothing you do can complete a commitment and the only way out is
+an Override.
 
 **Expected if you refuse:** the app should say so. Check **You** → **Apple Health** — it
 should say it isn't connected and offer to ask again. A commitment you can't complete should
@@ -91,15 +108,16 @@ count. This is the single most important thing to report.
 
 ## Step 5 — Choose what gets taken away
 
-**Expected:** **You** → **Restrictions**, then pick a Gate and choose apps in Apple's own
-picker.
+You should already have done this during setup, on the **WHAT DO YOU LOSE?** screen. It can
+be changed later at **You** → **Restrictions**.
 
 Pick **one** low-stakes app. Earned genuinely cannot see which app you picked — that is
 Apple's design and Earned works within it — so screens count restrictions rather than naming
 them. That is expected, not a bug.
 
-**Tell us if:** you picked something and the count didn't change, or you couldn't find where
-to pick.
+**Tell us if:** you picked something and the count didn't change, the setup screen offered
+you a picker when Screen Time wasn't on yet, or setup let you finish believing apps were
+selected when none were.
 
 ## Step 6 — Make one short commitment
 

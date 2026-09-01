@@ -94,27 +94,32 @@ tests instead of shipping.
 > Source: `app/Earned/Store/EarnedStore.swift`, `app/Earned/Store/LedgerStorage.swift`,
 > `packages/EarnedKit/Sources/EarnedKit/Migration.swift`
 
-### Onboarding — five screens, Next / Back
+### Onboarding — six screens, Continue / Back
 
-| Screen | What it says |
+Full design and reasoning: [`docs/onboarding.md`](onboarding.md).
+
+| Screen | What it does |
 |---|---|
-| **DO WHAT MATTERS FIRST.** | The pitch: you decide the deal while thinking clearly, Earned remembers it later. |
-| **GATES** | Every active Gate must be satisfied for full access. Calls, messages, maps, music never go behind one. |
-| **HYDRATION** | The only screen that collects input. Two sliders. |
-| **WHAT GETS RESTRICTED** | Each Gate takes away its own things; whatever is unsatisfied, you lose the sum of it. Points at Settings to grant Screen Time and pick apps. |
-| **THE DEAL** | Correction window, harder-only edits, missing a deadline doesn't clear it. |
+| **DO WHAT MATTERS FIRST.** | The promise, in three lines. "How Earned works" optionally reveals the Gate paragraph; not required to advance. |
+| **YOU CHOOSE WHAT GOES.** | Prepares the permission ask: only what you select, kept opaque to Earned, and calls/messages/maps/music never go. |
+| **TURN ON BLOCKING.** | **Makes the real Screen Time request.** Three states — ask, granted, denied. Apple's dialog appears only after the explicit CTA. |
+| **WHAT DO YOU LOSE?** | **Opens Apple's picker.** Three states — no permission (offers to fix it), nothing selected, a selection with its count. |
+| **WATER CHECKS.** | A toggle and two default values; the dials are behind `Customize`. Off is a valid answer. |
+| **THE DEAL.** | Correction window, harder-only edits, a missed deadline stays open, Overrides never depend on anyone else, and the permission stays revocable. Then a receipt of what is about to be switched on. |
 
-Only the hydration screen writes anything. Defaults are a **60-minute** interval
-(slider 15–240) and active hours **08:00–22:00**, with a 10-minute warning lead.
+Hydration defaults are a **60-minute** interval (15–240) and active hours
+**08:00–22:00**, with a 10-minute warning lead.
 
 > Source: `app/Earned/Onboarding/OnboardingView.swift` — `activate()`
 
-Tapping **ACTIVATE EARNED** appends one `hydrationConfigured` event and flips the flag.
+**ACTIVATE EARNED** appends one `hydrationConfigured` event carrying the picked restriction
+profile, writes that same profile as the default for new commitments, and flips the flag.
 
-**What doesn't happen:** onboarding never asks for a first commitment, never asks which apps
-to restrict, and never requests Screen Time — all three happen later in Settings. NORTHSTAR
-§28 puts them in the onboarding journey, so this is still a gap; now that app picking is real
-it is a gap worth closing.
+**What doesn't happen:** onboarding never requests HealthKit — nobody has mentioned a workout
+yet — and never creates a first commitment. Today lands on a first-use state whose dominant
+button is **MAKE YOUR FIRST DEAL**; nothing is created on the user's behalf. Four concepts
+that used to be onboarding screens (the Gate vocabulary, Health provenance, the Override
+ladder, Screen Time passcode advice) now arrive the first time each one means something.
 
 ---
 
