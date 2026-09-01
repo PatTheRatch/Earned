@@ -119,8 +119,9 @@ struct DiagnosticsReport {
             Line(label: "Commitments", value: "\(store.state.commitments.count)"),
             Line(label: "Workouts", value: "\(store.state.workouts.count)"),
         ]
-        if store.loadFailure != nil {
-            lines.append(Line(label: "History", value: "Set aside on launch", problem: true))
+        if let quarantined = store.quarantinedHistory {
+            lines.append(Line(label: "History", value: "Set aside: \(quarantined)",
+                              problem: true))
         }
         return lines
     }

@@ -258,11 +258,18 @@ struct OverrideMenu: View {
                 Text("An approval arrived that this app cannot verify yet. "
                      + "Retrying after the next key refresh.")
             } else if let receipt = account.lastRequest, receipt.partnersNotified > 0 {
+                // "Asked" is what the server did; it is not the same as "they
+                // have seen it". Push is not delivered yet (docs/deployment.md
+                // §6), so an Earned-user partner finds the ask the next time
+                // they open the app — which can be hours. Saying so is the
+                // difference between waiting and wondering whether it worked.
                 Text("Asked \(receipt.partnersNotified) "
                      + "\(receipt.partnersNotified == 1 ? "partner" : "partners"). "
-                     + "Waiting to hear back.")
+                     + "They'll see it next time they open Earned — nudge them "
+                     + "if it's urgent.")
             } else if account.hasAccountabilityRoute(for: record.commitment.id) {
-                Text("Waiting to hear back from your partners.")
+                Text("Waiting to hear back from your partners. They see it when they "
+                     + "next open Earned.")
             } else {
                 Text("No accountability route on this commitment; "
                      + "the solo route is the only one that ends in an unlock.")
