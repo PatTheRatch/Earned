@@ -547,14 +547,19 @@ select cron.schedule('expire-override-requests', '*/15 * * * *',
 select cron.schedule('purge-override-receipts', '17 3 * * *',
                      \$\$select public.purge_override_receipts()\$\$);
 select cron.schedule('purge-social-events', '23 3 * * *',
-                     \$\$select public.purge_social_events()\$\$);"
+                     \$\$select public.purge_social_events()\$\$);
+select cron.schedule('announce-shared-starts', '0 * * * *',
+                     \$\$select public.announce_shared_starts()\$\$);
+select cron.schedule('purge-shared-commitments', '47 3 * * *',
+                     \$\$select public.purge_shared_commitments()\$\$);"
 ```
 
 (`purge_social_events`, from migration 0017, is the same not-load-bearing shape:
 `friend_activity` already refuses to read past the 30-day horizon; the purge keeps
 storage honest about the retention promise.)
 
-**Done on the hosted project, 31 August 2026.** All three jobs are scheduled and active
+**Done on the hosted project, 31 August 2026** (the three jobs above) **and 1 September
+2026** (the two Shared Commitments jobs in §8). All five jobs are scheduled and active
 in `cron.job`, and each function was run once by hand to prove it executes cleanly under
 the role cron uses. One divergence from the command above worth knowing: Supabase
 relocates pg_cron to `pg_catalog` regardless of the `with schema extensions` clause —
@@ -574,14 +579,14 @@ stored fact is one timestamp the switch itself deletes).
 
 **Applied to the hosted project, 31 August 2026** (0013–0018), and every check below
 verified by SQL the same day — except the two-device pass, which still needs real phones.
-**`0019` (earned-user partners) is built and tested but not yet applied to the hosted
-project** — it goes up by the same road when wanted, and needs no bucket, cron, or
-dashboard step.
+**`0019` (earned-user partners) is applied to the hosted project (1 September 2026)** —
+it went up by the same road as the rest, and needs no bucket, cron, or dashboard step.
 
-**Also built, tested, and not yet applied: `0020`–`0022`.** `0020` (close an override
-request when it stops mattering) needs nothing special. `0021`/`0022` are Shared
+**`0020`–`0022` are applied to the hosted project (1 September 2026).** `0020` (close an
+override request when it stops mattering) needs nothing special. `0021`/`0022` are Shared
 Commitments (`docs/shared-commitments.md`) and are the first social migrations since
-`0017` that **want cron**, so applying them without scheduling is a half-deployment:
+`0017` that **want cron**, so they were scheduled at the same time rather than left as a
+half-deployment:
 
 - **`announce_shared_starts()`** — emits the `shared_started` event when a shared
   window opens. Unscheduled, that moment simply never reaches anyone's shelf. Hourly is
@@ -592,7 +597,9 @@ Commitments (`docs/shared-commitments.md`) and are the first social migrations s
   participant stands on any more. Daily, beside the existing purge cron in §7.
 
 Both are `service_role` only and deliberately not granted to `authenticated`, so they
-are scheduled exactly like `purge-social-events`. Nothing else in `0021`/`0022` needs a
+are scheduled exactly like `purge-social-events`: `announce-shared-starts` hourly
+(`0 * * * *`) and `purge-shared-commitments` daily (`47 3 * * *`). Nothing else in
+`0021`/`0022` needs a
 bucket or a dashboard step. The `push_outbox` they create is **queued but never
 drained** until an APNs sender exists — rows accumulating there are the expected state,
 not a fault, exactly as `message_outbox` awaited its SMS sender.
