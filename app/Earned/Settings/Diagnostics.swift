@@ -197,6 +197,7 @@ struct DiagnosticsReport {
 
     /// The project's host — never the publishable key, never a token. Enough to
     /// tell a tester pointed at the wrong project from one pointed at none.
+    @MainActor
     private static func backendLabel(_ account: AccountStore) -> String {
         guard account.isConfigured else { return "Not configured" }
         return BackendConfig.shared?.url.host ?? "Configured"
