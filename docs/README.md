@@ -29,6 +29,17 @@ retroactively; the discipline applies from here forward.
 
 ## What's here
 
+- [`beta-readiness.md`](beta-readiness.md) — whether Earned can be handed to people who are
+  not Patrick. Four severity buckets, every item marked with the furthest claim that is
+  actually true — built, tested, deployed, signed, device-verified, multi-user verified —
+  and the checklists Patrick has to work through personally before tester #1 and before
+  ten. **Start here for anything about shipping.**
+- [`beta-test-script.md`](beta-test-script.md) — the same milestone from the other end:
+  what a non-developer tester should try, what should happen, and how to report it when it
+  doesn't. Assumes no knowledge of Supabase, ledgers or RLS, and leads with how to get
+  unstuck rather than burying it.
+- [`release.md`](release.md) — the repeatable road from a clean checkout to a TestFlight
+  build: prerequisites, the version bump, the archive, and what to check afterwards.
 - [`deployment.md`](deployment.md) — the ordered runbook: an empty Supabase project to a
   partner opening a real approval link, with something to verify after every step.
 - [`walkthrough.md`](walkthrough.md) — every screen from fresh install to a live

@@ -194,8 +194,9 @@ Two things this needs that a simulator will not give you: the **App Group**
 `group.com.pattheratch.earned` registered in the developer portal and added to both App IDs,
 and **Family Controls enabled on the extension's App ID** (`com.pattheratch.earned.monitor`)
 as well as the app's. Without the App Group the container URL is nil, the plan is never
-read, and the monitor wakes on time to shield nothing — silently. Settings → Testing reports
-whether the container is reachable for exactly that reason.
+read, and the monitor wakes on time to shield nothing — silently. You → Advanced →
+Diagnostics reports whether the container is reachable, and whether a plan is in it, for
+exactly that reason.
 
 **Before TestFlight or the App Store**, request **Family Controls (Distribution)** in the
 developer portal — per bundle id, and separately for each Screen Time extension. Apple reviews
@@ -207,13 +208,21 @@ build needs, is self-serve.
 - **A custom shield screen.** Blocked apps currently show Apple's default shield. The
   `NICE TRY.` surface reserved in `docs/design-language.md` needs a `ShieldConfiguration`
   extension.
-- **HealthKit** — workout verification. Until then, Settings → Testing logs a workout by hand
-  so the full loop can be exercised.
-- **Accountability partners** — the approve/deny links need the Supabase backend. Free and
-  Solo overrides work today.
+- **Evidence that the monitor fires.** The extension is built and everything it depends on is
+  checked by CI, but DeviceActivity schedules do not run in the simulator, so nobody has
+  watched a restricted app go dark at a deadline with Earned force-quit.
+  `docs/beta-readiness.md` B‑2 is the test.
+- **External accountability partners.** Inviting someone who is not already on Earned is
+  switched off: nothing delivers the invitation and the consent page has no function behind
+  its route. Friends on Earned, Free and Solo overrides all work.
+
+HealthKit workout verification and accountability partners both landed; manual workout
+logging survives under You → Advanced in debug builds only.
 
 ## Where state lives
 
-The ledger is JSON in the app's Documents directory. When the Screen Time extensions land it
-moves to a shared App Group container so the shield can read gate state — every path goes
-through `Store/LedgerStorage.swift` to make that a one-file change.
+The ledger is JSON in the app's Documents directory, and stays there. The extension does not
+read it: replaying an event log in a second process would mean two implementations of the
+domain, so instead the app computes a `ShieldPlan` ahead of each deadline and leaves that in
+the App Group — one small format, one file (`Enforcement/ShieldPlan.swift`) compiled into
+both targets so the two cannot drift.
