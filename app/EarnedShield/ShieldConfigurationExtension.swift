@@ -34,14 +34,23 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
     private static let signal = UIColor(red: 0.910, green: 0.267, blue: 0.180, alpha: 1)
 
     private func configuration() -> ShieldConfiguration {
-        let lines = SharedContainer.loadCopy()?.lines.filter { !$0.isEmpty } ?? []
-        let subtitle = lines.isEmpty
-            ? ShieldCopy.fallbackLine
-            // Every closed Gate, not just the first. A phone held shut by two
-            // Gates that names one of them sends the user to satisfy it and
-            // find the shield still there, which reads as a broken app rather
-            // than as the second deal they made (NORTHSTAR §5, §6).
-            : lines.joined(separator: "\n")
+        // Every closed Gate, not just the first. A phone held shut by two Gates
+        // that names one of them sends the user to satisfy it and find the
+        // shield still there, which reads as a broken app rather than as the
+        // second deal they made (NORTHSTAR §5, §6).
+        let owed = SharedContainer.loadCopy()?.lines.filter { !$0.isEmpty } ?? []
+        // The brand line is the last line of the subtitle, not the button.
+        //
+        // It began on the button, which is where it reads best and where it
+        // cannot survive: Apple sizes that pill, twenty-two characters is long
+        // for it, and a shield whose one button says THE DEAL STILL STAND… is
+        // worse than one that says nothing. The subtitle is a multi-line label
+        // that wraps, so the phrase is safe there at any width and any Dynamic
+        // Type size. Capitals because this label has no font control — caps is
+        // the only weight available to separate the line that is doing brand
+        // work from the factual sentences above it.
+        let subtitle = ((owed.isEmpty ? [ShieldCopy.fallbackLine] : owed)
+                        + ["THE DEAL STILL STANDS."]).joined(separator: "\n")
 
         return ShieldConfiguration(
             backgroundBlurStyle: nil,
@@ -50,13 +59,12 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
             title: ShieldConfiguration.Label(text: "NICE TRY.", color: Self.paper),
             subtitle: ShieldConfiguration.Label(text: subtitle,
                                                 color: Self.paper.withAlphaComponent(0.85)),
-            // There is one button because there is one honest action. A
-            // shield action extension cannot open its host app, so a second
-            // button offering the ways out would be a button that does not go
-            // there — and this is the exact moment at which a promise the app
-            // cannot keep costs the most.
-            primaryButtonLabel: ShieldConfiguration.Label(text: "THE DEAL STILL STANDS.",
-                                                          color: Self.signal),
+            // One button, and a short word in it, because the button is a
+            // mechanism rather than a message. A shield action extension
+            // cannot open its host app, so a second button offering the ways
+            // out would be a button that does not go there — and this is the
+            // exact moment at which a promise the app cannot keep costs most.
+            primaryButtonLabel: ShieldConfiguration.Label(text: "CLOSE", color: Self.signal),
             primaryButtonBackgroundColor: Self.paper,
             secondaryButtonLabel: nil)
     }
