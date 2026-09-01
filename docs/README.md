@@ -14,6 +14,9 @@ The two root documents outrank everything here: [NORTHSTAR.md](../NORTHSTAR.md) 
   palette, type, and the voice-restraint rules.
 - [`earnedkit-semantics.md`](earnedkit-semantics.md) — the rules the engine had to decide
   that the north star leaves open.
+- [`family-controls-request.md`](family-controls-request.md) — the Family Controls
+  (Distribution) request: what to send, drafted from what the app actually does, and why
+  it is the long pole. Apple reviews it by hand, per bundle id, and TestFlight waits on it.
 - [`strava.md`](strava.md) — whether to integrate Strava, and how. **Tabled**: Apple Health
   already reaches almost every device a user records on, and Earned reads it today. Kept
   for the day server-authoritative completion is the gap worth closing, which is the one
