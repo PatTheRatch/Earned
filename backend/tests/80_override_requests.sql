@@ -272,25 +272,23 @@ select test_raises($$
 
 -- MARK: - Rate limiting (§16, partner fatigue)
 
--- One request already exists. Two more reach the cap of three.
+-- One request already exists; the loop below fills whatever is left of the
+-- day's allowance, and then one more is asked for.
+--
+-- The cap is *read*, never written down here. It is a product judgement that
+-- has already moved once — 0023 raises it for Wave 0, because a tester asked
+-- to go and exercise the escape ladder would otherwise hit the limit doing
+-- exactly what the script told them to — and a test that spells out "a fourth
+-- request is refused" fails on the day the number changes, reporting a broken
+-- rate limit when what actually happened is that somebody changed the rate
+-- limit on purpose. The shape is what has to hold, at three or at ten: every
+-- request up to the cap is allowed, and the one after it is not.
 select public.register_contract_envelope(
   p_commitment_id => 'aaaaaaaa-0000-0000-0000-000000000005', p_title => 'Third',
   p_created_at => now(), p_eligible_from => now(), p_deadline => now() + interval '8 hours',
   p_correction_window => 7200, p_approvals_required => 1, p_accountability_window => 1800,
   p_partner_ids => array(select id from public.partner where display_name = 'Mom'));
-select public.register_contract_envelope(
-  p_commitment_id => 'aaaaaaaa-0000-0000-0000-000000000006', p_title => 'Fourth',
-  p_created_at => now(), p_eligible_from => now(), p_deadline => now() + interval '8 hours',
-  p_correction_window => 7200, p_approvals_required => 1, p_accountability_window => 1800,
-  p_partner_ids => array(select id from public.partner where display_name = 'Mom'));
-select public.register_contract_envelope(
-  p_commitment_id => 'aaaaaaaa-0000-0000-0000-000000000007', p_title => 'Fifth',
-  p_created_at => now(), p_eligible_from => now(), p_deadline => now() + interval '8 hours',
-  p_correction_window => 7200, p_approvals_required => 1, p_accountability_window => 1800,
-  p_partner_ids => array(select id from public.partner where display_name = 'Mom'));
 select test_advance_past_hardening('aaaaaaaa-0000-0000-0000-000000000005');
-select test_advance_past_hardening('aaaaaaaa-0000-0000-0000-000000000006');
-select test_advance_past_hardening('aaaaaaaa-0000-0000-0000-000000000007');
 
 -- Checked on the creating path this time, not only on the idempotent replay:
 -- the device that asked never receives a link its partners were sent.
@@ -299,14 +297,47 @@ select test_assert(
      'bbbbbbbb-0000-0000-0000-000000000030', 'aaaaaaaa-0000-0000-0000-000000000005',
      1, 1, 'session', 8, 10, 2, 1)::text) !~ '/a/',
   'a freshly created request returns no approval link to the requester either');
-select public.create_override_request(
-  'bbbbbbbb-0000-0000-0000-000000000031', 'aaaaaaaa-0000-0000-0000-000000000006',
-  1, 1, 'session', 8, 10, 2, 1);
+
+-- A fresh commitment per request, because a second request against a
+-- commitment that already has an open one is refused by a different rule
+-- (23505, above) and would prove nothing about this one.
+do $$
+declare
+  v_account uuid;
+  v_used int;
+  v_commitment uuid;
+begin
+  select a.id into v_account from public.account a
+   where a.auth_user_id = auth.uid() and a.deleted_at is null;
+  loop
+    select count(*) into v_used from public.override_request r
+     where r.account_id = v_account and r.requested_at > now() - interval '1 day';
+    exit when v_used >= private.max_requests_per_day();
+    v_commitment := gen_random_uuid();
+    perform public.register_contract_envelope(
+      p_commitment_id => v_commitment, p_title => 'Filling the day',
+      p_created_at => now(), p_eligible_from => now(),
+      p_deadline => now() + interval '8 hours',
+      p_correction_window => 7200, p_approvals_required => 1,
+      p_accountability_window => 1800,
+      p_partner_ids => array(select id from public.partner where display_name = 'Mom'));
+    perform test_advance_past_hardening(v_commitment);
+    perform public.create_override_request(
+      gen_random_uuid(), v_commitment, 1, 1, 'session', 8, 10, 2, 1);
+  end loop;
+end $$;
+
+select public.register_contract_envelope(
+  p_commitment_id => 'aaaaaaaa-0000-0000-0000-000000000007', p_title => 'One too many',
+  p_created_at => now(), p_eligible_from => now(), p_deadline => now() + interval '8 hours',
+  p_correction_window => 7200, p_approvals_required => 1, p_accountability_window => 1800,
+  p_partner_ids => array(select id from public.partner where display_name = 'Mom'));
+select test_advance_past_hardening('aaaaaaaa-0000-0000-0000-000000000007');
 select test_raises($$
   select public.create_override_request(
     'bbbbbbbb-0000-0000-0000-000000000032', 'aaaaaaaa-0000-0000-0000-000000000007',
     1, 1, 'session', 8, 10, 2, 1) $$,
-  'a fourth request in a rolling day is refused — asking five people hourly is an escape route');
+  'one request past the cap is refused — asking five people hourly is an escape route');
 
 -- MARK: - What the requesting app is told
 
