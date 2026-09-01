@@ -34,17 +34,22 @@ claim, that is said out loud.
 
 ## Score
 
-Nine blockers were open at the start of B1. Six are closed in code on this branch; three
-cannot be closed from a repository at all, because they are Apple's approval queue, a
-hosted backend credential, and a physical iPhone.
+Nine blockers. Four are closed in code on this branch, one was audited and found sound, and
+four cannot be closed from a repository at all — they are Apple's approval queue, a hosted
+backend credential, and a physical iPhone.
 
-| | Count | |
+| | Count | Which |
 |---|---|---|
-| BLOCKER, fixed on this branch | 6 | code merged, CI green |
-| BLOCKER, needs Patrick | 3 | Apple portal, device, hosted backend |
-| BETA REQUIRED, fixed | 8 | |
-| BETA REQUIRED, needs a device or a second person | 4 | |
-| PUBLIC BETA | 15 | documented, deliberately not built |
+| BLOCKER, fixed in code | 4 | B‑5 ledger, B‑6 TestFlight config, B‑8 undeliverable invitations, B‑9 session |
+| BLOCKER, audited and found sound | 1 | B‑3 Solo cannot strand — wants one device confirmation |
+| BLOCKER, only Patrick can close | 4 | B‑1 Apple, B‑2 and B‑4 device, B‑7 hosted backend |
+| BETA REQUIRED, closed or written | 10 | R‑1 to R‑8, R‑11, R‑12 |
+| BETA REQUIRED, still open | 2 | R‑9 wants Patrick's eyes, R‑10 has never been run |
+| PUBLIC BETA | 14 | documented, deliberately not built |
+
+Two of the four code fixes were silent bypasses rather than papercuts: `xcodegen generate`
+was stripping the monitor extension's Family Controls entitlement on every run (B‑6), and
+the default commitment tier could not be completed at all in a release build (R‑1).
 
 **Earned is not yet distributable.** The honest summary is that the software is in
 reasonable shape and the *evidence* is missing: nothing in this product has been proven on
@@ -564,7 +569,20 @@ Documented deliberately, and not built. Required before strangers, not before fa
 | **Disaster recovery** | Supabase's own backups, untested by us. No restore drill. |
 | **Key rotation drill** | The *code* path is drilled in CI (`keyset_drill.sh`, and rotation has been done in anger once). The *operational* drill — rotate the hosted key, confirm phones follow — has not been run. |
 | **Accessibility** | Dynamic Type and VoiceOver have not been tested. The design leans on tracked small caps, which is exactly the sort of thing that breaks at accessibility sizes. |
-| **Widgets, reactions, gamification, Android, pricing, more commitment types, public discovery** | Out of scope for B1 by instruction, and correctly so. |
+
+---
+
+# POST-BETA
+
+Explicitly out of B1, and out of the way. Widgets, deeper social reactions, gamification,
+new integrations (including Strava — see [`strava.md`](strava.md), tabled), pricing,
+subscriptions, Android, further commitment types, public discovery, App Store marketing
+polish.
+
+The reason for listing them at all is that a private beta generates requests for every one
+of them, and the answer to each is the same: none of it is what five people are being asked
+to find out. What they are being asked to find out is whether a Gate closing while the phone
+is in someone's pocket does what the product says it does.
 
 ---
 
