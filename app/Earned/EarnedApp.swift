@@ -24,68 +24,84 @@ struct EarnedApp: App {
                 .environmentObject(account)
                 .environmentObject(social)
                 .environmentObject(health)
+                .task {
+                    // Before anything that needs a session, and once per
+                    // launch. `scenePhase` may already have gone active by
+                    // now, in which case that pass ran signed out and did
+                    // nothing; the pass below is the one that counts.
+                    await account.restoreSession()
+                    await foregroundPass()
+                }
         }
         .onChange(of: scenePhase) { _, phase in
-            // Notification permission can be revoked in iOS Settings while
-            // Earned isn't running, so re-check on every return to the
-            // foreground rather than trusting what we saw at launch.
             guard phase == .active else { return }
-            Task { await store.refreshWarnings() }
-            // Screen Time authorization can be revoked in iOS Settings while
-            // Earned isn't running, and iOS never tells a backgrounded app that
-            // it happened (NORTHSTAR §33). Launch was the only moment this was
-            // re-read, so a revocation mid-session left the app claiming to
-            // enforce for as long as the process lived — and left stale
-            // DeviceActivity schedules registered behind it.
-            store.refreshShielding()
-            // Health first, before anything network: a run finished ten
-            // minutes ago should resolve its Gate here and now, not after a
-            // round trip — and a Gate resolved locally is one less override
-            // anybody needs to ask for.
-            Task { await health.importWorkouts(into: store) }
-            // Anything created offline is still owed an envelope. Registering
-            // late costs the accountability route for that commitment (S13),
-            // so the retry happens at the first opportunity, not the next
-            // time the user happens to open a detail screen.
-            // A partner can accept or decline while Earned isn't running, and
-            // that changes which commitments have a working way out.
-            Task {
-                await account.refreshPartners()
-                // Social is a passenger here, never a dependency: profile and
-                // friends refresh on the same foreground pass, and failure
-                // changes what the Social tab shows, nothing else.
-                await social.refreshProfile()
-                // The check-in is the fact the quiet surface is built on:
-                // "Earned heard from this phone." Recorded only while the
-                // owner shares check-ins; the server no-ops otherwise.
-                await social.checkIn()
-                await social.refreshSocial()
-                // Sharing runs after the health import above, so a run that
-                // just resolved its Gate is the story that gets published —
-                // and always after the profile, whose switches govern it.
-                await social.syncSharing(commitments: store.allCommitments, now: store.now)
-                // Shared-commitment lines ride the same pass and the same
-                // trust posture: the phone reports its own standing against
-                // the shared target, and the roster is refreshed after — so a
-                // friend's finished run shows up without them being nagged
-                // per progress tick (nothing here ever notifies).
-                await social.syncSharedProgress(commitments: store.allCommitments,
-                                                state: store.ledger.state, now: store.now)
-                await social.refreshShared()
-                await social.publishStreaks(store.ledger.state.socialStreaks(now: store.now))
-                await social.refreshActivity()
-                await account.syncEnvelopes(for: store.allCommitments, now: store.now)
-                // Grants last, and only after envelopes: a grant is checked
-                // against the contract digest the server gave us, so a
-                // commitment whose envelope has not synced yet has nothing to
-                // check against and its grant would be held for no reason.
-                await applyGrants()
-                // And after the grants, because a grant is the one resolution
-                // that needs no telling — the server decided it. Everything
-                // else that closed a request while partners were still being
-                // asked stands them down here (migration 0020).
-                await account.closeResolvedRequests(in: store.ledger.state)
-            }
+            Task { await foregroundPass() }
+        }
+    }
+
+    /// Everything that has to be re-read because the world moved while Earned
+    /// was not running. Runs on every return to the foreground, and once at
+    /// launch after the session is back.
+    @MainActor
+    private func foregroundPass() async {
+        // Notification permission can be revoked in iOS Settings while
+        // Earned isn't running, so re-check on every return to the
+        // foreground rather than trusting what we saw at launch.
+        Task { await store.refreshWarnings() }
+        // Screen Time authorization can be revoked in iOS Settings while
+        // Earned isn't running, and iOS never tells a backgrounded app that
+        // it happened (NORTHSTAR §33). Launch was the only moment this was
+        // re-read, so a revocation mid-session left the app claiming to
+        // enforce for as long as the process lived — and left stale
+        // DeviceActivity schedules registered behind it.
+        store.refreshShielding()
+        // Health first, before anything network: a run finished ten
+        // minutes ago should resolve its Gate here and now, not after a
+        // round trip — and a Gate resolved locally is one less override
+        // anybody needs to ask for.
+        Task { await health.importWorkouts(into: store) }
+        // Anything created offline is still owed an envelope. Registering
+        // late costs the accountability route for that commitment (S13),
+        // so the retry happens at the first opportunity, not the next
+        // time the user happens to open a detail screen.
+        // A partner can accept or decline while Earned isn't running, and
+        // that changes which commitments have a working way out.
+        Task {
+            await account.refreshPartners()
+            // Social is a passenger here, never a dependency: profile and
+            // friends refresh on the same foreground pass, and failure
+            // changes what the Social tab shows, nothing else.
+            await social.refreshProfile()
+            // The check-in is the fact the quiet surface is built on:
+            // "Earned heard from this phone." Recorded only while the
+            // owner shares check-ins; the server no-ops otherwise.
+            await social.checkIn()
+            await social.refreshSocial()
+            // Sharing runs after the health import above, so a run that
+            // just resolved its Gate is the story that gets published —
+            // and always after the profile, whose switches govern it.
+            await social.syncSharing(commitments: store.allCommitments, now: store.now)
+            // Shared-commitment lines ride the same pass and the same
+            // trust posture: the phone reports its own standing against
+            // the shared target, and the roster is refreshed after — so a
+            // friend's finished run shows up without them being nagged
+            // per progress tick (nothing here ever notifies).
+            await social.syncSharedProgress(commitments: store.allCommitments,
+                                            state: store.ledger.state, now: store.now)
+            await social.refreshShared()
+            await social.publishStreaks(store.ledger.state.socialStreaks(now: store.now))
+            await social.refreshActivity()
+            await account.syncEnvelopes(for: store.allCommitments, now: store.now)
+            // Grants last, and only after envelopes: a grant is checked
+            // against the contract digest the server gave us, so a
+            // commitment whose envelope has not synced yet has nothing to
+            // check against and its grant would be held for no reason.
+            await applyGrants()
+            // And after the grants, because a grant is the one resolution
+            // that needs no telling — the server decided it. Everything
+            // else that closed a request while partners were still being
+            // asked stands them down here (migration 0020).
+            await account.closeResolvedRequests(in: store.ledger.state)
         }
     }
 

@@ -40,7 +40,10 @@ actor BackendClient {
 
     var isSignedIn: Bool { accessToken != nil }
 
-    func clearSession() { accessToken = nil }
+    func clearSession() {
+        accessToken = nil
+        SessionKeychain.clear()
+    }
 
     // MARK: - Auth
 
@@ -59,7 +62,71 @@ actor BackendClient {
             throw Failure.refused(status: 200, message: "Sign-in returned no session.")
         }
         accessToken = token
+        keep(refreshTokenFrom: json)
         return token
+    }
+
+    /// Picks a session back up on a cold launch, without asking Apple again.
+    ///
+    /// Returns false when there is nothing stored, or when the stored token
+    /// has been revoked — both are ordinary signed-out, not errors. Throws
+    /// only for a network that was not there, so a launch on the Tube does not
+    /// silently discard a session that is still perfectly good.
+    func restoreSession() async throws -> Bool {
+        guard accessToken == nil else { return true }
+        guard SessionKeychain.load() != nil else { return false }
+        return try await refreshAccessToken()
+    }
+
+    /// Trades the stored refresh token for a new access token.
+    ///
+    /// Supabase rotates on every use, so the token that comes back must
+    /// replace the one that was sent — dropping it would strand the next
+    /// launch. A refusal means the grant is gone for good (signed out
+    /// elsewhere, project keys rotated, token already spent), so the stored
+    /// credential is cleared rather than retried forever.
+    @discardableResult
+    private func refreshAccessToken() async throws -> Bool {
+        guard let refreshToken = SessionKeychain.load() else { return false }
+        let json: [String: Any]
+        do {
+            json = try await post(path: "/auth/v1/token?grant_type=refresh_token",
+                                  body: ["refresh_token": refreshToken], authorized: false)
+        } catch Failure.refused {
+            accessToken = nil
+            SessionKeychain.clear()
+            return false
+        }
+        guard let token = json["access_token"] as? String else {
+            accessToken = nil
+            SessionKeychain.clear()
+            return false
+        }
+        accessToken = token
+        keep(refreshTokenFrom: json)
+        return true
+    }
+
+    private func keep(refreshTokenFrom json: [String: Any]) {
+        guard let refresh = json["refresh_token"] as? String, !refresh.isEmpty else { return }
+        SessionKeychain.save(refresh)
+    }
+
+    /// Runs an authenticated call, and if the access token had expired
+    /// underneath it, refreshes once and runs it again.
+    ///
+    /// Supabase access tokens last an hour. Without this, every sync pass past
+    /// the first hour of a session failed with a 401 that no screen could
+    /// explain and no user could act on — the app looked signed in and quietly
+    /// stopped hearing about approvals. Once, not in a loop: if the second
+    /// attempt is also refused, the refusal is real and belongs to the caller.
+    private func reauthorizing<T>(_ call: () async throws -> T) async throws -> T {
+        do {
+            return try await call()
+        } catch Failure.refused(let status, _) where status == 401 {
+            guard try await refreshAccessToken() else { throw Failure.notSignedIn }
+            return try await call()
+        }
     }
 
     // MARK: - Account
@@ -441,6 +508,10 @@ actor BackendClient {
     /// Fetches an avatar through the authenticated route; RLS decides whether
     /// this caller may see this object.
     func fetchAvatar(path: String) async throws -> Data {
+        try await reauthorizing { try await fetchAvatarOnce(path: path) }
+    }
+
+    private func fetchAvatarOnce(path: String) async throws -> Data {
         guard accessToken != nil else { throw Failure.notSignedIn }
         guard let url = URL(string: "/storage/v1/object/authenticated/avatars/\(path)",
                             relativeTo: config.url) else {
@@ -462,6 +533,14 @@ actor BackendClient {
 
     private func storage(method: String, path: String,
                          body: Data?, contentType: String?) async throws {
+        try await reauthorizing {
+            try await storageOnce(method: method, path: path,
+                                  body: body, contentType: contentType)
+        }
+    }
+
+    private func storageOnce(method: String, path: String,
+                             body: Data?, contentType: String?) async throws {
         guard accessToken != nil else { throw Failure.notSignedIn }
         guard let url = URL(string: "/storage/v1/object/avatars/\(path)",
                             relativeTo: config.url) else {
@@ -562,8 +641,10 @@ actor BackendClient {
     /// with this caller's own JWT, so RLS applies here exactly as anywhere.
     func fetchGrants() async throws -> [SignedGrant] {
         guard accessToken != nil else { throw Failure.notSignedIn }
-        let json = try await post(path: "/functions/v1/grants",
-                                  body: [String: String](), authorized: true)
+        let json = try await reauthorizing {
+            try await post(path: "/functions/v1/grants",
+                           body: [String: String](), authorized: true)
+        }
         guard let rows = json["grants"] as? [[String: Any]] else { return [] }
         return rows.compactMap(SignedGrant.init(row:))
     }
@@ -604,17 +685,25 @@ actor BackendClient {
 
     private func rpc(_ name: String, _ params: [String: Any]) async throws -> [String: Any] {
         guard accessToken != nil else { throw Failure.notSignedIn }
-        return try await post(path: "/rest/v1/rpc/\(name)", body: params, authorized: true)
+        return try await reauthorizing {
+            try await post(path: "/rest/v1/rpc/\(name)", body: params, authorized: true)
+        }
     }
 
     /// For functions that return something other than a JSON object — an
     /// array, a scalar, or SQL null (which arrives as NSNull).
     private func rpcValue(_ name: String, _ params: [String: Any]) async throws -> Any {
         guard accessToken != nil else { throw Failure.notSignedIn }
-        return try await postValue(path: "/rest/v1/rpc/\(name)", body: params, authorized: true)
+        return try await reauthorizing {
+            try await postValue(path: "/rest/v1/rpc/\(name)", body: params, authorized: true)
+        }
     }
 
     private func get<T>(path: String) async throws -> [T] {
+        try await reauthorizing { try await getOnce(path: path) }
+    }
+
+    private func getOnce<T>(path: String) async throws -> [T] {
         guard let url = URL(string: path, relativeTo: config.url) else {
             throw Failure.transport("Bad backend path.")
         }

@@ -138,6 +138,32 @@ final class AccountStore: ObservableObject {
         }
     }
 
+    /// Picks up the session left behind by the last launch.
+    ///
+    /// Sign in with Apple cannot be replayed silently — Apple hands over an
+    /// identity token only in response to a deliberate gesture — so without
+    /// this, every cold launch was signed out until the user happened to tap
+    /// the button again. That quietly broke the thing accounts exist for: a
+    /// partner's approval, a friend's request and a shared commitment's roster
+    /// all arrive on the foreground sync pass, and that pass does nothing
+    /// while signed out. The user opens Earned to find out whether they have
+    /// been let off, and Earned does not ask.
+    ///
+    /// Silent on failure. Nothing local waits on a session (S8), and a launch
+    /// with no network should look like the signed-out launch it already
+    /// looked like, not like something went wrong.
+    func restoreSession() async {
+        guard let client, case .signedOut = session else { return }
+        guard let displayName = UserDefaults.standard.string(forKey: Self.displayNameKey),
+              let appleUserID else { return }
+        guard (try? await client.restoreSession()) == true else { return }
+        session = .signedIn(displayName: displayName)
+        // The account row is the server's own idempotent upsert, and running
+        // it here keeps a restored session indistinguishable from a fresh
+        // sign-in for everything downstream.
+        _ = try? await client.ensureAccount(appleUserID: appleUserID, displayName: displayName)
+    }
+
     func signOut() {
         guard let client else { return }
         Task { await client.clearSession() }
