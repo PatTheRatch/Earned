@@ -112,6 +112,14 @@ struct SocialEvent: Identifiable, Equatable, Sendable {
         case commitmentKeptLate = "commitment_kept_late"
         case overrideUsed = "override_used"
         case streakMilestone = "streak_milestone"
+        // Shared-commitment roster moments (NORTHSTAR §46,
+        // docs/shared-commitments.md §13). Never progress ticks, never
+        // declines — the server's vocabulary is the allow-list.
+        case sharedAccepted = "shared_accepted"
+        case sharedStarted = "shared_started"
+        case sharedCompleted = "shared_completed"
+        case sharedCompletedLate = "shared_completed_late"
+        case sharedAllCompleted = "shared_all_completed"
     }
 
     /// The server sends no event id; the tuple is identity enough for a
@@ -151,6 +159,16 @@ struct SocialEvent: Identifiable, Equatable, Sendable {
         case .overrideUsed: return "used an Override on \(title ?? "a commitment")"
         case .streakMilestone:
             return "hit \(milestone ?? 0) commitments kept in a row"
+        case .sharedAccepted:
+            return "joined a shared commitment: \(title ?? "a commitment")"
+        case .sharedStarted:
+            return "started a shared commitment: \(title ?? "a commitment")"
+        case .sharedCompleted:
+            return "finished their part of \(title ?? "a shared commitment")"
+        case .sharedCompletedLate:
+            return "finished their part of \(title ?? "a shared commitment"), late"
+        case .sharedAllCompleted:
+            return "finished \(title ?? "a shared commitment") — everyone made it"
         }
     }
 }

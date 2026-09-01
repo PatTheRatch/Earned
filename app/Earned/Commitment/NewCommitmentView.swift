@@ -30,6 +30,7 @@ struct NewCommitmentView: View {
 
     private enum Kind: String, CaseIterable, Identifiable {
         case any = "Just show up"
+        case sessions = "A number of times"
         case duration = "A total time"
         case distance = "A total distance"
         case calories = "A total effort"
@@ -83,6 +84,7 @@ struct NewCommitmentView: View {
     @State private var repeats: Repeat = .once
     @State private var weekdays: Set<Int> = []
     @State private var weeks = 4.0
+    @State private var sessions = 3.0
     @State private var minutes = 30.0
     @State private var kilometers = 5.0
     @State private var calories = 200.0
@@ -213,6 +215,14 @@ struct NewCommitmentView: View {
                          ? "Any workout recorded in Apple Health will satisfy this."
                          : "One \(activity.rawValue.lowercased()) workout will satisfy this.")
                         .font(.footnote).foregroundStyle(.secondary)
+                case .sessions:
+                    VStack(alignment: .leading) {
+                        Text("\(Int(sessions)) time\(Int(sessions) == 1 ? "" : "s")").font(.headline)
+                        Slider(value: $sessions, in: 1...14, step: 1)
+                        Text("Each qualifying workout counts once, whatever its length — "
+                             + "three separate runs, not one long one split three ways.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
                 case .duration:
                     VStack(alignment: .leading) {
                         Text("\(Int(minutes)) minutes").font(.headline)
@@ -515,6 +525,9 @@ struct NewCommitmentView: View {
     private var requirement: Requirement {
         switch kind {
         case .any: return Requirement(activity: activity.filter, metric: .anyQualifyingWorkout,
+                                verification: verification)
+        case .sessions: return Requirement(activity: activity.filter,
+                                metric: .sessionCount(Int(sessions)),
                                 verification: verification)
         case .duration: return Requirement(activity: activity.filter, metric: .totalDuration(minutes * 60),
                                 verification: verification)

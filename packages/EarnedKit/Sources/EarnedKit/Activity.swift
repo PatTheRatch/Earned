@@ -97,6 +97,12 @@ public enum CompletionMetric: Codable, Equatable, Sendable {
     /// Same posture as §15 — this raises the cost of negotiating with
     /// yourself, and does not pretend to be unfoolable.
     case totalActiveEnergy(Double)
+    /// A number of qualifying workouts. One qualifying workout record counts
+    /// as one session, whatever its length — "run 3× this week" cares that you
+    /// went, three separate times, not how long each outing was. Sessions
+    /// accumulate like every quantitative metric (NORTHSTAR §14): each
+    /// eligible workout adds one.
+    case sessionCount(Int)
 
     public var isValid: Bool {
         switch self {
@@ -104,12 +110,14 @@ public enum CompletionMetric: Codable, Equatable, Sendable {
         case .totalDuration(let seconds): return seconds > 0
         case .totalDistance(let meters): return meters > 0
         case .totalActiveEnergy(let kilocalories): return kilocalories > 0
+        case .sessionCount(let sessions): return sessions > 0
         }
     }
 
-    /// Cross-dimension changes (duration ↔ distance ↔ energy) are incomparable
-    /// and so are rejected after hardening; anything is at least as hard as
-    /// "one workout".
+    /// Cross-dimension changes (duration ↔ distance ↔ energy ↔ sessions) are
+    /// incomparable and so are rejected after hardening; anything is at least
+    /// as hard as "one workout" — a session count included, since a valid one
+    /// requires at least the one workout that case asks for.
     public func isAtLeastAsHard(as other: CompletionMetric) -> Bool {
         switch (self, other) {
         case (_, .anyQualifyingWorkout):
@@ -119,6 +127,8 @@ public enum CompletionMetric: Codable, Equatable, Sendable {
         case (.totalDistance(let new), .totalDistance(let old)):
             return new >= old
         case (.totalActiveEnergy(let new), .totalActiveEnergy(let old)):
+            return new >= old
+        case (.sessionCount(let new), .sessionCount(let old)):
             return new >= old
         default:
             return false
@@ -188,6 +198,8 @@ public struct Requirement: Codable, Equatable, Sendable {
             return String(format: "%@ · %.1f km", activity.displayName, meters / 1000)
         case .totalActiveEnergy(let kilocalories):
             return "\(activity.displayName) · \(Int(kilocalories.rounded())) cal"
+        case .sessionCount(let sessions):
+            return "\(activity.displayName) · \(sessions)×"
         }
     }
 }

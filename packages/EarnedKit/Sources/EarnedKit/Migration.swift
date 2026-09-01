@@ -27,18 +27,22 @@ public enum LedgerMigration {
         case 1:
             return LedgerDocument(
                 version: Ledger.currentSchemaVersion,
-                entries: migrateV4ToV5(
-                    migrateV3ToV4(migrateV2ToV3(migrateV1ToV2(document.entries)))))
+                entries: migrateV5ToV6(migrateV4ToV5(
+                    migrateV3ToV4(migrateV2ToV3(migrateV1ToV2(document.entries))))))
         case 2:
             return LedgerDocument(
                 version: Ledger.currentSchemaVersion,
-                entries: migrateV4ToV5(migrateV3ToV4(migrateV2ToV3(document.entries))))
+                entries: migrateV5ToV6(migrateV4ToV5(migrateV3ToV4(migrateV2ToV3(document.entries)))))
         case 3:
-            return LedgerDocument(version: Ledger.currentSchemaVersion,
-                                  entries: migrateV4ToV5(migrateV3ToV4(document.entries)))
+            return LedgerDocument(
+                version: Ledger.currentSchemaVersion,
+                entries: migrateV5ToV6(migrateV4ToV5(migrateV3ToV4(document.entries))))
         case 4:
             return LedgerDocument(version: Ledger.currentSchemaVersion,
-                                  entries: migrateV4ToV5(document.entries))
+                                  entries: migrateV5ToV6(migrateV4ToV5(document.entries)))
+        case 5:
+            return LedgerDocument(version: Ledger.currentSchemaVersion,
+                                  entries: migrateV5ToV6(document.entries))
         case let version where version > Ledger.currentSchemaVersion:
             throw MigrationError.unknownVersion(version)
         default:
@@ -87,6 +91,18 @@ public enum LedgerMigration {
     /// without the version it would quarantine the ledger with a parse error
     /// about an unknown case. Refusing by version says what actually happened.
     private static func migrateV4ToV5(_ entries: [LedgerEntry]) -> [LedgerEntry] { entries }
+
+    /// v5 → v6: nothing to rewrite.
+    ///
+    /// v6 adds `CompletionMetric.sessionCount` — "run 3× this week" as a
+    /// first-class requirement. No v5 ledger contains one, and every metric a
+    /// v5 ledger does contain means exactly what it meant.
+    ///
+    /// The bump, as with v5, is for the other direction: a v5 build cannot
+    /// decode `sessionCount` and without the version would quarantine the
+    /// ledger with a parse error about an unknown case. Refusing by version
+    /// says what actually happened.
+    private static func migrateV5ToV6(_ entries: [LedgerEntry]) -> [LedgerEntry] { entries }
 
     /// v1 → v2.
     ///

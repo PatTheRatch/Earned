@@ -463,8 +463,26 @@ friend is a state on the roster and the profile, deliberately **not** an event o
 shelf — silence is not content, and an event would let it outlive the silence.
 
 Next, when warranted: invite links, possibly reactions, enforcement-integrity-lapse
-sharing. Still never: push notifications for friends, comments, leaderboards, XP,
-contact imports, follow model, public web profiles.
+sharing. Still never: comments, leaderboards, XP, contact imports, follow model, public
+web profiles.
+
+### The push rule (revised by Patrick with the SC1 follow-ups)
+
+The old blanket line — *no push notifications for friends* — is replaced by a sharper
+one:
+
+**No social-engagement push notifications. Commitment-relevant notifications are
+allowed.**
+
+Allowed: a shared-commitment invitation, an accountability-partner request, an override
+approval request waiting on you — asks that are *actionable commitment events*, where a
+person's phone buzzing is the promise machinery working. Never pushed: reactions,
+generic social activity, streak updates, milestones, "your friend finished their run",
+or any engagement nudge — the shelf is where those live, read when the user chooses.
+Structurally, the server's `push_outbox` (0021) can only spell the allowed kinds; an
+engagement push is not a policy violation waiting to be caught in review, it is a row
+that cannot exist. Delivery (APNs sender, device registration in the app, the aps
+entitlement) is the deployment half and does not ship with the groundwork.
 
 ---
 

@@ -18,6 +18,7 @@ struct CommitmentDetailView: View {
 
     @State private var title = ""
     @State private var kind: RequirementKind = .any
+    @State private var sessions = 3.0
     @State private var minutes = 30.0
     @State private var kilometers = 5.0
     @State private var calories = 200.0
@@ -27,7 +28,7 @@ struct CommitmentDetailView: View {
     @State private var accountabilityMinutes = 30.0
     @State private var loaded = false
 
-    private enum RequirementKind: Hashable { case any, duration, distance, calories }
+    private enum RequirementKind: Hashable { case any, sessions, duration, distance, calories }
     @State private var activity: ActivityFilterChoice = .any
     private enum ActivityFilterChoice: Hashable, CaseIterable {
         case any, running, walking, cycling, strength
@@ -256,10 +257,22 @@ struct CommitmentDetailView: View {
                         saveRequirement()
                     })) {
                     Text("Any workout").tag(RequirementKind.any)
+                    Text("Number of times").tag(RequirementKind.sessions)
                     Text("Total duration").tag(RequirementKind.duration)
                     Text("Total distance").tag(RequirementKind.distance)
                     Text("Active calories").tag(RequirementKind.calories)
                 }
+            }
+        case .sessions:
+            VStack(alignment: .leading) {
+                Text("Times: \(Int(sessions))")
+                Slider(value: $sessions,
+                       in: minSessions(current)...max(14, minSessions(current)), step: 1)
+                    .onChange(of: sessions) { saveRequirement() }
+            }
+            if hardened {
+                Text("Hardened: the number of times can only increase.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         case .duration:
             VStack(alignment: .leading) {
@@ -299,6 +312,11 @@ struct CommitmentDetailView: View {
         return 5
     }
 
+    private func minSessions(_ current: Requirement) -> Double {
+        if case .sessionCount(let count) = current.metric { return max(1, Double(count)) }
+        return 1
+    }
+
     private func minCalories(_ current: Requirement) -> Double {
         if case .totalActiveEnergy(let kilocalories) = current.metric { return max(25, kilocalories) }
         return 25
@@ -326,6 +344,9 @@ struct CommitmentDetailView: View {
         switch kind {
         case .any:
             return Requirement(activity: activity.filter, metric: .anyQualifyingWorkout,
+                               verification: verification)
+        case .sessions:
+            return Requirement(activity: activity.filter, metric: .sessionCount(Int(sessions)),
                                verification: verification)
         case .duration:
             return Requirement(activity: activity.filter, metric: .totalDuration(minutes * 60),
@@ -416,6 +437,9 @@ struct CommitmentDetailView: View {
         switch commitment.requirement.metric {
         case .anyQualifyingWorkout:
             kind = .any
+        case .sessionCount(let count):
+            kind = .sessions
+            sessions = Double(count)
         case .totalDuration(let seconds):
             kind = .duration
             minutes = seconds / 60

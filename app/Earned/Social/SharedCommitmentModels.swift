@@ -41,6 +41,8 @@ struct SharedTerms: Equatable, Sendable {
         switch requirement.metric {
         case .anyQualifyingWorkout:
             metric = "show_up"; target = nil
+        case .sessionCount(let count):
+            metric = "sessions"; target = Double(count)
         case .totalDuration(let seconds):
             metric = "total_duration"; target = seconds
         case .totalDistance(let meters):
@@ -62,6 +64,7 @@ struct SharedTerms: Equatable, Sendable {
         let metric: CompletionMetric?
         switch self.metric {
         case "show_up": metric = .anyQualifyingWorkout
+        case "sessions": metric = target.map { CompletionMetric.sessionCount(Int($0)) }
         case "total_duration": metric = target.map { CompletionMetric.totalDuration($0) }
         case "total_distance": metric = target.map { CompletionMetric.totalDistance($0) }
         case "active_calories": metric = target.map { CompletionMetric.totalActiveEnergy($0) }

@@ -182,6 +182,11 @@ extension Requirement {
         case .totalActiveEnergy(let required):
             let total = workouts.reduce(0) { $0 + ($1.activeEnergyKilocalories ?? 0) }
             return CommitmentProgress(achieved: total, required: required, unit: .kilocalories)
+        case .sessionCount(let required):
+            // One qualifying workout record is one session; the eligibility
+            // filter upstream already decided which records qualify.
+            return CommitmentProgress(achieved: Double(workouts.count),
+                                      required: Double(required), unit: .workouts)
         }
     }
 }

@@ -83,6 +83,8 @@ enum Format {
             return String(format: "%@ · %.1f km", activity, meters / 1000)
         case .totalActiveEnergy(let kilocalories):
             return "\(activity) · \(Int(kilocalories)) cal"
+        case .sessionCount(let sessions):
+            return "\(activity) · \(sessions)×"
         }
     }
 

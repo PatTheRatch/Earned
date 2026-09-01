@@ -56,6 +56,12 @@ reviewed — they are not settled product intent.
   and swapping one specific type for another is *incomparable* — rejected after
   hardening, because it is neither harder nor easier.
 - **Cross-metric changes (duration ↔ distance) are likewise incomparable.**
+- **A session count is a count of qualifying workout records.** `sessionCount(3)`
+  (ledger schema v6, settled for Shared Commitments) is satisfied by three eligible
+  workouts, whatever their lengths — two on one day are two sessions; the calendar is
+  not a dimension of the metric. It obeys the same lattice: more sessions is harder,
+  fewer is easier, another dimension is incomparable — except that any valid metric,
+  a session count included, is at least as hard as "one workout".
 - **[open] `ActivityType` is a small closed set** (`running`, `walking`,
   `cycling`, `strength`, `swimming`, `other`) rather than mirroring HealthKit's
   full enumeration. The adapter maps `HKWorkoutActivityType` onto it. If the

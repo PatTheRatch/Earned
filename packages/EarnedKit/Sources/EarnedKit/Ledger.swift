@@ -9,7 +9,7 @@ import Foundation
 public struct Ledger: Equatable, Sendable {
     /// Bumped when the meaning of stored events changes in a way that needs an
     /// explicit migration rather than tolerant decoding. See `LedgerMigration`.
-    public static let currentSchemaVersion = 5
+    public static let currentSchemaVersion = 6
 
     public private(set) var entries: [LedgerEntry]
     public private(set) var state: EarnedState

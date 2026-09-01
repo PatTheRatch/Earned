@@ -1,11 +1,13 @@
 # Shared Commitments — Design
 
-v0.1 · September 2026 · Milestone SC1 (create → invite → accept/decline → own Deal → own
-Gate → shared progress → Social surfacing → notifications-by-design → block/friendship
-rules → backend + RLS + tests). The durable product principle lives in NORTHSTAR §46 and
-invariants 30–32. This document is the working design: every state, rule, edge case, and
-the storage model. Where this document and the code disagree, one of them is a bug — fix
-whichever is wrong.
+v0.2 · September 2026 · Milestone SC1 (create → invite → accept/decline → own Deal → own
+Gate → shared progress → Social surfacing → block/friendship rules → backend + RLS +
+tests), plus the four follow-up decisions Patrick settled the same week: a session-count
+metric in EarnedKit (§2), creator deletion orphaning rather than dissolving (§9), roster
+moments on the Recent shelf (§13), and the revised push rule (§11; migration 0021). The
+durable product principle lives in NORTHSTAR §46 and invariants 30–32. This document is
+the working design: every state, rule, edge case, and the storage model. Where this
+document and the code disagree, one of them is a bug — fix whichever is wrong.
 
 ---
 
@@ -361,6 +363,14 @@ report and still confers nothing (§7, invariant 28).
   no tombstone, no "left owing 2/3". A signed-out or silent participant's line goes
   stale honestly: their last reported progress with no fabricated freshness; absence is
   observable, motive is not (invariant 27).
+- **The creator's deletion orphans the agreement, never dissolves it** (settled by
+  Patrick; 0021). The roster belongs to everyone bound to it: the agreement survives
+  with a null author, the departed creator's line ceases to appear like any deleted
+  participant's, and every personal commitment stands untouched. An orphaned agreement
+  is closed in practice — no author remains to edit, cancel, or invite into it, and its
+  outstanding invitations can no longer be accepted — but the shared context stays
+  visible to the bound until normal retention purges it: the deadline horizon, or the
+  moment no participant rows remain at all.
 
 ---
 
@@ -386,8 +396,10 @@ in two tables:
 
 **`shared_commitment_agreement`** — the promise: `id`, `creator`, `title` (neutralised,
 ≤80), `activity` (`any|running|walking|cycling|strength|swimming|other`), `metric`
-(`show_up|sessions|total_duration|total_distance|active_calories` — `sessions` is
-schema-ready; the client offers it once EarnedKit grows a session-count metric),
+(`show_up|sessions|total_duration|total_distance|active_calories` — `sessions` maps to
+EarnedKit's `CompletionMetric.sessionCount`, first-class since ledger schema v6: one
+qualifying workout record is one session, accumulated under the ordinary activity
+filter, harder-only after hardening),
 `target` (null exactly for show_up), `window_start`, `deadline`, `terms_version`,
 `state` (`open|closed|cancelled`). `closed` = the creator cancelled the unstarted future
 after someone was bound; `cancelled` = nobody else ever was.
@@ -461,12 +473,17 @@ Worth a notification:
 - your own deadline approaching (this is the existing local warning, unchanged).
 
 Never a notification: progress ticks, partial workouts, app opens, reactions received,
-declines (quiet, §4.2). SC1 delivery rides the surfaces the app already has — the
-invitation card and roster on the Social tab, refreshed on every foreground pass; push
-delivery for social events remains deliberately unbuilt until the "no push notifications
-for friends" stance in social-architecture §9 is revisited on purpose — inviting someone
-must not become a way to make their phone buzz. The user's own deadline warnings are the
-existing local notifications, unchanged and authoritative.
+declines (quiet, §4.2). The push stance was revisited on purpose with the follow-ups and
+the rule is now (social-architecture §9): **no social-engagement push; commitment-relevant
+push allowed** — a shared-commitment invitation, an accountability-partner request, an
+override approval request. Migration 0021 builds the groundwork: a `push_device` token
+registry (session-bound registration; a re-registered token follows the new account) and
+a `push_outbox` the server enqueues into at exactly those three transitions, via
+triggers, with the kind check constraint as the allow-list. Delivery — the APNs sender
+draining the outbox, app-side registration, the aps entitlement — is the deployment
+half, exactly as `message_outbox` awaits its SMS/email sender. In-app surfaces (the
+invitation card, the roster, the shelf) remain primary either way, and the user's own
+deadline warnings are the existing local notifications, unchanged and authoritative.
 
 ## 12. Edge cases, settled
 
@@ -495,16 +512,26 @@ existing local notifications, unchanged and authoritative.
 
 ## 13. Social activity events
 
-The meaningful moments — shared commitment created (the invitation card), invitation
-accepted, participant completed / completed late, everyone done — are, in SC1,
-**derived from roster state** rather than minted as `social_event` rows: the roster is
-already the bounded, idempotent record of exactly these transitions, and deriving them
-means duplicate-event bugs are structurally impossible. (A participant's *witnessing*
-events still flow through 0016/0017 exactly as before, under their own sharing
-choices — the roster never becomes a side door into the Recent shelf.) If a later
-milestone wants these moments on the shelf itself, they ride the existing `social_event`
-machinery and its 30-day horizon. Explicitly never events, in any milestone:
-per-progress-tick, per-app-open, hydration anything, reaction-received.
+*Settled by Patrick with the follow-ups: the roster's meaningful moments belong on the
+Recent shelf.* Migration 0021 grows the `social_event` vocabulary by five kinds, all
+riding the existing shelf machinery — 30-day horizon, cap of 50, the same purge:
+
+- `shared_accepted` — emitted once, at the acceptor's real acceptance (the idempotent
+  retry paths emit nothing);
+- `shared_started` — the shared window opening, announced once per agreement to each
+  *bound* participant by the scheduler (`announce_shared_starts`); a window already open
+  at creation is never re-announced — the invitation cards were the announcement;
+- `shared_completed` / `shared_completed_late` — the owner's real open→done transition,
+  late stated as late. Suppressed when the same commitment is also friend-shared through
+  the witnessing pipeline (0016), which already tells the story: one fact, one line;
+- `shared_all_completed` — every accepted line done (two or more of them), told once, by
+  the participant whose finish closed the roster.
+
+For the shared kinds, `social_event.commitment_id` carries the *agreement* id, so the
+witnessing pipeline's per-commitment withdrawal can never collide with them. Explicitly
+never events, in any milestone: per-progress-tick, per-app-open, declines, roster
+bookkeeping, hydration anything, reaction-received. The kind check constraint is the
+allow-list — an event outside the vocabulary cannot be spelled.
 
 ## 14. Design tone
 

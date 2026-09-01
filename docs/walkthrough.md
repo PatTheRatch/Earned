@@ -548,9 +548,20 @@ unstarted future, which expires unanswered invitations and takes nothing from an
 bound. Blocking withdraws pending asks between the pair and severs their mutual roster
 visibility — obligations stand untouched.
 
+The follow-up pass (migration 0021, ledger schema v6) made "Run 3× this week" literal:
+**A number of times** is a first-class completion choice — each qualifying workout counts
+once, accumulating like any metric, harder-only after hardening. Roster moments (joined,
+finished, finished late, the window opening, everyone made it) now appear on friends'
+Recent shelves; a creator deleting their account orphans the agreement rather than
+dissolving it; and the actionable asks — a shared invitation, a partner request, an
+approval request — are queued for push under the revised rule (no social-engagement
+push, commitment-relevant push allowed), with APNs delivery itself a deployment step.
+
 > Source: `app/Earned/Social/SharedCommitmentViews.swift`, `SharedCommitmentModels.swift`,
 > `SharedCommitmentRegistry.swift`, `app/Earned/Commitment/NewCommitmentView.swift`,
-> `backend/migrations/0020_shared_commitments.sql`, `docs/shared-commitments.md`
+> `backend/migrations/0020_shared_commitments.sql`,
+> `backend/migrations/0021_shared_commitment_followups.sql`,
+> `packages/EarnedKit/Sources/EarnedKit/Activity.swift`, `docs/shared-commitments.md`
 
 ### Going quiet (Milestone S3)
 
