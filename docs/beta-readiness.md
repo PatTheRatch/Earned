@@ -586,8 +586,38 @@ family member will actually be shown.
 
 ## R‑10 · Multi-account matrix
 
-**Status: NOT RUN.** Nothing in this product has been driven by two real accounts. The
-matrix is [below](#the-multi-account-matrix).
+**Status: NOT RUN with two real accounts. The social half is now testable by one person.**
+
+`backend/tools/fake_friends.sh` seeds three accounts — `@testmaya`, `@testleo`, `@testpriya`
+— and drives *their* side of a friendship through the same RPCs a real phone calls, by
+setting `request.jwt.claims` exactly as the SQL suite does. Nothing about it is a mock:
+search runs its real query, RLS makes its real decisions, and a block is a real block. It
+exists because every social row in the matrix below needed a second Apple ID, a second
+device, and a TestFlight seat, so none of them had ever been run at all.
+
+```sh
+backend/tools/fake_friends.sh seed
+backend/tools/fake_friends.sh list            # where you stand with each
+backend/tools/fake_friends.sh request testleo # an incoming request to accept in the app
+backend/tools/fake_friends.sh accept testmaya # after you send one from the app
+backend/tools/fake_friends.sh block testpriya
+backend/tools/fake_friends.sh reset           # strangers again, profiles kept
+backend/tools/fake_friends.sh clean           # remove them entirely
+```
+
+Verified on the hosted project when it was written: an incoming request appears as pending
+and is distinguished from an outgoing one; accept moves the pair to accepted; a block makes
+the blocker vanish from `search_profiles` for the blocked side; and the server refuses to
+let a fake answer a request it sent itself, which is the rule and not the tool being clever.
+
+**What it does not replace.** It drives only the far side. The app's own half — searching,
+tapping send, seeing the request arrive — is still tapped by hand, which is the half worth
+watching anyway. And it says nothing about accountability partners, shared commitments, or
+override approvals, which are separate matrices below. **Run `clean` before handing the app
+to anyone**: these are real rows in the real project, which is the reason they are worth
+anything and also the reason they must not still be there on the day a tester signs in.
+
+The two-real-account run is still owed. The matrix is [below](#the-multi-account-matrix).
 
 ## R‑11 · Manual test script
 
