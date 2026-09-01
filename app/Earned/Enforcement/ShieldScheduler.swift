@@ -37,7 +37,38 @@ enum ShieldScheduler {
     /// Recompute, persist, and re-register. Safe to call as often as the
     /// ledger changes; the result is a pure function of the state and the
     /// clock (`shieldWindows` is tested for exactly that).
+    /// The windows last handed to the system, so a ticking clock does not
+    /// re-register them sixty times a minute.
+    ///
+    /// `ScreenTimeController.apply` has had the equivalent guard since it was
+    /// written, and this function needed it more: applying a shield is one
+    /// write to a settings store, while rescheduling is a stop plus up to eight
+    /// starts, each a synchronous round trip to the DeviceActivity daemon. Run
+    /// from the one-second ticker that is exactly ten of those per second, on
+    /// the main thread, forever.
+    ///
+    /// Nothing caught it because none of this code could run at all until
+    /// somebody granted Screen Time on a real device — the caller returns at
+    /// `canShield` — and until that happened the whole path was dead.
+    private static var registered: [ShieldWindow]?
+
+    /// Forget what is registered, so the next `reschedule` genuinely
+    /// re-registers. For the foreground pass: schedules can be dropped by the
+    /// system, or by an authorization that went away and came back, and the
+    /// cache above would otherwise report everything fine forever.
+    static func invalidate() { registered = nil }
+
     static func reschedule(for state: EarnedState, now: Date = Date()) {
+        let windows = state.shieldWindows(from: now, limit: maximumWindows)
+        // The windows are deadlines, so a second passing does not move them:
+        // the common case by far is that this is the same answer as last time
+        // and there is nothing to do — including nothing to undo.
+        guard windows != registered else { return }
+        // Recorded before the work, not after. A window that fails to register
+        // must not be retried on the next tick — that is the storm again, in
+        // the one case where it also never succeeds.
+        registered = windows
+
         let center = DeviceActivityCenter()
         // Clear ours and only ours. `stopMonitoring()` with no argument would
         // also stop activities another feature might register later.
@@ -46,7 +77,6 @@ enum ShieldScheduler {
 
         guard SharedContainer.isAvailable else { return }
 
-        let windows = state.shieldWindows(from: now, limit: maximumWindows)
         var planned: [ShieldPlan.Window] = []
 
         for (index, window) in windows.enumerated() {
@@ -97,10 +127,17 @@ enum ShieldScheduler {
     /// inside the app — so while the app is closed these numbers are frozen and
     /// still true. A remaining-time figure would not be: it would keep shrinking
     /// in the user's head while the file said otherwise.
+    /// The lines last written, for the same reason `registered` exists: this is
+    /// also on the one-second path, and rewriting an identical file sixty times
+    /// a minute is disk traffic in exchange for nothing.
+    private static var published: [String]?
+
     static func publishCopy(for access: AccessState) {
         guard SharedContainer.isAvailable else { return }
-        SharedContainer.save(ShieldCopy(generatedAt: Date(),
-                                        lines: access.lockReasons.map(line(for:))))
+        let lines = access.lockReasons.map(line(for:))
+        guard lines != published else { return }
+        published = lines
+        SharedContainer.save(ShieldCopy(generatedAt: Date(), lines: lines))
     }
 
     private static func line(for reason: LockReason) -> String {
@@ -152,6 +189,11 @@ enum ShieldScheduler {
         // is shielding anything; leaving lines behind would mean a shield
         // raised by some other app one day could show Earned's obligations.
         SharedContainer.save(ShieldCopy(generatedAt: Date(), lines: []))
+        // Both caches too, or the next `reschedule` after authorization comes
+        // back would compare against windows that are no longer registered and
+        // decide there is nothing to do.
+        registered = nil
+        published = []
     }
 
     private static func encode<T: Encodable>(_ token: T) -> Data? {

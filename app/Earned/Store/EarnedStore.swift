@@ -130,6 +130,12 @@ final class EarnedStore: ObservableObject {
         screenTime.refreshAuthorization()
         recordEnforcementTransition()
         if screenTime.authorization.canShield {
+            // Once per foreground, insist on a real re-registration rather than
+            // trusting the scheduler's cache. The cache is what stops the
+            // one-second ticker from hammering the DeviceActivity daemon, but
+            // it cannot know that the system dropped a schedule, or that
+            // authorization went away and came back while Earned was closed.
+            ShieldScheduler.invalidate()
             syncShield()
         } else {
             // Holding restrictions the user can no longer manage would be a

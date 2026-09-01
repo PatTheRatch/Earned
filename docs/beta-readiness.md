@@ -139,6 +139,27 @@ DeviceActivity schedules, CI signs nothing, and the failure mode — the app shi
 launch and looks fine — is indistinguishable from success unless someone deliberately
 avoids opening the app.
 
+**The first thing a real grant found: the app froze.** Granting Screen Time on a device made
+Earned stop responding, permanently, across relaunches. `EarnedStore` runs `syncShield()`
+from a one-second ticker, and `syncShield()` opens with `guard canShield` — so until somebody
+granted authorization on real hardware, **every line after that guard was dead code that had
+never executed once**. Behind it sat `ShieldScheduler.reschedule`, which stops monitoring and
+re-registers up to eight DeviceActivity schedules, each a synchronous round trip to the
+system daemon: roughly ten of them per second, on the main thread, forever.
+`ScreenTimeController.apply` had had the equivalent guard since the day it was written; the
+scheduler, which needed it far more, never got one.
+
+Fixed by caching the registered windows and returning when they have not changed — the
+windows are deadlines, so a second passing does not move them. The foreground pass calls
+`ShieldScheduler.invalidate()` first, so a schedule the system dropped is still recovered
+once per launch rather than never. The shield itself still follows the clock every second;
+only the re-registration is throttled.
+
+Worth stating plainly because it shapes what B‑2 is for: no amount of green CI could have
+found this, and neither could the simulator, where Family Controls cannot be authorized at
+all. The bug lived precisely in the region that only a granted device can reach — which is
+the same region B‑2 exists to test.
+
 **Owner:** enforcement.
 **Requires:** device testing. Signed build on real hardware, which means B‑1 first.
 **Verify:** [`beta-test-script.md`](beta-test-script.md) step 7 is written for a tester;
