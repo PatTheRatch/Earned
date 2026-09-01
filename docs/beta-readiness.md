@@ -546,6 +546,30 @@ Health is asked for, and that a workout is the only thing that completes a commi
 "Ways out" (the three overrides, and that Solo needs nobody). The activation page now says
 the authorization is voluntary and that withdrawing it stops enforcement.
 
+**And onboarding now leaves a working app rather than an inert one.** It used to configure
+the Hydration Gate and stop: Screen Time was never asked for, no apps were ever picked, so
+the first Today said LOCKED while blocking nothing, and the only route to a functioning
+product was for the user to guess that two settings screens existed. A commitment app whose
+first impression is "nothing is owed and nothing is blocked" has argued against itself
+before it starts.
+
+Two pages now *do* something instead of explaining something — the Screen Time ask, and
+Apple's app picker — placed immediately after the page that explains restriction, because a
+permission asked before its reason is a permission refused. What is picked becomes both the
+Hydration Gate's own restriction profile and the default for new commitments; asking twice
+for a decision just made once would read as the app not having listened. Hydration itself
+became a toggle rather than an assumption, on by default.
+
+Both pages are skippable and say so, and the navigation button yields to `Not now` /
+`Skip for now` in underline style while a page is still asking — so the loud button on
+screen is always the grant, never the way past it. Skipping leaves precisely the app that
+shipped before, with an honest line about what that costs.
+
+**Still open:** onboarding does not offer a first *commitment*. Hydration plus a real
+restriction profile is enough for the first day to have a locked state that means something,
+but the empty Today still says "Nothing owed" until the user makes one. Whether the first
+commitment belongs inside onboarding is a product decision, not an oversight.
+
 **Verify:** hand the phone to someone who has heard nothing about Earned and ask them,
 afterwards, what the app does and what happens if they want out. Their answer is the test.
 

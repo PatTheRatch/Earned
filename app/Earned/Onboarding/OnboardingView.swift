@@ -1,19 +1,51 @@
 import SwiftUI
+import FamilyControls
 import EarnedKit
 
 /// First launch teaches the mental model, one concept per screen, and ends with
-/// a configured Hydration Gate (NORTHSTAR §28).
+/// a Gate that is actually holding something (NORTHSTAR §28).
+///
+/// **It used to end with an app that did nothing.** Onboarding configured the
+/// Hydration Gate and stopped there: Screen Time was never asked for, no apps
+/// were ever picked, so the first Today said LOCKED while blocking precisely
+/// nothing, and the only way to a working product was for the user to guess
+/// that two settings screens existed and go and find them. A commitment app
+/// whose first impression is "nothing is owed and nothing is blocked" has
+/// argued against itself before it starts.
+///
+/// So two pages here *do* something rather than explain something: the Screen
+/// Time ask, and Apple's own app picker. They sit immediately after the page
+/// that explains restriction, because asking for the permission before saying
+/// what it is for is how permissions get refused — and because everything
+/// after them is easier to agree to once the phone can already enforce.
+///
+/// Both are skippable and say so. Refusing leaves exactly the app that shipped
+/// before: Gates tracked, nothing blocked, and an honest line about it.
 struct OnboardingView: View {
     @EnvironmentObject private var store: EarnedStore
 
     private enum Page: Int, CaseIterable {
-        case idea, gates, hydration, restrictions, proof, ways, hardening, activate
+        case idea, gates, restrictions, screenTime, blocking, hydration,
+             proof, ways, hardening, activate
     }
 
     @State private var page: Page = .idea
     @State private var interval = 60.0
     @State private var startHour = 8.0
     @State private var endHour = 22.0
+    /// Hydration is a choice now, not an assumption. It stays on by default —
+    /// it is the one Gate that needs no setup and no permission, and it is what
+    /// makes the first day feel like the product works — but a user who does
+    /// not want it should not have to go and turn off something they never
+    /// agreed to.
+    @State private var hydrationOn = true
+    @State private var picking = false
+    @State private var selection = FamilyActivitySelection()
+    /// What the user chose to lose. Applied to the Hydration Gate *and* as the
+    /// default for commitments, because at this point in the product they have
+    /// made exactly one decision about what optional means and it would be
+    /// strange to ask again three screens later.
+    @State private var restrictions: RestrictionProfile = .none
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -27,14 +59,18 @@ struct OnboardingView: View {
                     .font(.headline)
                     .padding(.vertical, 16).padding(.horizontal, 20)
                 }
-                Button(page == .activate ? "ACTIVATE EARNED" : "NEXT") {
-                    if page == .activate {
-                        activate()
-                    } else {
-                        withAnimation { page = Page(rawValue: page.rawValue + 1) ?? .activate }
-                    }
+                // The two action pages own their screen's one filled button, so
+                // the navigation yields to a quiet one and says what skipping
+                // means. Two ink blocks side by side would make "move on"
+                // compete with "grant the permission the app runs on" — and
+                // the louder of the two would be the wrong one.
+                if pageOwnsItsAction {
+                    Button(advanceTitle) { advance() }
+                        .buttonStyle(UnderlineButtonStyle())
+                } else {
+                    Button(advanceTitle) { advance() }
+                        .buttonStyle(PosterButtonStyle())
                 }
-                .buttonStyle(PosterButtonStyle())
             }
         }
         .padding(28)
@@ -58,12 +94,96 @@ struct OnboardingView: View {
                        + "satisfied for full access. Calls, messages, maps and music never go "
                        + "behind a Gate.")
 
+        case .screenTime:
+            VStack(alignment: .leading, spacing: 18) {
+                Text("TURN ON\nBLOCKING").font(Theme.display(44)).foregroundStyle(Theme.ink)
+                    .lineSpacing(-4)
+                Text("Earned blocks apps through Apple's Screen Time. Without it, Earned "
+                     + "can still track every Gate and tell you exactly what would be "
+                     + "locked — it just can't lock anything.")
+                    .foregroundStyle(Theme.muted)
+                switch store.shielding {
+                case .approved:
+                    Text("Screen Time is on. Earned can enforce your Gates.")
+                        .font(.headline).foregroundStyle(Theme.ink)
+                case .denied:
+                    // Never dead-ended: iOS will not re-ask once refused, so
+                    // the only honest next step is the Settings app.
+                    Text("Screen Time is off. You can turn it on in iOS Settings, now or "
+                         + "any time later.")
+                        .foregroundStyle(Theme.signal)
+                    Button("Open iOS Settings") { openSystemSettings() }
+                        .buttonStyle(UnderlineButtonStyle())
+                case .notDetermined:
+                    Button("ALLOW SCREEN TIME") {
+                        Task { await store.requestShieldingAuthorization() }
+                    }
+                    .buttonStyle(PosterButtonStyle())
+                    Text("Apple asks, not us. You can withdraw it in iOS Settings at any "
+                         + "time, and Earned will stop enforcing rather than pretend it "
+                         + "still can.")
+                        .font(.footnote).foregroundStyle(Theme.muted)
+                }
+                if let failure = store.shieldingFailure {
+                    Text(failure).font(.footnote).foregroundStyle(Theme.signal)
+                }
+            }
+            .padding(.top, 40)
+
+        case .blocking:
+            VStack(alignment: .leading, spacing: 18) {
+                Text("WHAT YOU\nLOSE").font(Theme.display(44)).foregroundStyle(Theme.ink)
+                    .lineSpacing(-4)
+                Text("Pick the apps and sites that should go behind your Gates. Apple's "
+                     + "picker keeps the choices private — Earned can block them without "
+                     + "ever learning which ones they are.")
+                    .foregroundStyle(Theme.muted)
+                if store.shielding.canShield {
+                    Button(shieldableCount == 0 ? "CHOOSE APPS" : "CHANGE SELECTION") {
+                        selection = RestrictionBridge.selection(from: restrictions)
+                        picking = true
+                    }
+                    .buttonStyle(shieldableCount == 0 ? PosterButtonStyle()
+                                                      : PosterButtonStyle(background: Theme.field,
+                                                                          foreground: Theme.ink))
+                    Text(shieldableCount == 0
+                         ? "Nothing picked yet. You can skip this and choose later."
+                         : "\(shieldableCount) blocked while a Gate is unsatisfied.")
+                        .font(.footnote)
+                        .foregroundStyle(shieldableCount == 0 ? Theme.muted : Theme.ink)
+                } else {
+                    // One sentence of consequence, then the reassurance in the
+                    // ordinary voice. A whole paragraph in signal red spends
+                    // the loudest colour in the system on mostly-good news.
+                    Text("Screen Time isn't on, so there's nothing to pick yet.")
+                        .font(.headline).foregroundStyle(Theme.signal)
+                    Text("Earned will still track your Gates and show you what would be "
+                         + "locked. Come back to You → Restrictions when you're ready.")
+                        .foregroundStyle(Theme.muted)
+                }
+                Text("Calls, messages, maps and music never go behind a Gate, whatever you "
+                     + "pick here.")
+                    .font(.footnote).foregroundStyle(Theme.muted)
+            }
+            .padding(.top, 40)
+            .familyActivityPicker(isPresented: $picking, selection: $selection)
+            .onChange(of: picking) { wasPicking, isPicking in
+                // Commit when the picker closes, not on every tap inside it.
+                if wasPicking && !isPicking {
+                    restrictions = RestrictionBridge.profile(from: selection)
+                }
+            }
+
         case .hydration:
             VStack(alignment: .leading, spacing: 18) {
                 Text("HYDRATION").font(Theme.display(44)).foregroundStyle(Theme.ink)
                 Text("A behavioural interrupt, not a tracker. You just say you drank some water — "
                      + "and the day begins owing it.")
                     .foregroundStyle(.secondary)
+                Toggle("Start with this Gate on", isOn: $hydrationOn)
+                    .font(.headline)
+                    .tint(Theme.ink)
+                if hydrationOn {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Every \(Int(interval)) minutes").font(.headline)
                     Slider(value: $interval, in: 15...240, step: 15)
@@ -79,6 +199,11 @@ struct OnboardingView: View {
                          + "opens closed: the day starts locked until the first glass of water.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
+                } else {
+                    Text("You can turn it on later in You → Hydration. Without it, nothing "
+                         + "is owed until you make your first commitment.")
+                        .font(.footnote).foregroundStyle(Theme.muted)
+                }
             }
 
         case .restrictions:
@@ -87,9 +212,9 @@ struct OnboardingView: View {
                        + "and music alone; unmet water can strip the phone back to calls and "
                        + "messages. Whatever is unsatisfied, you lose the sum of it.\n\nYou pick "
                        + "the apps in Apple's own picker, so Earned can block them without ever "
-                       + "learning which ones they are. Grant Screen Time access in Settings when "
-                       + "you're ready — until you do, Earned tracks your Gates and tells you "
-                       + "exactly what would be locked.")
+                       + "learning which ones they are.\n\nThe next two screens set that up. "
+                       + "Both are optional, and Earned works without them — it just can't "
+                       + "lock anything until they're done.")
 
         // Health and the Overrides were both absent from onboarding, and both
         // are things a first-time user has to know before they agree to
@@ -141,15 +266,51 @@ struct OnboardingView: View {
         }
     }
 
+    private var shieldableCount: Int { RestrictionBridge.shieldableCount(in: restrictions) }
+
+    /// True while the page is asking for something the user has not yet done.
+    /// Once they have, the page is finished and NEXT becomes the act again.
+    private var pageOwnsItsAction: Bool {
+        switch page {
+        case .screenTime: return store.shielding == .notDetermined
+        case .blocking:   return store.shielding.canShield && shieldableCount == 0
+        default:          return false
+        }
+    }
+
+    private var advanceTitle: String {
+        if pageOwnsItsAction { return page == .screenTime ? "Not now" : "Skip for now" }
+        return page == .activate ? "ACTIVATE EARNED" : "NEXT"
+    }
+
+    private func advance() {
+        if page == .activate {
+            activate()
+        } else {
+            withAnimation { page = Page(rawValue: page.rawValue + 1) ?? .activate }
+        }
+    }
+
     private func activate() {
         let hours = ActiveHours(startMinuteOfDay: Int(startHour) * 60,
                                 endMinuteOfDay: Int(endHour) * 60,
                                 timeZoneIdentifier: TimeZone.current.identifier)
-        let config = HydrationConfig(enabled: true,
+        let config = HydrationConfig(enabled: hydrationOn,
                                      interval: interval * 60,
                                      activeHours: hours,
+                                     // The picked apps are what the Hydration
+                                     // Gate takes away, so the first locked day
+                                     // locks something. Before this the Gate
+                                     // was configured with `.none` and the
+                                     // first Today read LOCKED over an empty
+                                     // restriction profile.
+                                     restrictions: restrictions,
                                      warningLead: 10 * 60)
         guard store.configureHydration(config) else { return }
+        // And the same choice becomes the default for commitments. Asking again
+        // three screens later, for a decision the user has just made once and
+        // carefully, would read as the app not having listened.
+        if shieldableCount > 0 { store.setDefaultRestrictions(restrictions) }
         store.hasOnboarded = true
     }
 
