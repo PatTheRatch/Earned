@@ -167,7 +167,42 @@ final class AccountStore: ObservableObject {
     func signOut() {
         guard let client else { return }
         Task { await client.clearSession() }
+        forgetAccount()
         session = .signedOut
+    }
+
+    /// Notices that the session died underneath us.
+    ///
+    /// A refused refresh means the grant is gone — signed out elsewhere,
+    /// project keys rotated, the token already spent. `BackendClient` discards
+    /// it and every later call throws "Not signed in.", but nothing told this
+    /// store, so the app went on saying "Signed in" while nothing worked and
+    /// no screen offered a way back: both Settings and Social only show the
+    /// sign-in button when `session` says signed out. Only a relaunch
+    /// recovered.
+    func noteIfSignedOut() async {
+        guard let client, case .signedIn = session else { return }
+        if await client.isSignedIn == false {
+            forgetAccount()
+            session = .signedOut
+        }
+    }
+
+    /// Drops what belonged to the account that just left.
+    ///
+    /// The envelope registry deliberately stays. It is keyed by commitment and
+    /// records what the server was told about obligations that outlive the
+    /// session — signing out is not a way out (NORTHSTAR §33), and the next
+    /// sign-in on this device should not have to re-register them.
+    private func forgetAccount() {
+        partners = []
+        partnerRequests = []
+        pendingApprovals = []
+        partnerFailure = nil
+        lastRequest = nil
+        requestFailure = nil
+        heldGrants = 0
+        grantFailure = nil
     }
 
     // MARK: - Partners

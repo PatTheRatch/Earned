@@ -25,12 +25,27 @@ enum SessionKeychain {
     private static let service = "com.pattheratch.earned.session"
     private static let account = "supabase.refreshToken"
 
-    static func save(_ token: String) {
-        var query = baseQuery
-        SecItemDelete(query as CFDictionary)
-        query[kSecValueData as String] = Data(token.utf8)
-        query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        SecItemAdd(query as CFDictionary, nil)
+    /// Stores the token, replacing any existing one. Returns whether it
+    /// landed.
+    ///
+    /// Update-then-add rather than delete-then-add: the delete half always
+    /// succeeds and the add half can fail, so the pair could remove a working
+    /// credential and store nothing in its place — a sign-out on the next
+    /// launch, from a token that had been perfectly good. The status is
+    /// returned rather than discarded for the same reason; a credential that
+    /// quietly failed to store is the hardest kind of bug report to answer.
+    @discardableResult
+    static func save(_ token: String) -> Bool {
+        let data = Data(token.utf8)
+        var status = SecItemUpdate(baseQuery as CFDictionary,
+                                   [kSecValueData as String: data] as CFDictionary)
+        if status == errSecItemNotFound {
+            var insert = baseQuery
+            insert[kSecValueData as String] = data
+            insert[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+            status = SecItemAdd(insert as CFDictionary, nil)
+        }
+        return status == errSecSuccess
     }
 
     static func load() -> String? {

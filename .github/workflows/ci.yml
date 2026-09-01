@@ -104,12 +104,28 @@ jobs:
       # effect, including any other way generation could rewrite these files.
       - name: Generation did not rewrite the entitlements
         run: git diff --exit-code -- 'app/**/*.entitlements'
-      - name: The generated Info.plist carries the version keys
+      # Both bundles, not just the app's. The monitor's plist declared no
+      # version keys at all, so XcodeGen wrote its own defaults into the
+      # extension while the app carried the real ones — an upload App Store
+      # Connect refuses, with every check either side of it green.
+      - name: The generated Info.plists carry the version keys, and agree
         run: |
+          plist() { /usr/libexec/PlistBuddy -c "Print :$2" "$1" 2>/dev/null; }
           for key in CFBundleShortVersionString CFBundleVersion \
                      ITSAppUsesNonExemptEncryption NSHealthShareUsageDescription; do
-            /usr/libexec/PlistBuddy -c "Print :$key" app/Earned/Info.plist >/dev/null \
-              || { echo "generated Info.plist is missing $key" >&2; exit 1; }
+            plist app/Earned/Info.plist "$key" >/dev/null \
+              || { echo "generated app Info.plist is missing $key" >&2; exit 1; }
+          done
+          for key in CFBundleShortVersionString CFBundleVersion \
+                     NSExtension:NSExtensionPointIdentifier; do
+            plist app/EarnedMonitor/Info.plist "$key" >/dev/null \
+              || { echo "generated monitor Info.plist is missing $key" >&2; exit 1; }
+          done
+          for key in CFBundleShortVersionString CFBundleVersion; do
+            a=$(plist app/Earned/Info.plist "$key")
+            m=$(plist app/EarnedMonitor/Info.plist "$key")
+            [ "$a" = "$m" ] \
+              || { echo "$key: app is $a, monitor is $m — the extension and its host must agree" >&2; exit 1; }
           done
       - name: Build
         run: |

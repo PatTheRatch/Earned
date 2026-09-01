@@ -64,6 +64,7 @@ final class SocialStore: ObservableObject {
     /// stale entry can only be an image nobody points at any more.
     private var avatarCache: [String: Data] = [:]
     private var accountID: String?
+    private var sessionObserver: AnyCancellable?
 
     init(account: AccountStore,
          sharingStorage: SharingRegistryStorage = .documents(),
@@ -73,6 +74,42 @@ final class SocialStore: ObservableObject {
         self.sharedStorage = sharedStorage
         self.sharing = sharingStorage.load()
         self.sharedRegistry = sharedStorage.load()
+        // Signing out has to take the account's things with it. Every
+        // published value below belongs to one account, and none of them was
+        // being cleared: a second Apple ID on the same device saw the previous
+        // user's name, handle and avatar presented as its own until a refresh
+        // landed, and could open the profile editor on them. `accountID` was
+        // worse than stale — it is the prefix of the avatar upload path, so it
+        // stayed pinned to the departed account for the life of the process
+        // and every upload was refused by RLS with nothing on screen to say
+        // why. AccountStore publishes the transition; this is the only place
+        // that needs to hear it.
+        sessionObserver = account.$session
+            .dropFirst()
+            .sink { [weak self] session in
+                guard case .signedOut = session else { return }
+                MainActor.assumeIsolated { self?.forgetAccount() }
+            }
+    }
+
+    /// Drops everything belonging to the account that just left.
+    ///
+    /// Deliberately *not* the sharing registries: those are keyed by
+    /// commitment and belong to the ledger, which survives a sign-out exactly
+    /// as the obligations it records do.
+    private func forgetAccount() {
+        profileState = .unknown
+        friends = []
+        requests = FriendRequests()
+        blocked = []
+        activity = []
+        sharedCommitments = []
+        sharedInvitations = []
+        avatarCache = [:]
+        accountID = nil
+        failure = nil
+        lastSync = nil
+        setupOffered = false
     }
 
     private var client: BackendClient? {
@@ -215,27 +252,33 @@ final class SocialStore: ObservableObject {
         }
     }
 
-    func sendRequest(handle: String) async {
+    @discardableResult
+    func sendRequest(handle: String) async -> Bool {
         await perform { try await $0.sendFriendRequest(handle: handle) }
     }
 
-    func respond(handle: String, accept: Bool) async {
+    @discardableResult
+    func respond(handle: String, accept: Bool) async -> Bool {
         await perform { try await $0.respondToFriendRequest(handle: handle, accept: accept) }
     }
 
-    func cancelRequest(handle: String) async {
+    @discardableResult
+    func cancelRequest(handle: String) async -> Bool {
         await perform { try await $0.cancelFriendRequest(handle: handle) }
     }
 
-    func removeFriend(handle: String) async {
+    @discardableResult
+    func removeFriend(handle: String) async -> Bool {
         await perform { try await $0.removeFriend(handle: handle) }
     }
 
-    func block(handle: String) async {
+    @discardableResult
+    func block(handle: String) async -> Bool {
         await perform { try await $0.blockUser(handle: handle) }
     }
 
-    func unblock(handle: String) async {
+    @discardableResult
+    func unblock(handle: String) async -> Bool {
         await perform { try await $0.unblockUser(handle: handle) }
     }
 
@@ -566,14 +609,25 @@ final class SocialStore: ObservableObject {
         } catch { failure = error.localizedDescription }
     }
 
-    private func perform(_ action: (BackendClient) async throws -> Void) async {
-        guard let client else { return }
+    /// Runs one friendship mutation and reports whether it actually landed.
+    ///
+    /// The refresh afterwards is what makes the return value necessary. It
+    /// reports its own outcome into `failure`, and on success that means
+    /// `failure = nil` — erasing the mutation's error before any view could
+    /// render it. Every failed request, unfriend and *block* therefore read as
+    /// success: the row said "Asked", the profile dismissed, and the user
+    /// believed they had blocked someone who could still see them.
+    @discardableResult
+    private func perform(_ action: (BackendClient) async throws -> Void) async -> Bool {
+        guard let client else { return false }
+        var thrown: String?
         do {
             try await action(client)
-            failure = nil
         } catch {
-            failure = error.localizedDescription
+            thrown = error.localizedDescription
         }
         await refreshSocial()
+        if let thrown { failure = thrown }
+        return thrown == nil
     }
 }

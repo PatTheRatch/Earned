@@ -91,7 +91,8 @@ targets:
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        # Set explicitly as well as via `entitlements:` above. Without
+        # The only reference the build needs — there is deliberately no
+        # `entitlements:` block above, for the reason stated there. Without
         # this reaching the signed binary, the sandbox refuses the XPC
         # lookup to com.apple.FamilyControlsAgent with "error 159 -
         # Sandbox restriction" and authorization can never succeed.
@@ -129,6 +130,14 @@ targets:
       path: EarnedMonitor/Info.plist
       properties:
         CFBundleDisplayName: Earned Monitor
+        # Stated, not inherited. With GENERATE_INFOPLIST_FILE: NO nothing
+        # substitutes MARKETING_VERSION/CURRENT_PROJECT_VERSION into this
+        # bundle unless the plist asks for them by name, and XcodeGen fills
+        # the gap with its own defaults (1.0/1). App Store Connect rejects an
+        # upload whose extension disagrees with its host, so the settings
+        # below were inert and the first archive would have been refused.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.deviceactivity.monitor-extension
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).MonitorExtension

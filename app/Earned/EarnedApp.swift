@@ -102,6 +102,10 @@ struct EarnedApp: App {
             // else that closed a request while partners were still being
             // asked stands them down here (migration 0020).
             await account.closeResolvedRequests(in: store.ledger.state)
+            // Last, because any call above may have discovered that the
+            // session died. Without this the app keeps claiming to be
+            // signed in while everything fails, and offers no way back.
+            await account.noteIfSignedOut()
         }
     }
 

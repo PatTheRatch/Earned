@@ -220,8 +220,18 @@ struct FriendProfileView: View {
                     .confirmationDialog("Block @\(profile.handle)?",
                                         isPresented: $confirmingBlock) {
                         Button("Block", role: .destructive) {
-                            Task { await social.block(handle: profile.handle)
-                                   dismiss() }
+                            // Dismissing regardless was the worst version of
+                            // this bug: the screen closed and the user believed
+                            // they had blocked someone who could still see
+                            // them. Staying put leaves the error on screen and
+                            // the button to try again.
+                            Task {
+                                if await social.block(handle: profile.handle) {
+                                    dismiss()
+                                } else {
+                                    await refresh()
+                                }
+                            }
                         }
                     } message: {
                         Text("You disappear from each other entirely — search, profiles, "

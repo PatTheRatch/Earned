@@ -31,6 +31,8 @@ actor BackendClient {
     private let config: BackendConfig
     private let session: URLSession
     private var accessToken: String?
+    /// The refresh currently in flight, if any. See `refreshAccessToken`.
+    private var refreshInFlight: Task<Bool, Error>?
 
     init?(config: BackendConfig? = BackendConfig.shared, session: URLSession = .shared) {
         guard let config else { return nil }
@@ -78,33 +80,60 @@ actor BackendClient {
         return try await refreshAccessToken()
     }
 
-    /// Trades the stored refresh token for a new access token.
+    /// Trades the stored refresh token for a new access token — once at a
+    /// time, however many callers discover the expiry together.
     ///
-    /// Supabase rotates on every use, so the token that comes back must
-    /// replace the one that was sent — dropping it would strand the next
-    /// launch. A refusal means the grant is gone for good (signed out
-    /// elsewhere, project keys rotated, token already spent), so the stored
-    /// credential is cleared rather than retried forever.
+    /// The single-flight is load-bearing, not tidiness. Supabase rotates the
+    /// refresh token on every use, so a second concurrent exchange sends one
+    /// the first has already spent; the server refuses it, and the obvious
+    /// response — forget the session — destroys the freshly-rotated token that
+    /// just arrived. The user is signed out for good, with nothing left for
+    /// the next launch to restore from. And concurrent expiry is the normal
+    /// case here rather than an edge: a friends list issues one authenticated
+    /// avatar fetch per row.
+    ///
+    /// The actor does not prevent this on its own. `await` on the exchange is
+    /// a suspension point, and an actor is re-entrant across one.
     @discardableResult
     private func refreshAccessToken() async throws -> Bool {
-        guard let refreshToken = SessionKeychain.load() else { return false }
+        if let existing = refreshInFlight { return try await existing.value }
+        let task = Task { try await self.exchangeRefreshToken() }
+        refreshInFlight = task
+        defer { refreshInFlight = nil }
+        return try await task.value
+    }
+
+    /// The exchange itself. Never call this directly — `refreshAccessToken` is
+    /// the door in front of it, and the reason there is one.
+    private func exchangeRefreshToken() async throws -> Bool {
+        guard let sent = SessionKeychain.load() else { return false }
         let json: [String: Any]
         do {
             json = try await post(path: "/auth/v1/token?grant_type=refresh_token",
-                                  body: ["refresh_token": refreshToken], authorized: false)
+                                  body: ["refresh_token": sent], authorized: false)
         } catch Failure.refused {
-            accessToken = nil
-            SessionKeychain.clear()
+            // The grant is gone for good: signed out elsewhere, project keys
+            // rotated, or this token already spent.
+            forgetSession(ifStoredTokenIsStill: sent)
             return false
         }
         guard let token = json["access_token"] as? String else {
-            accessToken = nil
-            SessionKeychain.clear()
+            forgetSession(ifStoredTokenIsStill: sent)
             return false
         }
         accessToken = token
         keep(refreshTokenFrom: json)
         return true
+    }
+
+    /// Forgets the session — but only if the credential that was refused is
+    /// still the stored one. If anything rotated it while this exchange was in
+    /// flight, what is stored now is newer and valid, and clearing it would
+    /// sign the user out over somebody else's success.
+    private func forgetSession(ifStoredTokenIsStill sent: String) {
+        guard SessionKeychain.load() == sent else { return }
+        accessToken = nil
+        SessionKeychain.clear()
     }
 
     private func keep(refreshTokenFrom json: [String: Any]) {

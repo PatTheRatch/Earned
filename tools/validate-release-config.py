@@ -77,6 +77,7 @@ def main() -> int:
     app_settings = app.get("settings", {}).get("base", {})
     monitor_settings = monitor.get("settings", {}).get("base", {})
     info = app.get("info", {}).get("properties", {})
+    monitor_info = monitor.get("info", {}).get("properties", {})
 
     # --- Bundle identifiers -------------------------------------------------
     # The monitor must be a child of the app's identifier: iOS refuses to embed
@@ -107,11 +108,20 @@ def main() -> int:
           == monitor_settings.get("CURRENT_PROJECT_VERSION"),
           "app and monitor CURRENT_PROJECT_VERSION disagree; App Store Connect "
           "rejects the upload")
-    check(info.get("CFBundleShortVersionString") == "$(MARKETING_VERSION)",
-          "Info.plist does not carry CFBundleShortVersionString; You → About "
-          "would show '?'")
-    check(info.get("CFBundleVersion") == "$(CURRENT_PROJECT_VERSION)",
-          "Info.plist does not carry CFBundleVersion; You → About would show '?'")
+    # A build setting only reaches the bundle if the plist asks for it by name.
+    # Both targets must ask, for opposite reasons: the app so You → About can
+    # name the build, the monitor so its version matches its host. Checking the
+    # settings alone is what let the monitor ship XcodeGen's default 1.0/1
+    # against the app's own version — green here, refused at upload.
+    for label, properties in (("the app", info), ("the monitor", monitor_info)):
+        check(properties.get("CFBundleShortVersionString") == "$(MARKETING_VERSION)",
+              f"{label}'s Info.plist does not carry CFBundleShortVersionString: "
+              "$(MARKETING_VERSION); the setting above is inert and XcodeGen "
+              "writes its own default into the bundle instead")
+        check(properties.get("CFBundleVersion") == "$(CURRENT_PROJECT_VERSION)",
+              f"{label}'s Info.plist does not carry CFBundleVersion: "
+              "$(CURRENT_PROJECT_VERSION); the setting above is inert and "
+              "XcodeGen writes its own default into the bundle instead")
 
     # --- Entitlements: the silent-strip failure -----------------------------
     # CODE_SIGN_ENTITLEMENTS is the only reference the build needs, and the app

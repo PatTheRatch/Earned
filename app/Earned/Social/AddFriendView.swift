@@ -65,8 +65,14 @@ struct AddFriendView: View {
                                     } else {
                                         Button("Add") {
                                             Task {
-                                                await social.sendRequest(handle: person.handle)
-                                                asked.insert(person.handle)
+                                                // Only if it landed. Marking
+                                                // the row regardless told the
+                                                // user they had asked someone
+                                                // the server never heard about.
+                                                if await social.sendRequest(
+                                                    handle: person.handle) {
+                                                    asked.insert(person.handle)
+                                                }
                                             }
                                         }
                                         .buttonStyle(.borderedProminent)
