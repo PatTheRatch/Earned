@@ -233,6 +233,31 @@ the override history are unchanged, and that You → Advanced → Diagnostics re
 quarantined history. The quarantine path itself has no automated test because the app
 target has none — see [CI](#ci-and-what-it-actually-protects).
 
+**Run on the simulator, 1 September 2026.** Not a device, and not a substitute for one, but
+it exercises the path CI cannot reach: `LedgerStorage` itself, in the app, against bytes an
+earlier build wrote. Each golden fixture was seeded as the app's `ledger.json` and the
+current build launched over it.
+
+| Seeded | Read | Result |
+|---|---|---|
+| v1 (bare array, pre-envelope) | v1→v6 chain | Rendered: 33% KEPT, 1 of 3, both override kinds in the record |
+| v2, v2-override, v3, v4 | migrated | No quarantine; history intact |
+| v5 (the format on the phones) | rewritten as v6 | 9 entries in, the same 9 byte-identical out, plus one new `enforcementUnavailableDetected` — the app recording that this simulator has no Screen Time grant, not data loss. Rendered: 50% KEPT, the effort commitment v5 introduced, the bypass in signal |
+| deliberately corrupt | refused | Moved to `ledger-unreadable-<stamp>.json`, app started fresh, alert shown, and Diagnostics reported **History · Set aside: …** in signal |
+
+Nothing was quarantined that should not have been, and nothing was lost. Two things worth a
+decision rather than a fix:
+
+- **The quarantine alert shows a raw `DecodingError`** — "Path: entries[0].id. Debug
+  description: Attempted to decode UUID from invalid UUID string." R‑2's rule is that no
+  screen shows raw system text, and a `DecodingError` is not written for people. Against
+  that: a tester who screenshots it hands over the exact failure. Keep it for Wave 0 and
+  revisit, or move it behind Diagnostics now.
+- **The Diagnostics `History` row only appears on the launch that quarantined** (the
+  comment in `EarnedStore` says so deliberately). Dismiss the alert, relaunch, and the only
+  remaining evidence is a file in the container. Fine if the tester reports immediately;
+  worth knowing before asking one to "check Diagnostics" after the fact.
+
 ## B‑6 · TestFlight distributability
 
 **Status: BUILT and TESTED, not SIGNED.** The project's *configuration* is now verified on
@@ -271,19 +296,33 @@ reviewed rather than remembered. Confirm it once against Apple's current questio
 
 ## B‑7 · Hosted backend parity
 
-**Status: DEPLOYED per `deployment.md`, NOT independently verified this milestone.**
+**Status: DEPLOYED and independently verified, 1 September 2026.**
 
-The repository holds 22 migrations, `0001`–`0022`. `deployment.md` records `0013`–`0018`
-applied 31 August 2026 and `0019`–`0022` applied 1 September 2026, with an RPC-probe method
+Re-checked against the hosted project rather than against `deployment.md`, through the
+Management API's query endpoint (the CLI's own keychain token, so no database password was
+needed): **five cron jobs active** including `announce-shared-starts`; **22 tables, none
+without RLS, no write policies**; grant key `g1` `current` with two published key sets and
+`current_signing_kid()` agreeing; all three Vault secrets present; the `avatars` bucket
+private at 1 MiB and `image/jpeg` only; every `0019`–`0022` function present. From outside:
+`approval` answers 200 on a bad token, `grants` 401 unsigned, `earntherest.com` serves the
+site and proxies a well-formed token. Both edge functions are byte-current with the repo —
+nothing under `supabase/functions/` or `web/` has changed since they were deployed.
+
+The one route that is confirmed *missing* rather than working: `/c/<token>` returns 404,
+because there is no `consent` function behind the Worker's route. That is B‑8, not a
+deployment fault.
+
+The repository holds 23 migrations, `0001`–`0023`. `deployment.md` records `0013`–`0018`
+applied 31 August 2026 and `0019`–`0023` applied 1 September 2026, with an RPC-probe method
 that is worth repeating because it needs only the publishable key: PostgREST answers `401` /
 `42501` for a function that exists and refuses `anon`, and `404` / `PGRST202` for one that
 is not there. Every function from `0019`–`0022` answered `42501` against a made-up-name
 control, which also proves the `notify pgrst, 'reload schema'` step landed.
 
-I have no database credential and have not re-run any of it. The whole of the local schema
-does pass its own suite: **17 SQL test files plus three drills — key rotation, vote
-concurrency, and a real signed grant — green in both the `default` and `supabase` layouts**
-against Postgres 16, run locally this milestone as well as in CI.
+The local schema passes its own suite: **17 SQL test files plus three drills — key rotation,
+vote concurrency, and a real signed grant — green in both the `default` and `supabase`
+layouts** against Postgres 16, 588 assertions each, run locally this milestone as well as in
+CI.
 
 **Owner:** backend.
 **Requires:** hosted backend access.
@@ -696,13 +735,19 @@ Only then: one tester, who is in the same building as you.
    that is not yours.
 4. Confirm the **ledger survives an upgrade** (B‑5) — install the previous build, make a
    commitment, upgrade, check nothing moved.
-5. Watch the rate limits with real traffic. **Three override requests per account per day**
-   (`private.max_requests_per_day`) and **five partner nominations**
+5. Watch the rate limits with real traffic. **Ten override requests per account per day**
+   (`private.max_requests_per_day`, raised from three by
+   [`0023`](../backend/migrations/0023_beta_override_request_cap.sql) and applied to the
+   hosted project on 1 September 2026) and **five partner nominations**
    (`private.max_nominations_per_day`); the Worker adds roughly 20 requests per minute per IP
-   on approval links. Three is tight for a tester who is deliberately exercising the escape
-   routes — the script asks for two, and a retry after a failure spends a third. The fourth
-   ask is refused with "too many override requests today", which reads like a bug to someone
-   testing. Either brief them, or raise the cap for the beta and put it back afterwards.
+   on approval links — **that last one is still unconfirmed in Cloudflare** (deployment §5.4).
+   Three was tight for a tester deliberately exercising the escape routes: the script asks
+   for two, and a retry after a failure spends the third, so the fourth ask was refused with
+   "too many override requests today" — which reads as a bug to someone recruited to find
+   bugs. **`0023` is meant to be reverted** when Wave 0 ends; the migration says so and names
+   the file that should undo it. Note that raising this by hand on the hosted project instead
+   would not have survived: `apply.sh` is convergent, so the next apply restores three
+   silently.
 6. Have a **support answer ready** for the two questions that will come: "how do I get out
    of this" and "how do I delete my account". The first is in the script. The second is
    "message Patrick", and there is no button.

@@ -628,6 +628,14 @@ half-deployment:
   `purge_social_events`: retention behind the 30-day horizon plus agreements no
   participant stands on any more. Daily, beside the existing purge cron in §7.
 
+**`0023` is applied to the hosted project (1 September 2026)**, and is the one migration in
+here that is *meant to be undone*: it raises the override-request cap from three a day to
+ten for Wave 0, because the beta script asks a tester to exercise the escape routes and
+three does not survive that. It needs no cron, bucket or dashboard step. Revert it when
+Wave 0 ends by adding a migration that sets the function back to three — not by deleting
+the file, which un-applies nothing. Verified after applying: the cap reads `10`, and `anon`
+and `authenticated` still cannot execute the function.
+
 Both are `service_role` only and deliberately not granted to `authenticated`, so they
 are scheduled exactly like `purge-social-events`: `announce-shared-starts` hourly
 (`0 * * * *`) and `purge-shared-commitments` daily (`47 3 * * *`). Nothing else in
