@@ -182,10 +182,20 @@ The picker runs in a separate process and returns **opaque tokens**: Earned can 
 without ever learning which app it is. That is the Screen Time privacy guarantee (NORTHSTAR
 §34), and it is why these screens count restrictions rather than naming them.
 
-**One real gap.** The shield is applied by the app, so a Gate that closes while Earned isn't
-running won't be shielded until the app next opens. A `DeviceActivityMonitor` extension fixes
-this and is the next step. Note the failure direction: a shield already applied *stays*
-applied, so the gap can leave you locked slightly too long — never let off early.
+**The gap that used to be here is closed, pending device verification.** The shield was
+applied only by the app, so a Gate closing while Earned wasn't running stayed unshielded
+until the app was next opened — and since there is no reason to open Earned except to make
+commitments, not opening it was a complete bypass. The `EarnedMonitor` extension now takes
+that half: the app computes when the shield must change and writes a small plan into the
+App Group, registers a `DeviceActivity` schedule per change, and the extension applies the
+plan when the system wakes it.
+
+Two things this needs that a simulator will not give you: the **App Group**
+`group.com.pattheratch.earned` registered in the developer portal and added to both App IDs,
+and **Family Controls enabled on the extension's App ID** (`com.pattheratch.earned.monitor`)
+as well as the app's. Without the App Group the container URL is nil, the plan is never
+read, and the monitor wakes on time to shield nothing — silently. Settings → Testing reports
+whether the container is reachable for exactly that reason.
 
 **Before TestFlight or the App Store**, request **Family Controls (Distribution)** in the
 developer portal — per bundle id, and separately for each Screen Time extension. Apple reviews

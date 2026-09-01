@@ -104,6 +104,11 @@ final class EarnedStore: ObservableObject {
     private func syncShield() {
         guard screenTime.authorization.canShield else { return }
         screenTime.apply(access.effectiveRestrictions)
+        // What is in force now, and what will be in force at every deadline
+        // ahead, are two different jobs. This one covers the app being open;
+        // the schedule below covers it being closed, which is the case that
+        // actually matters — nobody opens a commitment app to be restricted.
+        ShieldScheduler.reschedule(for: state, now: now)
     }
 
     /// Re-reads Screen Time permission, which can be revoked in iOS Settings

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The extension shields on its own, so it needs the capability on its
+	     own. Family Controls is granted per bundle identifier, and this is a
+	     different bundle identifier from the app: it needs its own
+	     (Development) capability now, and its own (Distribution) review before
+	     TestFlight. See docs/family-controls-request.md. -->
+	<key>com.apple.developer.family-controls</key>
+	<true/>
+	<!-- The only route between two processes that never run at the same time.
+	     Without it the container URL is nil, the plan cannot be read, and the
+	     monitor wakes on time to shield nothing. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.pattheratch.earned</string>
+	</array>
+</dict>
+</plist>

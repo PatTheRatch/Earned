@@ -19,5 +19,12 @@
 	     device build fails to sign. -->
 	<key>com.apple.developer.healthkit</key>
 	<true/>
+	<!-- Shared with the DeviceActivityMonitor extension, which is a separate
+	     process and cannot see this app's Documents directory. It carries the
+	     shield plan and nothing else — the ledger deliberately stays put. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.pattheratch.earned</string>
+	</array>
 </dict>
 </plist>

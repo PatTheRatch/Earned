@@ -23,6 +23,7 @@ targets:
     dependencies:
       - package: EarnedKit
         product: EarnedKit
+      - target: EarnedMonitor
       - package: EarnedMedia
         product: EarnedMedia
     info:
@@ -75,4 +76,39 @@ targets:
         # lookup to com.apple.FamilyControlsAgent with "error 159 -
         # Sandbox restriction" and authorization can never succeed.
         CODE_SIGN_ENTITLEMENTS: Earned/Earned.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+
+  # The half of enforcement that runs when the app does not: the system wakes
+  # this at a scheduled deadline and it applies the shield the app worked out
+  # in advance. A separate bundle identifier, so it needs Family Controls
+  # enabled on its own App ID — and its own Distribution review before
+  # TestFlight (docs/family-controls-request.md).
+  EarnedMonitor:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: EarnedMonitor
+        excludes:
+          - "EarnedMonitor.entitlements"
+      # Shared verbatim with the app rather than reimplemented. The plan is the
+      # contract between the two processes, and two copies of a format that
+      # must agree forever is how they stop agreeing.
+      - path: Earned/Enforcement/ShieldPlan.swift
+    entitlements:
+      path: EarnedMonitor/EarnedMonitor.entitlements
+    info:
+      path: EarnedMonitor/Info.plist
+      properties:
+        CFBundleDisplayName: Earned Monitor
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.deviceactivity.monitor-extension
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).MonitorExtension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.pattheratch.earned.monitor
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_ENTITLEMENTS: EarnedMonitor/EarnedMonitor.entitlements
         GENERATE_INFOPLIST_FILE: NO

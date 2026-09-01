@@ -33,7 +33,7 @@ trusted. Re-verify against the code when it drifts.
 | What "done" means | **Real** | Show up, total time, total distance, or **active calories** — the one target a minute of standing still cannot satisfy |
 | Restriction tokens | **Real** | Apple's picker; opaque tokens Earned itself cannot read |
 | Enforcement — apps actually blocked | **Real** | `ManagedSettingsStore` shields the union of closed Gates |
-| Enforcement while the app is closed | **Missing** | A Gate closing with Earned not running waits for next launch; needs `DeviceActivityMonitor` |
+| Enforcement while the app is closed | **Built, unverified on device** | `EarnedMonitor`, a `DeviceActivityMonitor` extension, applies a plan the app computes ahead of each deadline. Needs the App Group and a second Family Controls entitlement to actually run |
 | Enforcement integrity — noticing a revocation | **Partial** | Detected the next time Earned runs. iOS never tells a backgrounded app its authorization went away, so a revocation is invisible until launch |
 | Deleting and reinstalling erases what is owed | **Hole, narrowed** | The ledger is still a file in the app's container, so a reinstall wipes local commitments, debt and bypass records. The server now holds every registered Contract Envelope, so *terms* survive — but nothing yet rebuilds obligations from them on reinstall |
 | Enforcement can be revoked | **By design, unfixable** | iOS Settings → Screen Time → Apps With Screen Time Access. No app can prevent this; a Screen Time passcode is the only friction |

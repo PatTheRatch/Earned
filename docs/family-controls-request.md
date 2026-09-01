@@ -32,17 +32,24 @@ separate bundle identifier with its own review.
 | Target | Bundle id | Request now? |
 |---|---|---|
 | The app | `com.pattheratch.earned` | **Yes** — this is what unblocks TestFlight |
-| `DeviceActivityMonitor` extension | not built yet | Later, when it exists |
+| `DeviceActivityMonitor` extension | `com.pattheratch.earned.monitor` | **Yes** — it exists now, and it is what makes a deadline land on time |
 | `ShieldConfiguration` extension | not built yet | Later, when it exists |
 
-Requesting for the app alone is correct today. The extensions do not exist, cannot be
-described honestly, and would only muddy a review. Their reviews are separate queues, and
-starting them before there is a target to attach them to buys nothing.
+Request **both** the app and the monitor extension. They are separate queues, so starting
+them together costs nothing and saves a second wait. The `ShieldConfiguration` extension
+does not exist, cannot be described honestly, and would only muddy a review — leave it.
 
-Worth knowing in advance so it is not a surprise: **the extensions will each need their own
-wait.** The current shield gap — a Gate closing while Earned is not running stays unshielded
-until next launch — is fixed by the `DeviceActivityMonitor` extension, and that fix is
-gated behind a second review that has not started. Plan the beta around a build without it.
+The monitor's own description is short, and the same argument as the app's:
+
+> The extension applies the same restrictions the app does, at the moment a commitment the
+> user set falls due, so that a deadline is enforced whether or not the app happens to be
+> running. It reads a small file the app wrote — which apps to shield, and when — and
+> writes those shields. It performs no monitoring of activity, collects nothing, and reads
+> no usage data; `DeviceActivityMonitor` is used purely as a scheduled wake-up, not to
+> observe device activity.
+
+That last sentence is worth keeping. The framework's name suggests surveillance and the use
+here is the opposite, so saying so plainly costs a line and pre-empts the obvious question.
 
 ## 3. The facts the request rests on
 

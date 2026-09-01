@@ -436,6 +436,31 @@ struct AdvancedView: View {
                 LabeledContent("Commitments", value: "\(store.state.commitments.count)")
                 LabeledContent("Workouts", value: "\(store.state.workouts.count)")
             }
+
+            // Enforcement while Earned is closed depends on two processes
+            // agreeing through a shared container, and every way that can fail
+            // fails silently: the monitor wakes on time and shields nothing.
+            // These three lines are the difference between noticing that and
+            // discovering it weeks later.
+            Section {
+                LabeledContent("Shared container",
+                               value: SharedContainer.isAvailable ? "Reachable" : "Missing")
+                let plan = SharedContainer.loadPlan()
+                LabeledContent("Scheduled changes", value: "\(plan?.windows.count ?? 0)")
+                if let next = plan?.windows.first {
+                    LabeledContent("Next", value: Format.deadline(next.opensAt, from: store.now))
+                }
+            } header: {
+                Text("Closed-app enforcement")
+            } footer: {
+                if SharedContainer.isAvailable {
+                    Text("Deadlines that fall while Earned is closed are applied by the "
+                         + "monitor extension from this plan.")
+                } else {
+                    Text("The App Group is not reachable, so nothing can be shielded while "
+                         + "Earned is closed. Deadlines will apply at next launch instead.")
+                }
+            }
             #if DEBUG
             Section {
                 Button("Log a workout by hand") { showingWorkoutSheet = true }
