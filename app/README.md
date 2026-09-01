@@ -205,9 +205,12 @@ build needs, is self-serve.
 
 ## What's still missing
 
-- **A custom shield screen.** Blocked apps currently show Apple's default shield. The
-  `NICE TRY.` surface reserved in `docs/design-language.md` needs a `ShieldConfiguration`
-  extension.
+- **Evidence that the shield and the monitor render on a phone.** `EarnedShield` is built —
+  the `NICE TRY.` surface reserved in `docs/design-language.md` since the identity work — and
+  it is a third Screen Time bundle id (`com.pattheratch.earned.shield`) needing its own
+  Family Controls capability. Development is self-serve, so a development build on a real
+  device shows it today; nothing in the simulator can, because Family Controls cannot be
+  authorized there at all.
 - **Evidence that the monitor fires.** The extension is built and everything it depends on is
   checked by CI, but DeviceActivity schedules do not run in the simulator, so nobody has
   watched a restricted app go dark at a deadline with Earned force-quit.

@@ -103,7 +103,11 @@ tap targets.
   **EARNED.** is reserved for the unlock moment itself (the full-access notice), so the
   masthead never reads "EARNED / EARNED."
 - **NICE TRY. / THE DEAL STILL STANDS.** stay reserved for the shield and the lock
-  notice — the moments they're earned.
+  notice — the moments they're earned. The shield now exists (`app/EarnedShield/`), and it
+  is the only place `NICE TRY.` appears: the in-app notice is factual because the user came
+  looking for it, and the shield can be wry because they were caught. Apple's layout is
+  fixed and its labels take no font, so this is the one Earned surface where the poster face
+  does not survive — the brand carries on signal red, capitals, and the full stop.
 - Copy is deadpan, factual, concise, playful only when earned: "12 MIN LEFT." ·
   "YOU SET THIS ONE." Never "You've got this!", never "Level up!".
 - Second-person ownership: "Your rules. Your deal."

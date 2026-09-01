@@ -32,12 +32,18 @@ separate bundle identifier with its own review.
 | Target | Bundle id | Request now? |
 |---|---|---|
 | The app | `com.pattheratch.earned` | **Yes** — this is what unblocks TestFlight |
-| `DeviceActivityMonitor` extension | `com.pattheratch.earned.monitor` | **Yes** — it exists now, and it is what makes a deadline land on time |
-| `ShieldConfiguration` extension | not built yet | Later, when it exists |
+| `DeviceActivityMonitor` extension | `com.pattheratch.earned.monitor` | **Yes** — it is what makes a deadline land on time |
+| `ShieldConfiguration` extension | `com.pattheratch.earned.shield` | **Yes** — built, and it is the screen a blocked app shows |
 
-Request **both** the app and the monitor extension. They are separate queues, so starting
-them together costs nothing and saves a second wait. The `ShieldConfiguration` extension
-does not exist, cannot be described honestly, and would only muddy a review — leave it.
+Request **all three**. They are separate queues, so starting them together costs nothing and
+saves two more waits — and this is the whole reason the shield extension was built before
+the request rather than after it. An approved app and monitor with an unapproved shield is
+not a partial win: the archive contains an extension whose entitlement was never granted,
+and the upload is refused.
+
+**The distribution review is not what gates seeing it work.** Family Controls
+(*Development*) is self-serve for all three bundle ids, so a development build on your own
+phone renders the shield today. The review below is only the road to TestFlight.
 
 The monitor's own description is short, and the same argument as the app's:
 
@@ -50,6 +56,17 @@ The monitor's own description is short, and the same argument as the app's:
 
 That last sentence is worth keeping. The framework's name suggests surveillance and the use
 here is the opposite, so saying so plainly costs a line and pre-empts the obvious question.
+
+The shield extension's description is shorter still, because it does less than either:
+
+> The extension supplies the text and colours of the screen iOS already shows when the user
+> opens an app they have restricted. It replaces Apple's generic wording with the specific
+> commitment the user made, read from a short file the app wrote in advance. It makes no
+> decision about what is blocked, performs no monitoring, reads no usage data, and has no
+> network access.
+
+The point a reviewer will look for is that this extension cannot *cause* a restriction —
+it only describes one the user asked for. Say it in those words.
 
 ## 3. The facts the request rests on
 

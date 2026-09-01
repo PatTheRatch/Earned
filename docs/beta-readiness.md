@@ -68,31 +68,44 @@ Must be resolved before any external tester receives the app.
 **Status: EXTERNAL VERIFICATION REQUIRED.** The repository cannot know Apple's answer, and
 this document will not guess at it.
 
-Two targets use Screen Time APIs. There is no third; `rg` over `app/` finds
-`FamilyControls`, `ManagedSettings` and `DeviceActivity` imports in these and nowhere else.
+**Three** targets use Screen Time APIs, since the shield configuration extension landed.
 
-| | Main app | Monitor extension |
-|---|---|---|
-| Bundle id | `com.pattheratch.earned` | `com.pattheratch.earned.monitor` |
-| Type | Application | `com.apple.deviceactivity.monitor-extension` |
-| Entitlement | `com.apple.developer.family-controls` | `com.apple.developer.family-controls` |
-| Also needs | `applesignin`, `healthkit`, App Group | App Group |
-| Development capability | Self-serve in the portal | Self-serve in the portal |
-| Distribution approval | **Required, reviewed by hand** | **Required, reviewed by hand, separately** |
-| Request submitted? | **UNKNOWN — Patrick must confirm** | **UNKNOWN — Patrick must confirm** |
-| Approved? | **UNKNOWN** | **UNKNOWN** |
-| TestFlight profile exists? | **UNKNOWN** | **UNKNOWN** |
+| | Main app | Monitor extension | Shield extension |
+|---|---|---|---|
+| Bundle id | `com.pattheratch.earned` | `com.pattheratch.earned.monitor` | `com.pattheratch.earned.shield` |
+| Type | Application | `com.apple.deviceactivity.monitor-extension` | `com.apple.ManagedSettings.shield-configuration-service` |
+| Entitlement | `com.apple.developer.family-controls` | `com.apple.developer.family-controls` | `com.apple.developer.family-controls` |
+| Also needs | `applesignin`, `healthkit`, App Group | App Group | App Group |
+| Development capability | Self-serve in the portal | Self-serve in the portal | Self-serve in the portal |
+| Distribution approval | **Required, reviewed by hand** | **Required, reviewed by hand, separately** | **Required, reviewed by hand, separately** |
+| Request submitted? | **UNKNOWN — Patrick must confirm** | **UNKNOWN — Patrick must confirm** | **UNKNOWN — Patrick must confirm** |
+| Approved? | **UNKNOWN** | **UNKNOWN** | **UNKNOWN** |
+| TestFlight profile exists? | **UNKNOWN** | **UNKNOWN** | **UNKNOWN** |
 
-Evidence for the left-hand column: `app/project.yml` lines 82–99 and 135–143,
-`app/Earned/Earned.entitlements`, `app/EarnedMonitor/EarnedMonitor.entitlements`. Both
-entitlement files are checked in and both are verified byte-for-byte by CI
+The third one is new, and it is the reason it was built now rather than after the first
+approvals: the queues run in parallel, so three requests started together cost the same wait
+as two. Started a month apart they cost two waits, and an archive containing an extension
+whose entitlement was never granted is refused at upload rather than shipped without it.
+
+Evidence: `app/project.yml`, `app/Earned/Earned.entitlements`,
+`app/EarnedMonitor/EarnedMonitor.entitlements`, `app/EarnedShield/EarnedShield.entitlements`.
+All three entitlement files are checked in and verified byte-for-byte by CI
 (`tools/validate-release-config.py`, and a `git diff --exit-code` after `xcodegen generate`).
+The validator's extension checks are driven from one table rather than written per target,
+so the third extension arrived with the same guards as the first — including the negative
+test: strip the shield's Family Controls key or point its App Group elsewhere and three
+named checks fail.
 
-One approval does **not** cover both. Apple grants Family Controls (Distribution) per App
-ID, and a Screen Time extension is a separate App ID. A build whose app was approved and
-whose extension was not will fail to upload, or will upload and then fail to install — and
-the review queue is measured in weeks, not hours, so this is the long pole of the entire
+One approval does **not** cover the others. Apple grants Family Controls (Distribution) per
+App ID, and each Screen Time extension is a separate App ID. A build whose app was approved
+and whose extension was not will fail to upload, or will upload and then fail to install —
+and the review queue is measured in weeks, not hours, so this is the long pole of the entire
 milestone.
+
+**Distribution is not what gates seeing the shield work.** Family Controls (*Development*)
+is self-serve for all three ids, so adding it to `com.pattheratch.earned.shield` in the
+portal and running a development build renders the shield on a real phone today, weeks
+before any review returns.
 
 **Owner:** Patrick, Apple Developer portal.
 **Requires:** Apple setup. No code.
@@ -701,9 +714,12 @@ individually above so they are checked by hand instead.
 
 Patrick, in order. Each of these is a thing only you can do.
 
-1. **Apple portal.** Confirm or submit Family Controls (Distribution) for **both**
-   `com.pattheratch.earned` and `com.pattheratch.earned.monitor`. Record the dates in B‑1.
-   Everything below waits on this, and Apple's queue is the long pole.
+1. **Apple portal.** Confirm or submit Family Controls (Distribution) for **all three** —
+   `com.pattheratch.earned`, `com.pattheratch.earned.monitor`, and
+   `com.pattheratch.earned.shield`. Record the dates in B‑1. Everything below waits on this,
+   and Apple's queue is the long pole. While you are there, add Family Controls
+   (Development) to the shield's App ID: that half is self-serve and is all a development
+   build needs to render the shield on your own phone.
 2. **Export compliance.** Confirm the exempt reading in `app/project.yml` against Apple's
    current questionnaire.
 3. **Archive.** Follow [`release.md`](release.md). Bump `CURRENT_PROJECT_VERSION`. Confirm

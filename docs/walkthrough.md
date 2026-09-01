@@ -37,7 +37,7 @@ trusted. Re-verify against the code when it drifts.
 | Enforcement integrity — noticing a revocation | **Partial** | Detected the next time Earned runs. iOS never tells a backgrounded app its authorization went away, so a revocation is invisible until launch |
 | Deleting and reinstalling erases what is owed | **Hole, narrowed** | The ledger is still a file in the app's container, so a reinstall wipes local commitments, debt and bypass records. The server now holds every registered Contract Envelope, so *terms* survive — but nothing yet rebuilds obligations from them on reinstall |
 | Enforcement can be revoked | **By design, unfixable** | iOS Settings → Screen Time → Apps With Screen Time Access. No app can prevent this; a Screen Time passcode is the only friction |
-| Custom shield screen (`NICE TRY.`) | **Missing** | Blocked apps show Apple's default shield; needs a `ShieldConfiguration` extension |
+| Custom shield screen (`NICE TRY.`) | **Built, unverified on device** | `EarnedShield`, a `ShieldConfiguration` extension: signal-red ground, `NICE TRY.`, every closed Gate named with its own figures, and `THE DEAL STILL STANDS.` on the one button. The lines are written in advance by the app into the App Group, because the extension has milliseconds and no ledger. A third Screen Time bundle id, so a third Family Controls review. Unviewable in the simulator — Family Controls cannot be authorized there |
 | Sign in with Apple + Contract Envelopes | **Real** | `Backend/AccountStore.swift`: nonce-checked sign-in, `ensure_account`, idempotent envelope registration and re-sync on every foreground. Optional to everything local (S8) |
 | Accountability partners | **Real for friends already on Earned** (backend deployed per `deployment.md`; end-to-end device verification is the open item) | Nomination by identity, partner list and roster eligibility in-app (`Backend/PartnersView.swift`), override requests with frozen snapshots, the partner approval page, concurrent-safe voting, Ed25519-signed grants verified on-device against a compiled-in root key (`Grants/`), applied to the ledger which may still refuse a stale grant. Inviting someone who is *not* on Earned is switched off — the message cannot be delivered, see the row below |
 | Social — profiles, friends, Social tab | **Real** (Milestone S1) | Profile with unique handle + avatar, friend requests/accept/decline/remove/block, handle search, Social tab. See `docs/social-architecture.md` |
@@ -466,10 +466,29 @@ takes apps away rather than describing what it would take away. What remains:
    with Earned force-quit. The failure mode is quiet — the app shields on next launch and
    everything looks fine — so it will not be noticed by accident. `docs/beta-readiness.md`
    B‑2 is the nine-step test that would settle it.
-2. **`ShieldConfiguration` extension.** Blocked apps currently show Apple's default shield.
-   The `NICE TRY.` surface has been reserved in `docs/design-language.md` since the identity
-   pass for exactly this moment — the one place the loud voice is earned, because the user
-   just reached for a restricted app.
+2. ~~**`ShieldConfiguration` extension.**~~ Built (`app/EarnedShield/`). The `NICE TRY.`
+   surface reserved in `docs/design-language.md` since the identity pass now exists on the
+   one screen that earned the loud voice, because the user just reached for a restricted
+   app: signal-red ground, `NICE TRY.`, each closed Gate with its own figures, and
+   `THE DEAL STILL STANDS.` on the single button.
+
+   The extension decides nothing. It is handed an opaque token and a few milliseconds, so
+   the app writes the lines into the App Group ahead of time (`ShieldCopy`) and this process
+   reads them — the same division of labour as the monitor and the shield plan, for the same
+   reason. Nothing it says counts down, because it can be read hours after it was written;
+   progress figures are safe only because the sole route by which they change is a Health
+   import inside the app.
+
+   Two limits worth naming. Apple's layout is fixed and `ShieldConfiguration.Label` takes
+   text and a colour but no font, so the poster face does not survive here — the brand
+   carries on colour, capitals and the full stop. And there is one button, not two, because
+   a shield action extension cannot open its host app: a "ways out" button would be a
+   promise the app cannot keep at the exact moment it matters most.
+
+   **What it still needs is a phone.** Family Controls cannot be authorized in the simulator
+   at all, so this has never been seen. Unlike B‑2 it does not wait on Apple's review queue:
+   Family Controls (Development) is self-serve, so a development build shows it as soon as
+   the capability is added to the new App ID.
 3. ~~**HealthKit verification.**~~ Done. `Health/HealthImporter.swift` reads finished
    workouts (one type, read-only, only while something unresolved could be moved by them),
    keeps HealthKit's own workout UUID so re-imports are duplicates rather than
