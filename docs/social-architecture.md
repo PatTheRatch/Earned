@@ -89,6 +89,19 @@ Two cross-system rules, and only these two:
   standing; revoking a partner leaves the friendship standing; becoming one never implies
   the other (invariant 24).
 
+### A third relationship: the shared participant
+
+Shared Commitments (NORTHSTAR §46, [docs/shared-commitments.md](shared-commitments.md))
+add a third concept beside friend and accountability partner: a **shared participant** —
+someone who explicitly accepted the same shared commitment. It grants exactly one thing:
+mutual visibility of that one commitment's roster and progress lines. It grants no
+authority over anyone's contract, no access to anything else the person shares, and it is
+never inferred: friendship is only the invitation channel, and acceptance is the
+participant's own in-app act (invariant 31). The three relationships may overlap; none
+ever implies another. Block behaves here as everywhere — unanswered invitations between
+a blocked pair are withdrawn, roster visibility between them severs both ways, and
+nobody's personal commitment moves an inch (invariant 32).
+
 ---
 
 ## 3. Enforcement authority vs social representation
@@ -510,14 +523,16 @@ exactly one reviewed place per query rather than by policy arithmetic.
 
 Migrations: `0013_profiles.sql`, `0014_friendship.sql`, `0015_avatar_storage.sql` (S1),
 `0016_commitment_sharing.sql`, `0017_streaks_and_activity.sql` (S2),
-`0018_checkin_sharing.sql` (S3) — appended after the existing 0001–0012, which are never
-rewritten. The storage migration guards on the
+`0018_checkin_sharing.sql` (S3), `0019_earned_partners.sql`, and
+`0020_shared_commitments.sql` (SC1 — design in
+[shared-commitments.md](shared-commitments.md)) — appended after the existing 0001–0012,
+which are never rewritten. The storage migration guards on the
 `storage` schema existing so the plain-Postgres CI layout still applies cleanly; the
 visibility *rule* is a public function tested without Supabase.
 
 Tests: `backend/tests/110_profiles.sql`, `120_friendship.sql`, `130_avatars.sql`,
-`140_sharing_and_activity.sql`, `150_checkins.sql`, run by the same `run.sh` in both
-layouts. What they must
+`140_sharing_and_activity.sql`, `150_checkins.sql`, `160_earned_partners.sql`,
+`170_shared_commitments.sql`, run by the same `run.sh` in both layouts. What they must
 cover is listed in the milestone tasks and mirrored in the files themselves — profile
 mutation isolation, case-insensitive handle uniqueness, malformed/reserved handles, block
 non-discoverability through every endpoint, idempotent and crossed requests, search and

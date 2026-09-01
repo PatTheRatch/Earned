@@ -1304,3 +1304,23 @@ Stated so it is not discovered later.
 - **The root signing key is a single point of trust.** Kept offline and used only to sign key
   sets, but its compromise means a forced app update (§10.4).
 - **Partner fatigue is only rate-limited, not solved** (§16).
+
+---
+
+## 24. Shared commitments are not an authority surface
+
+*Added with Shared Commitments (NORTHSTAR §46, [shared-commitments.md](shared-commitments.md));
+a boundary clarification, not a design change.*
+
+Doing the same challenge grants no override authority. A shared-commitment participant is
+a third relationship concept beside friend and accountability partner (invariant 24,
+extended): nothing in migration 0020 is consulted by `register_contract_envelope`,
+`create_override_request`, `cast_override_vote`, or anything else on the enforcement
+path, and a roster of people running together is never an accountability roster. If a
+participant should also be able to approve Overrides, that is a separate nomination
+through 0005/0006/0019, with its own explicit consent. In the other direction, nothing
+here changes: an override-request snapshot exposes nothing about shared commitments, and
+a shared roster never learns who someone's partners are. Each participant's contract —
+threshold, hardening (from *their own* acceptance), grants — is individually enveloped
+exactly as if they had made the commitment alone; there is no group envelope, and the
+server's shared-commitment tables carry representation only (invariant 28).

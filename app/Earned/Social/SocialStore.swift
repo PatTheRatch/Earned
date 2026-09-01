@@ -43,19 +43,30 @@ final class SocialStore: ObservableObject {
     @Published private(set) var activity: [SocialEvent] = []
     /// Which commitments this user shares, and what was last published.
     @Published private(set) var sharing: SharingRegistry
+    /// Shared commitments this user stands on, roster and all, as the server
+    /// curates them. Presentation only — no Gate reads any of this.
+    @Published private(set) var sharedCommitments: [SharedCommitment] = []
+    /// Invitations waiting on this user. Obligations of nobody's (invariant 31).
+    @Published private(set) var sharedInvitations: [SharedInvitation] = []
+    /// Which of this user's own commitments belong to shared agreements.
+    @Published private(set) var sharedRegistry: SharedCommitmentRegistry
 
     private let account: AccountStore
     private let sharingStorage: SharingRegistryStorage
+    private let sharedStorage: SharedCommitmentRegistryStorage
     /// Fetched avatars, by object path. Paths are random per upload, so a
     /// stale entry can only be an image nobody points at any more.
     private var avatarCache: [String: Data] = [:]
     private var accountID: String?
 
     init(account: AccountStore,
-         sharingStorage: SharingRegistryStorage = .documents()) {
+         sharingStorage: SharingRegistryStorage = .documents(),
+         sharedStorage: SharedCommitmentRegistryStorage = .documents()) {
         self.account = account
         self.sharingStorage = sharingStorage
+        self.sharedStorage = sharedStorage
         self.sharing = sharingStorage.load()
+        self.sharedRegistry = sharedStorage.load()
     }
 
     private var client: BackendClient? {
@@ -299,6 +310,174 @@ final class SocialStore: ObservableObject {
         case nil:
             return ("open", nil)
         }
+    }
+
+    // MARK: - Shared commitments (NORTHSTAR §46, docs/shared-commitments.md)
+
+    func refreshShared() async {
+        guard let client else { return }
+        do {
+            sharedCommitments = try await client.loadSharedCommitments()
+            sharedInvitations = try await client.loadSharedInvitations()
+            // The server is authoritative for the link between agreement and
+            // personal commitment; the local registry only caches it, so it
+            // heals here after a reinstall or a lost write.
+            for shared in sharedCommitments {
+                if let mine = shared.myCommitmentID {
+                    sharedRegistry.link(mine, toAgreement: shared.id)
+                }
+            }
+            sharedStorage.save(sharedRegistry)
+            failure = nil
+        } catch {
+            failure = error.localizedDescription
+        }
+    }
+
+    /// The shared commitment one of this user's own commitments belongs to.
+    func sharedCommitment(for commitmentID: UUID) -> SharedCommitment? {
+        guard let agreementID = sharedRegistry.agreementID(for: commitmentID) else { return nil }
+        return sharedCommitments.first { $0.id == agreementID }
+    }
+
+    /// Registers a just-created commitment as a shared one and sends the
+    /// invitations. The creator's own Deal was already signed locally — this
+    /// distributes the promise, never the punishment.
+    func createShared(for record: CommitmentRecord, invitees: [String], now: Date) async {
+        guard let client else { return }
+        let commitment = record.commitment
+        let terms = SharedTerms(requirement: commitment.requirement,
+                                windowStart: commitment.eligibleFrom,
+                                deadline: commitment.deadline)
+        do {
+            let agreementID = try await client.createSharedCommitment(
+                commitmentID: commitment.id,
+                title: commitment.title.isEmpty ? "A workout" : commitment.title,
+                terms: terms,
+                handles: invitees.map(\.normalizedHandle),
+                verification: commitment.requirement.verification.sharedWireValue)
+            sharedRegistry.link(commitment.id, toAgreement: agreementID)
+            sharedStorage.save(sharedRegistry)
+            failure = nil
+            await refreshShared()
+        } catch {
+            failure = error.localizedDescription
+        }
+    }
+
+    /// Accepts an invitation and creates the participant's own personal
+    /// commitment — their Gate, their rules — in that order: the server
+    /// records the binding first, and only a recorded acceptance creates
+    /// anything locally. Returns whether both halves landed.
+    ///
+    /// The server repeats back the commitment id that stands, so a retried
+    /// acceptance (timeout, crash, double-tap) converges on one commitment
+    /// instead of minting a second.
+    @discardableResult
+    func acceptSharedInvitation(_ invitation: SharedInvitation,
+                                into store: EarnedStore,
+                                verification: WorkoutVerification,
+                                correctionWindow: TimeInterval,
+                                overridePolicy: OverridePolicy,
+                                rewardEligible: Bool,
+                                warningLead: TimeInterval?) async -> Bool {
+        guard let client else { return false }
+        guard let requirement = invitation.terms.requirement(verification: verification) else {
+            failure = "This build can't enforce that requirement. Update Earned first."
+            return false
+        }
+        do {
+            let minted = UUID()
+            let recorded = try await client.respondToSharedInvitation(
+                id: invitation.id, accept: true, commitmentID: minted,
+                verification: verification.sharedWireValue)
+            let commitmentID = recorded ?? minted
+            sharedRegistry.link(commitmentID, toAgreement: invitation.id)
+            sharedStorage.save(sharedRegistry)
+            failure = nil
+            // A retry that converged on an earlier acceptance may find the
+            // commitment already in the ledger; that is success, not a
+            // duplicate to create.
+            if store.state.commitments[commitmentID] == nil {
+                // Their own hardening clock starts now, at their acceptance —
+                // never at the inviter's creation (invariant 31). A shared
+                // window that opens later than today opens later for them too.
+                guard store.createCommitment(
+                    id: commitmentID,
+                    title: invitation.title,
+                    requirement: requirement,
+                    eligibleFrom: invitation.terms.windowStart,
+                    deadline: invitation.terms.deadline,
+                    correctionWindow: correctionWindow,
+                    overridePolicy: overridePolicy,
+                    rewardEligible: rewardEligible,
+                    warningLead: warningLead) else { return false }
+            }
+            await refreshShared()
+            return true
+        } catch {
+            failure = error.localizedDescription
+            return false
+        }
+    }
+
+    func declineSharedInvitation(_ invitation: SharedInvitation) async {
+        guard let client else { return }
+        do {
+            _ = try await client.respondToSharedInvitation(
+                id: invitation.id, accept: false, commitmentID: nil, verification: nil)
+            failure = nil
+        } catch { failure = error.localizedDescription }
+        await refreshShared()
+    }
+
+    /// Leave the roster. A social act only: the personal commitment is exactly
+    /// as escapable afterwards as before (invariant 32).
+    func leaveShared(_ shared: SharedCommitment) async {
+        guard let client else { return }
+        do {
+            try await client.leaveSharedCommitment(id: shared.id)
+            failure = nil
+        } catch { failure = error.localizedDescription }
+        await refreshShared()
+    }
+
+    /// Cancel the unstarted future of an agreement the user created. Everyone
+    /// already bound keeps exactly the commitment they accepted.
+    func cancelShared(_ shared: SharedCommitment) async {
+        guard let client else { return }
+        do {
+            try await client.cancelSharedCommitment(id: shared.id)
+            failure = nil
+        } catch { failure = error.localizedDescription }
+        await refreshShared()
+    }
+
+    /// Publish this user's own lines: progress against each shared target and
+    /// how each commitment stands. Safe to call every foreground — only
+    /// changes are sent, and the server is idempotent about the rest.
+    func syncSharedProgress(commitments: [CommitmentRecord],
+                            state earnedState: EarnedState, now: Date) async {
+        guard let client, !sharedRegistry.records.isEmpty else { return }
+        for record in commitments {
+            let id = record.commitment.id
+            guard sharedRegistry[id] != nil else { continue }
+            guard let story = Self.story(of: record) else { continue }
+            let achieved = earnedState.progress(for: id)?.achieved ?? 0
+            let cached = sharedRegistry[id]
+            guard story.state != cached?.lastPublishedState
+                    || achieved != cached?.lastPublishedProgress else { continue }
+            do {
+                try await client.publishSharedProgress(
+                    commitmentID: id, progress: achieved,
+                    state: story.state, resolvedAt: story.resolvedAt)
+                sharedRegistry.recordPublished(id, progress: achieved, state: story.state)
+                failure = nil
+            } catch {
+                failure = error.localizedDescription
+            }
+        }
+        sharedStorage.save(sharedRegistry)
     }
 
     // MARK: - Streaks and activity

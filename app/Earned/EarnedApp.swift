@@ -57,6 +57,14 @@ struct EarnedApp: App {
                 // just resolved its Gate is the story that gets published —
                 // and always after the profile, whose switches govern it.
                 await social.syncSharing(commitments: store.allCommitments, now: store.now)
+                // Shared-commitment lines ride the same pass and the same
+                // trust posture: the phone reports its own standing against
+                // the shared target, and the roster is refreshed after — so a
+                // friend's finished run shows up without them being nagged
+                // per progress tick (nothing here ever notifies).
+                await social.syncSharedProgress(commitments: store.allCommitments,
+                                                state: store.ledger.state, now: store.now)
+                await social.refreshShared()
                 await social.publishStreaks(store.ledger.state.socialStreaks(now: store.now))
                 await social.refreshActivity()
                 await account.syncEnvelopes(for: store.allCommitments, now: store.now)

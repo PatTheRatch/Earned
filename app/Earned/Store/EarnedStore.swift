@@ -265,9 +265,16 @@ final class EarnedStore: ObservableObject {
 
     /// Creates a commitment. `createdAt` must equal the event date, so the
     /// timestamp is taken here rather than by the caller.
+    ///
+    /// `id` is normally minted here; accepting a shared commitment passes the
+    /// id the server recorded, so a retried acceptance converges on one
+    /// commitment. `eligibleFrom` later than creation is a *harder* term —
+    /// a shared window that opens tomorrow must not be satisfiable today.
     @discardableResult
-    func createCommitment(title: String,
+    func createCommitment(id: UUID = UUID(),
+                          title: String,
                           requirement: Requirement,
+                          eligibleFrom: Date? = nil,
                           deadline: Date,
                           correctionWindow: TimeInterval,
                           overridePolicy: OverridePolicy,
@@ -275,8 +282,10 @@ final class EarnedStore: ObservableObject {
                           rewardEligible: Bool,
                           warningLead: TimeInterval?) -> Bool {
         let createdAt = eventDate
-        let commitment = Commitment(title: title,
+        let commitment = Commitment(id: id,
+                                    title: title,
                                     requirement: requirement,
+                                    eligibleFrom: eligibleFrom.map { max($0, createdAt) },
                                     deadline: deadline,
                                     createdAt: createdAt,
                                     configuredCorrectionWindow: correctionWindow,

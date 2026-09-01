@@ -44,6 +44,7 @@ trusted. Re-verify against the code when it drifts.
 | Social — commitment sharing, activity, streaks | **Real** (Milestone S2) | Per-commitment Private/Friends choice (default Private), friends' Recent shelf (bounded, 30-day horizon, meaningful events only), and the two streak figures ("12 commitments kept · 6 since last Override"). Overrides are told only when the owner shares Override usage |
 | Social — check-ins and the quiet surface | **Real** (Milestone S3) | Opt-in: friends see "Hasn't checked in · 4 days" (whole days, only past 72 hours, never a live status) and how many shared commitments were open at the last check-in. Facts only — motive is never claimed |
 | Earned-user accountability partners | **Real** (migration 0019; not yet on the hosted project) | An accepted friend can be nominated by identity — no number, no email — and consents in-app; their approval requests arrive in-app through the same snapshot and vote transaction as the web page. External partners keep the full no-account web flow. Block revokes accountability both ways; unblock restores nothing |
+| Shared Commitments — doing it together | **Real** (Milestone SC1; migration 0020, not yet on the hosted project) | "With friends" at creation invites accepted Earned friends; each accepts through their own Deal and gets their own ordinary commitment — own Gate, own rules, own hardening clock from their own acceptance. The roster shows everyone's self-reported line against the shared target; no ranking, no shared consequence. See `docs/shared-commitments.md` |
 
 **One-sentence version:** the contract machinery is real, the identity is real, Earned
 takes apps away when a Gate is closed, a partner's approval can genuinely unlock a phone,
@@ -523,6 +524,33 @@ the two accounts in both directions on the spot; unblocking brings none of it ba
 
 > Source: `app/Earned/Backend/PartnersView.swift` (`AddPartnerPickerView`),
 > `app/Earned/Social/SocialView.swift`, `backend/migrations/0019_earned_partners.sql`
+
+### Doing it together (Milestone SC1)
+
+The creation flow gains one question — WHO'S DOING THIS WITH YOU? (JUST ME / WITH
+FRIENDS) — offered only for one-off commitments when a profile and at least one accepted
+friend exist; it never blocks the ordinary path. Choosing friends sends invitations: the
+creator's own commitment is already made either way, and nothing exists on anyone else's
+phone. The ask lands on each friend's Social tab — *"Maya invited you to a commitment ·
+Your own Gate will apply if you accept"* — with READ THE DEAL and NO THANKS. Accepting
+opens the invitee's own Deal: the shared terms (title, requirement, deadline) printed
+frozen, and every enforcement term theirs to set — verification, escape rules, correction
+window — hardening from *their* acceptance, not the inviter's clock. COMMIT records the
+acceptance server-side first, then creates a completely ordinary local commitment
+(`eligibleFrom` = max(shared window start, acceptance)).
+
+The Social tab's TOGETHER block lists shared commitments; the detail screen is a printed
+roster in join order — each person's own line against the shared target, DONE ✓ / DONE
+LATE where earned, verification tiers stated only when they differ, an Override shown
+only as its owner shares Overrides. Nobody's line moves anybody else's Gate. Leaving is a
+social act (the commitment stays, with its usual ways out); the creator can close the
+unstarted future, which expires unanswered invitations and takes nothing from anyone
+bound. Blocking withdraws pending asks between the pair and severs their mutual roster
+visibility — obligations stand untouched.
+
+> Source: `app/Earned/Social/SharedCommitmentViews.swift`, `SharedCommitmentModels.swift`,
+> `SharedCommitmentRegistry.swift`, `app/Earned/Commitment/NewCommitmentView.swift`,
+> `backend/migrations/0020_shared_commitments.sql`, `docs/shared-commitments.md`
 
 ### Going quiet (Milestone S3)
 

@@ -14,6 +14,10 @@ struct SocialView: View {
 
     @State private var showingAdd = false
     @State private var showingSetup = false
+    /// The invitation whose Deal is being read. Accepting happens only there —
+    /// nobody binds to a shared commitment without seeing their own contract
+    /// first (docs/shared-commitments.md §4.3).
+    @State private var readingInvitation: SharedInvitation?
 
     var body: some View {
         NavigationStack {
@@ -36,10 +40,14 @@ struct SocialView: View {
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showingAdd) { AddFriendView() }
             .sheet(isPresented: $showingSetup) { ProfileSetupView() }
+            .sheet(item: $readingInvitation) { invitation in
+                AcceptSharedInvitationView(invitation: invitation)
+            }
         }
         .task {
             await social.refreshProfile()
             await social.refreshSocial()
+            await social.refreshShared()
             await social.refreshActivity()
             await account.refreshPartners()
         }
@@ -136,8 +144,10 @@ struct SocialView: View {
 
             if !account.pendingApprovals.isEmpty { approvalsBlock }
             if !account.partnerRequests.isEmpty { accountabilityBlock }
+            if !social.sharedInvitations.isEmpty { sharedInvitationsBlock }
             if !social.requests.isEmpty { requestsBlock }
             peopleBlock
+            if !social.sharedCommitments.isEmpty { togetherBlock }
             recentBlock
 
             if let failure = social.failure {
@@ -148,9 +158,105 @@ struct SocialView: View {
         .refreshable {
             await social.refreshProfile()
             await social.refreshSocial()
+            await social.refreshShared()
             await social.refreshActivity()
             await account.refreshPartners()
         }
+    }
+
+    // MARK: - Shared commitments (NORTHSTAR §46)
+
+    /// Invitations waiting on this user. An invitation obliges nobody — no
+    /// Gate exists until the Deal is read and committed (invariant 31), so
+    /// the accept path goes through the Deal sheet, never a one-tap yes.
+    private var sharedInvitationsBlock: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SectionLabel(text: "Invitations").padding(.top, Theme.blockSpacing)
+            ForEach(social.sharedInvitations) { invitation in
+                VStack(alignment: .leading, spacing: 0) {
+                    ThickRule().padding(.top, 8)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("\(invitation.inviterDisplayName) invited you to a commitment.")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Theme.ink)
+                        Text(invitation.title.uppercased())
+                            .font(Theme.blocker(17)).foregroundStyle(Theme.ink)
+                        Text("\(invitation.terms.label) · by "
+                             + Format.deadline(invitation.terms.deadline, from: store.now))
+                            .font(Theme.footnote).foregroundStyle(Theme.muted)
+                        Text("Your own Gate will apply if you accept — your rules, "
+                             + "your restrictions, your ways out.")
+                            .font(Theme.footnote).foregroundStyle(Theme.muted)
+                        HStack(spacing: 12) {
+                            Button("READ THE DEAL") { readingInvitation = invitation }
+                                .buttonStyle(UnderlineButtonStyle())
+                            Button("NO THANKS") {
+                                Task { await social.declineSharedInvitation(invitation) }
+                            }
+                            .buttonStyle(UnderlineButtonStyle(color: Theme.muted))
+                        }
+                        .padding(.top, 4)
+                    }
+                    .padding(.vertical, 10)
+                }
+            }
+        }
+    }
+
+    /// Shared commitments this user stands on: mutual visibility, printed —
+    /// no ranking, no places, no team score.
+    private var togetherBlock: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SectionLabel(text: "Together").padding(.top, Theme.blockSpacing)
+            ForEach(social.sharedCommitments) { shared in
+                NavigationLink {
+                    SharedCommitmentDetailView(sharedID: shared.id)
+                } label: {
+                    VStack(alignment: .leading, spacing: 0) {
+                        HairRule().padding(.top, 8)
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(shared.title)
+                                    .font(.system(size: 15, weight: .medium))
+                                    .foregroundStyle(Theme.ink)
+                                Text(rosterLine(for: shared))
+                                    .font(Theme.footnote).foregroundStyle(Theme.muted)
+                            }
+                            Spacer()
+                            if let mine = myLine(in: shared) {
+                                Text(mine)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(Theme.ink)
+                            }
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(Theme.muted)
+                        }
+                        .padding(.vertical, 10)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func rosterLine(for shared: SharedCommitment) -> String {
+        let accepted = shared.participants.filter(\.isAccepted)
+        let done = accepted.filter(\.isDone).count
+        let others = max(0, accepted.count - 1)
+        let with = others == 0 ? "just you so far"
+            : "you + \(others) other\(others == 1 ? "" : "s")"
+        return "\(with) · \(done) of \(accepted.count) done · by "
+            + Format.deadline(shared.terms.deadline, from: store.now)
+    }
+
+    /// This user's own figure, straight off their ledger — the one line here
+    /// the phone can vouch for itself.
+    private func myLine(in shared: SharedCommitment) -> String? {
+        guard let mine = shared.myCommitmentID,
+              let progress = store.state.progress(for: mine) else { return nil }
+        return shared.terms.progressLine(progress: progress.achieved)
     }
 
     // MARK: - You

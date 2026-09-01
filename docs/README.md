@@ -4,6 +4,29 @@ Design notes, decision records, and API notes.
 
 The two root documents outrank everything here: [NORTHSTAR.md](../NORTHSTAR.md) (what and why) and [ARCHITECTURE.md](../ARCHITECTURE.md) (how). Anything in this directory that contradicts them is wrong or stale.
 
+## The hierarchy
+
+NORTHSTAR.md is the product constitution: the enduring thesis, the core invariants, the
+durable mental models. Its sections are append-only and cited by number, which is exactly
+why it must not absorb every feature's workflows and edge cases — a constitution that
+grows a chapter per feature stops being citable. The division of labor:
+
+| Layer | Carries | Never carries |
+|---|---|---|
+| `NORTHSTAR.md` | Thesis, invariants, mental models that outlive implementations | Flows, states, schemas, edge cases, UI copy |
+| `ARCHITECTURE.md` | Technical decisions and why | Product intent, per-feature detail |
+| `docs/<feature>.md` | All detailed behavior of one area — states, rules, storage, privacy, edge cases | Contradictions of the two above |
+
+A new feature earns at most a short North Star section (its durable principle, a pointer to
+its design doc) plus any genuinely new invariants — everything operational goes in a
+`docs/` design document. The current per-area documents:
+[`shared-commitments.md`](shared-commitments.md) (doing it together),
+[`social-architecture.md`](social-architecture.md) (relationships, visibility, activity),
+[`accountability-architecture.md`](accountability-architecture.md) (override authority,
+partners), [`earnedkit-semantics.md`](earnedkit-semantics.md) (deterministic engine rules).
+Existing North Star sections keep their numbers — nothing is renumbered or moved
+retroactively; the discipline applies from here forward.
+
 ## What's here
 
 - [`deployment.md`](deployment.md) — the ordered runbook: an empty Supabase project to a
@@ -28,6 +51,10 @@ The two root documents outrank everything here: [NORTHSTAR.md](../NORTHSTAR.md) 
   app; every product decision is settled — account deletion's product half included
   (§21.2), with only its retention/legal half still under privacy review — and §20 lists
   the launch gates still to clear.
+- [`shared-commitments.md`](shared-commitments.md) — Shared Commitments (NORTHSTAR §46):
+  several people accepting the same promise, each keeping their own Gate. Shared vs
+  personal terms, the invitation state machine, per-participant hardening, editing and
+  withdrawal, shared progress visibility, and the backend model.
 - [`social-architecture.md`](social-architecture.md) — the Social Accountability layer
   (NORTHSTAR §45): profiles, friendships, avatars, commitment sharing, the activity
   shelf, streaks, the privacy model, and the explicit line between enforcement authority

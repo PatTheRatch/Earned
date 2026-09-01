@@ -334,6 +334,90 @@ actor BackendClient {
             .compactMap(SocialEvent.init(json:))
     }
 
+    // MARK: - Social: shared commitments (NORTHSTAR §46, docs/shared-commitments.md)
+
+    /// Registers a shared commitment: the creator's own commitment id, the
+    /// canonical shared terms, and the friends to ask. Idempotent by
+    /// commitment id — a retry returns the agreement the first call made.
+    /// Note what is *not* sent: restrictions, Override rules, anything about
+    /// how this user's own Gate enforces the promise.
+    func createSharedCommitment(commitmentID: UUID, title: String, terms: SharedTerms,
+                                handles: [String], verification: String) async throws -> UUID {
+        var params: [String: Any] = [
+            "p_commitment_id": commitmentID.uuidString,
+            "p_title": title,
+            "p_activity": terms.activity,
+            "p_metric": terms.metric,
+            "p_window_start": Self.timestamp(terms.windowStart),
+            "p_deadline": Self.timestamp(terms.deadline),
+            "p_handles": handles,
+            "p_verification": verification,
+        ]
+        if let target = terms.target { params["p_target"] = target }
+        let json = try await rpc("create_shared_commitment", params)
+        guard let idString = json["id"] as? String, let id = UUID(uuidString: idString) else {
+            throw Failure.refused(status: 200,
+                                  message: "The server did not confirm the shared commitment.")
+        }
+        return id
+    }
+
+    func inviteToSharedCommitment(id: UUID, handle: String) async throws {
+        _ = try await rpc("invite_to_shared_commitment",
+                          ["p_id": id.uuidString, "p_handle": handle])
+    }
+
+    func withdrawSharedInvitation(id: UUID, handle: String) async throws {
+        _ = try await rpc("withdraw_shared_invitation",
+                          ["p_id": id.uuidString, "p_handle": handle])
+    }
+
+    /// Answer an invitation. Accepting names the personal commitment this
+    /// client is about to create; the server records the binding and repeats
+    /// back the commitment id that stands — on a retry, the first one — so
+    /// the caller can converge instead of double-creating.
+    func respondToSharedInvitation(id: UUID, accept: Bool, commitmentID: UUID?,
+                                   verification: String?) async throws -> UUID? {
+        var params: [String: Any] = ["p_id": id.uuidString, "p_accept": accept]
+        if let commitmentID { params["p_commitment_id"] = commitmentID.uuidString }
+        if let verification { params["p_verification"] = verification }
+        let json = try await rpc("respond_to_shared_invitation", params)
+        return (json["commitment_id"] as? String).flatMap(UUID.init(uuidString:))
+    }
+
+    func cancelSharedCommitment(id: UUID) async throws {
+        _ = try await rpc("cancel_shared_commitment", ["p_id": id.uuidString])
+    }
+
+    func leaveSharedCommitment(id: UUID) async throws {
+        _ = try await rpc("leave_shared_commitment", ["p_id": id.uuidString])
+    }
+
+    /// Publish this user's own line: progress against the shared target and
+    /// how their commitment stands. Self-reported representation, exactly like
+    /// the witnessing pipeline — the server applies the owner's
+    /// Override-sharing setting and is idempotent about republishing.
+    func publishSharedProgress(commitmentID: UUID, progress: Double,
+                               state: String, resolvedAt: Date?) async throws {
+        var params: [String: Any] = [
+            "p_commitment_id": commitmentID.uuidString,
+            "p_progress": progress,
+            "p_state": state,
+        ]
+        if let resolvedAt { params["p_resolved_at"] = Self.timestamp(resolvedAt) }
+        _ = try await rpc("publish_shared_progress", params)
+    }
+
+    func loadSharedCommitments() async throws -> [SharedCommitment] {
+        (try await rpcValue("my_shared_commitments", [:]) as? [[String: Any]] ?? [])
+            .compactMap(SharedCommitment.init(json:))
+    }
+
+    func loadSharedInvitations() async throws -> [SharedInvitation] {
+        (try await rpcValue("my_shared_invitations", [:]) as? [[String: Any]] ?? [])
+            .compactMap(SharedInvitation.init(json:))
+    }
+
     // MARK: - Social: avatar storage
 
     /// Uploads the re-encoded derivative under the caller's own folder, then

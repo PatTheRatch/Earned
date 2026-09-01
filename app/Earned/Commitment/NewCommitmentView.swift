@@ -10,9 +10,10 @@ struct NewCommitmentView: View {
     @Environment(\.dismiss) private var dismiss
 
     private enum Step: Int, CaseIterable {
-        // Sharing is a visibility decision and escape is a contract mechanic,
-        // so they are separate questions (docs/design-language.md v2).
-        case what, completion, when, visibility, escape, review
+        // Sharing is a visibility decision, doing-it-together is an
+        // invitation, and escape is a contract mechanic — three separate
+        // questions (docs/design-language.md v2, NORTHSTAR §46).
+        case what, completion, when, visibility, who, escape, review
 
         var question: String {
             switch self {
@@ -20,6 +21,7 @@ struct NewCommitmentView: View {
             case .completion: return "What counts?"
             case .when: return "By when?"
             case .visibility: return "Who sees this?"
+            case .who: return "Who's doing this with you?"
             case .escape: return "How hard is escape?"
             case .review: return "The deal"
             }
@@ -98,6 +100,11 @@ struct NewCommitmentView: View {
     /// Sharing is chosen, never assumed (NORTHSTAR invariant 26): every
     /// commitment is born private, and this is the explicit choice otherwise.
     @State private var shareWithFriends = false
+    /// Doing it together (NORTHSTAR §46). Never forced: the default is just
+    /// me, and choosing friends only ever sends invitations — each person
+    /// accepts on their own phone and gets their own Gate.
+    @State private var withFriends = false
+    @State private var invitees: Set<String> = []
     @State private var showingEscapeDetails = false
 
     var body: some View {
@@ -122,9 +129,12 @@ struct NewCommitmentView: View {
                 }
             }
             // Who is eligible can have changed since the app last looked — a
-            // partner may have accepted an hour ago — and the picker must not
-            // offer a stale answer.
-            .task { await account.refreshPartners() }
+            // partner may have accepted an hour ago, a friend request an
+            // hour before that — and neither picker must offer a stale answer.
+            .task {
+                await account.refreshPartners()
+                await social.refreshSocial()
+            }
         }
     }
 
@@ -291,6 +301,52 @@ struct NewCommitmentView: View {
                     .font(.footnote).foregroundStyle(.secondary)
             }
 
+        case .who:
+            // An invitation, not an enrollment (invariant 31): everyone named
+            // here gets asked, decides on their own phone, and — only if they
+            // accept — gets their own commitment under their own rules.
+            VStack(alignment: .leading, spacing: 14) {
+                ChoiceRow(title: "Just me",
+                          subtitle: "The default. Nobody else is involved.",
+                          selected: !withFriends) { withFriends = false; invitees = [] }
+                ChoiceRow(title: "With friends",
+                          subtitle: "Same promise, separate contracts. Each person "
+                                  + "must accept.",
+                          selected: withFriends) { withFriends = true }
+                if withFriends {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(social.friends) { friend in
+                            Button {
+                                if invitees.contains(friend.handle) {
+                                    invitees.remove(friend.handle)
+                                } else {
+                                    invitees.insert(friend.handle)
+                                }
+                            } label: {
+                                HStack {
+                                    Image(systemName: invitees.contains(friend.handle)
+                                          ? "checkmark.square.fill" : "square")
+                                    Text(friend.displayName)
+                                    Spacer()
+                                    Text("@\(friend.handle)")
+                                        .font(Theme.footnote).foregroundStyle(Theme.muted)
+                                }
+                                .foregroundStyle(Theme.ink)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        Text("They'll each be asked, and nothing exists on their phone "
+                             + "unless they accept. Their own restrictions, verification "
+                             + "and escape rules apply — you share the promise, not the "
+                             + "punishment. Everyone who joins sees whether the others "
+                             + "did it.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.top, 4)
+                }
+            }
+
         case .escape:
             VStack(alignment: .leading, spacing: 18) {
                 rosterPicker
@@ -357,6 +413,11 @@ struct NewCommitmentView: View {
                     ReceiptRow(label: "Visible to",
                                value: shareWithFriends ? "Friends" : "Only you")
                 }
+                if withFriends, !invitees.isEmpty {
+                    ReceiptRow(label: "With",
+                               value: invitees.sorted().map { "@\($0)" }
+                                   .joined(separator: ", "))
+                }
                 ReceiptRow(label: repeats == .weekly ? "Fully hardens" : "Hardens",
                            value: Format.relative(hardensAt, from: store.now),
                            valueColor: Theme.signal)
@@ -406,13 +467,22 @@ struct NewCommitmentView: View {
     }
 
     /// The next or previous question, skipping the visibility step where it
-    /// has no answerers: plans (occurrences share individually, later) and
-    /// builds with no profile to share from.
+    /// has no answerers — plans (occurrences share individually, later) and
+    /// builds with no profile to share from — and the who step where there is
+    /// nobody to invite: plans (shared plans are not v1), no profile, no
+    /// accepted friends. Shared commitments require accepted Earned friends
+    /// (docs/shared-commitments.md §3).
     private func neighbour(from step: Step, direction: Int) -> Step {
         var raw = step.rawValue + direction
         while let candidate = Step(rawValue: raw) {
             if candidate == .visibility
                 && (repeats == .weekly || social.profileState.profile == nil) {
+                raw += direction
+                continue
+            }
+            if candidate == .who
+                && (repeats == .weekly || social.profileState.profile == nil
+                    || social.friends.isEmpty) {
                 raw += direction
                 continue
             }
@@ -425,6 +495,7 @@ struct NewCommitmentView: View {
         switch step {
         case .what: return !title.trimmingCharacters(in: .whitespaces).isEmpty
         case .when: return repeats == .weekly ? !weekdays.isEmpty : deadline > store.now
+        case .who: return !withFriends || !invitees.isEmpty
         default: return true
         }
     }
@@ -579,10 +650,19 @@ struct NewCommitmentView: View {
             rewardEligible: rewardEligible,
             warningLead: warnBefore ? 30 * 60 : nil)
         if created {
-            if shareWithFriends,
-               let new = store.allCommitments.first(where: { !before.contains($0.commitment.id) }) {
+            let new = store.allCommitments.first { !before.contains($0.commitment.id) }
+            if shareWithFriends, let new {
                 let now = store.now
                 Task { await social.share(new, now: now) }
+            }
+            // Doing it together: register the agreement and send the
+            // invitations. The commitment above is already this user's own
+            // contract either way — a network failure here costs the
+            // invitations (retryable), never the deal (invariant 30).
+            if withFriends, !invitees.isEmpty, let new {
+                let now = store.now
+                let handles = Array(invitees)
+                Task { await social.createShared(for: new, invitees: handles, now: now) }
             }
             registerEnvelopes(rosterFor: unregisteredIDs)
             dismiss()

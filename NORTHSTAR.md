@@ -2,7 +2,7 @@
 
 **North Star Product Document**
 
-v0.8 · August 2026 · *v0.6 added §45 (Social Accountability) and invariants 23–28; v0.7 settled the product half of account deletion (§33, §45); v0.8 adds invariant 29 (block supersedes both relationship systems). Sections are append-only — code and docs cite them by number.*
+v0.9 · September 2026 · *v0.6 added §45 (Social Accountability) and invariants 23–28; v0.7 settled the product half of account deletion (§33, §45); v0.8 adds invariant 29 (block supersedes both relationship systems); v0.9 adds §46 (Shared Commitments) and invariants 30–32. Sections are append-only — code and docs cite them by number.*
 
 > Do what matters first. Earn the rest.
 
@@ -1325,6 +1325,9 @@ These rules should survive feature debates.
 27. **Absence is observable; motive is not.** Earned may say a friend hasn't checked in and what was open when last seen. It never claims to know *why* — "deleted the app to escape" is a sentence the product cannot honestly render.
 28. **Social reputation is representation, not enforcement.** Socially shared completions are the client's own account of itself; nothing on the enforcement path may consume them as evidence.
 29. **Block supersedes both relationship systems.** A block between two Earned accounts revokes any accountability partnership between them, in both directions, and prevents new nominations while it stands — an explicit cross-system rule, never a side effect of shared rows. Frozen contracts keep their thresholds; a route that loses too many partners becomes unavailable, and Solo remains. Unblocking restores neither friendship nor authority: both take a fresh ask and a fresh yes.
+30. **A shared commitment shares the promise, not the punishment.** People may agree to do the same thing; each participant still owns their own Gate, restrictions, verification strength, Override rules, debt, and completion state. One participant failing never locks another participant's phone; one participant completing never satisfies another participant's Gate. The visible difference between their outcomes *is* the social pressure — Earned never converts it into a shared consequence.
+31. **Only acceptance creates an obligation.** An invitation to a shared commitment obliges nobody. A participant's personal commitment exists only from their own explicit acceptance; nobody accepts on another's behalf, and consent is never inferred from friendship or from an accountability partnership. Each participant's contract hardens from their own acceptance, never from someone else's clock.
+32. **The shared promise is fixed by acceptance; the enforcement is not the inviter's to set.** What was mutually agreed — the behavior, the target, the window — cannot be quietly rewritten for people already bound to it; a material change is a new agreement requiring fresh acceptance. And the inviter never dictates how Earned enforces the promise on another participant's device. Leaving the group is a social act: it never erases a hardened personal commitment, and no social exit may be cheaper than an Override.
 
 ---
 
@@ -1517,3 +1520,46 @@ departed most of all. What data may lawfully outlive deletion — suppression re
 abuse defences, any future server-authoritative state — remains a privacy/legal question
 under review (accountability-architecture §21.2), decided by counsel rather than encoded
 by accident.
+
+---
+
+## 46. Shared Commitments
+
+*Added in v0.9, after §45, because sections are append-only. The working design — states,
+terms, hardening, editing, blocking, schema, everything operational — is
+[docs/shared-commitments.md](docs/shared-commitments.md). This section carries only what
+must outlive any particular implementation.*
+
+The social layer supports three levels of involvement, each strictly opt-in:
+
+1. **Witnessing** — friends can see commitments the user explicitly shares (§45).
+2. **Encouragement** — lightweight reactions to meaningful events.
+3. **Doing it together** — multiple Earned users accept the same shared commitment.
+
+A shared commitment is an **agreement, not a group Gate**. It fixes the *shared terms* —
+what will be done, how much, by when — and produces **one ordinary personal commitment per
+accepting participant**. Everything about enforcement stays individual: Gate, restriction
+profile, verification strength, Override rules, debt, completion (invariant 30). Maya
+finishing does not unlock Patrick; Patrick failing does not lock Maya. What participants
+get from each other is visibility of the difference:
+
+> RUN 3× THIS WEEK
+>
+> Patrick  2 / 3
+>
+> Maya     3 / 3 ✓
+>
+> Dave     1 / 3
+
+That is the whole social mechanic. No ranking, no places, no team score, no XP — the
+anti-goals of §45 and invariant 23 apply with full force, and the Earned Test (§42) still
+decides every addition. Earned stays closer to: **go do the thing; your people can see
+whether you did.**
+
+Consent is structural, not polite: an invitation obliges nobody, only acceptance creates a
+participant's commitment, and their contract hardens from their own acceptance (invariant
+31). The shared promise freezes when people bind to it; the inviter never sets another
+participant's enforcement, and leaving the group never erases a hardened obligation
+(invariant 32). Shared participants are a third relationship concept beside friends and
+accountability partners — the three may overlap, but none is ever inferred from another
+(extending invariant 24). Hydration, as everywhere in Social, is excluded.
