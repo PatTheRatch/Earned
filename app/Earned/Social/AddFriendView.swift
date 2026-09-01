@@ -28,10 +28,26 @@ struct AddFriendView: View {
                          + "for theirs — that's the whole discovery mechanism, on purpose.")
                 }
 
+                // A failed search used to render as "Nobody by that handle",
+                // which is a lie told by an empty array: the server was never
+                // reached. Said plainly instead, above the results.
+                if let failure = social.failure {
+                    Section {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Search didn't reach the server.")
+                                .foregroundStyle(Theme.signal)
+                            Text(failure).font(.footnote).foregroundStyle(Theme.muted)
+                        }
+                    }
+                }
+
                 if searched {
                     Section {
                         if results.isEmpty {
-                            Text("Nobody by that handle.").foregroundStyle(Theme.muted)
+                            Text(social.failure == nil
+                                 ? "Nobody by that handle."
+                                 : "Nothing to show — see above.")
+                                .foregroundStyle(Theme.muted)
                         } else {
                             ForEach(results) { person in
                                 HStack(spacing: 12) {

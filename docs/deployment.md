@@ -475,9 +475,9 @@ labelled halves of the snapshot, and Approve / Deny. Tapping one records a real 
 shows that partner's receipt. Tapping both resolves the request; a third partner would
 find it superseded.
 
-Two steps of this flow have no interface yet — consent has no page until step 9, and
-override requests are not wired into the app — so the script does those the way the server
-will: it reads the consent token out of the outbox rather than being handed it, and it
+Consent still has no page, and this script predates the app being wired into override
+requests (it is now: `LockScreenView` appends the local event and then asks the roster), so
+the script does both the way the server would: it reads the consent token out of the outbox rather than being handed it, and it
 advances the commitment's *creation* time so the server recomputes hardening, rather than
 writing `hardens_at` (which a trigger would overwrite anyway, and that is the point of the
 trigger).
@@ -499,6 +499,12 @@ which also means the three-requests-per-day cap never gets in the way.
 `message_outbox` is where invitations and approval links queue, and **nothing drains it
 yet**. Until something does, a partner can only be reached by copying a link out of the
 table by hand.
+
+The app knows this and has stopped offering the form: `Partner.contactInvitationsDeliverable`
+is `false`, so Partners → Add partner says the invitation cannot be sent instead of taking a
+number and queueing a message nobody will receive. Only friends who are already on Earned can
+be accountability partners, and that path needs neither this drainer nor the consent page.
+Flip the flag when both exist.
 
 That also means consent cannot be completed the normal way. To do it manually today:
 
@@ -673,12 +679,25 @@ Not deployment problems — unbuilt steps, in
 - ~~The app half of step 8~~ — *landed.* The app fetches grants, verifies them against the
   published key set under the compiled-in root key, and offers them to the ledger
   (`app/Earned/Grants/`). What remains is the end-to-end pass on a real device.
-- **Close and moot propagation (step 9),** and with it the consent page at `/c/<token>`. A
-  requester cannot cancel an open request, and completing the workout does not yet tell the
-  partners they can stand down.
-- **The outbox drainer** (§6 above).
-- **A `DeviceActivityMonitor` extension**, so a Gate closing while the app is not running
-  takes effect immediately rather than at next launch.
+- ~~**Moot propagation (step 9)**~~ — *landed.* Migration `0020` added
+  `close_override_request`, and the app calls it on the foreground pass for any commitment
+  that resolved by some route other than the partners themselves, so a friend who was asked
+  at 7am is not still holding a live-looking link at lunchtime
+  (`AccountStore.closeResolvedRequests`). What remains of step 9 is the *requester-initiated*
+  cancel: there is no "never mind" button.
+- **The consent page at `/c/<token>`.** The Worker routes it
+  (`web/src/router.ts`) but there is no `consent` edge function behind the route — only
+  `approval` and `grants` exist under `supabase/functions/`. So the link a queued invitation
+  contains would 404 even if it were delivered.
+- **The outbox drainer** (§6 above). Together with the missing consent page this means
+  external accountability does not work at all, and the app no longer offers it:
+  `Partner.contactInvitationsDeliverable` is `false`, and the invite form says why rather
+  than taking a phone number and sending nothing. **Flip that flag in the same change that
+  lands both halves**, not before.
+- ~~**A `DeviceActivityMonitor` extension**~~ — *built* (`app/EarnedMonitor/`), so a Gate
+  closing while the app is not running no longer waits for next launch. Never observed
+  working on hardware; see `docs/beta-readiness.md` B‑2 for the device test that would
+  settle it.
 
 And two gates that are neither code nor configuration:
 

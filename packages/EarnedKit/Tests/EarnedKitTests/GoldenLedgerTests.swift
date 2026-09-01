@@ -820,4 +820,352 @@ final class GoldenLedgerTests: XCTestCase {
         XCTAssertEqual(replayed.state.enforcementBypasses, decoded.state.enforcementBypasses,
                        "including the projected bypasses, ordinals and all")
     }
+
+    // MARK: - v3
+
+    /// A ledger from before verification tiers existed at all.
+    ///
+    /// This is the format where a *silent* misreading is possible rather than
+    /// merely awkward: a v3 requirement has no `verification` key and a v3
+    /// workout has no `evidence` key, and the whole safety of §15 rests on
+    /// those absences decoding as `.selfReported` in both places. Decode the
+    /// requirement as `.appVerified` by accident and an obligation the user
+    /// could satisfy by hand becomes unsatisfiable; decode the workout as
+    /// `.appVerified` by accident and a manual entry starts satisfying
+    /// commitments whose entire point was that it must not.
+    ///
+    /// It also carries v3's own addition, a server-granted accountability
+    /// override, with the overdue obligation that made it necessary.
+    private let v3Fixture = """
+    {
+      "version": 3,
+      "entries": [
+        {
+          "id": "30000000-0000-0000-0000-000000000001",
+          "date": "2026-08-22T08:00:00Z",
+          "event": {
+            "commitmentCreated": {
+              "_0": {
+                "id": "C3000000-0000-0000-0000-000000000001",
+                "title": "Run 5k",
+                "requirement": {
+                  "activity": { "types": { "_0": ["running"] } },
+                  "metric": { "totalDistance": { "_0": 5000 } }
+                },
+                "eligibleFrom": "2026-08-22T08:00:00Z",
+                "deadline": "2026-08-22T20:00:00Z",
+                "createdAt": "2026-08-22T08:00:00Z",
+                "configuredCorrectionWindow": 7200,
+                "overridePolicy": {
+                  "approvalsRequired": 2,
+                  "accountabilityWindow": 1800,
+                  "soloEscalation": {
+                    "recentWindow": 2592000,
+                    "steps": [
+                      { "effortUnits": 60, "minimumElapsed": 600 },
+                      { "effortUnits": 180, "minimumElapsed": 1800 },
+                      { "effortUnits": 360, "minimumElapsed": 3600 }
+                    ]
+                  }
+                },
+                "restrictions": { "tokens": ["instagram", "youtube"] },
+                "rewardEligible": true
+              }
+            }
+          }
+        },
+        {
+          "id": "30000000-0000-0000-0000-000000000002",
+          "date": "2026-08-22T10:00:00Z",
+          "event": {
+            "workoutRecorded": {
+              "_0": {
+                "id": "A3000000-0000-0000-0000-000000000001",
+                "activity": "running",
+                "start": "2026-08-22T09:00:00Z",
+                "end": "2026-08-22T09:35:00Z",
+                "distanceMeters": 5200
+              }
+            }
+          }
+        },
+        {
+          "id": "30000000-0000-0000-0000-000000000003",
+          "date": "2026-08-23T08:00:00Z",
+          "event": {
+            "commitmentCreated": {
+              "_0": {
+                "id": "C3000000-0000-0000-0000-000000000002",
+                "title": "Lift",
+                "requirement": {
+                  "activity": { "any": {} },
+                  "metric": { "anyQualifyingWorkout": {} }
+                },
+                "eligibleFrom": "2026-08-23T08:00:00Z",
+                "deadline": "2026-08-23T10:00:00Z",
+                "createdAt": "2026-08-23T08:00:00Z",
+                "configuredCorrectionWindow": 7200,
+                "overridePolicy": {
+                  "approvalsRequired": 2,
+                  "accountabilityWindow": 1800,
+                  "soloEscalation": {
+                    "recentWindow": 2592000,
+                    "steps": [
+                      { "effortUnits": 60, "minimumElapsed": 600 },
+                      { "effortUnits": 180, "minimumElapsed": 1800 },
+                      { "effortUnits": 360, "minimumElapsed": 3600 }
+                    ]
+                  }
+                },
+                "restrictions": { "tokens": ["instagram"] },
+                "rewardEligible": true
+              }
+            }
+          }
+        },
+        {
+          "id": "30000000-0000-0000-0000-000000000004",
+          "date": "2026-08-23T11:00:00Z",
+          "event": {
+            "overrideRequested": {
+              "id": "D3000000-0000-0000-0000-000000000001",
+              "commitmentID": "C3000000-0000-0000-0000-000000000002"
+            }
+          }
+        },
+        {
+          "id": "30000000-0000-0000-0000-000000000005",
+          "date": "2026-08-23T11:30:00Z",
+          "event": {
+            "accountabilityOverrideGranted": {
+              "requestID": "D3000000-0000-0000-0000-000000000001",
+              "decidedAt": "2026-08-23T11:30:00Z",
+              "roster": [
+                { "partnerDisplayName": "Mom", "vote": "approve", "at": "2026-08-23T11:20:00Z" },
+                { "partnerDisplayName": "Maya", "vote": "approve", "at": "2026-08-23T11:29:00Z" }
+              ],
+              "serverGrantID": "60000000-0000-0000-0000-000000000003"
+            }
+          }
+        }
+      ]
+    }
+    """
+
+    func testV3GoldenFixtureStillLoadsUnderSchemaSix() throws {
+        let ledger = try Self.decoder.decode(Ledger.self, from: Data(v3Fixture.utf8))
+        let runID = UUID(uuidString: "C3000000-0000-0000-0000-000000000001")!
+        let liftID = UUID(uuidString: "C3000000-0000-0000-0000-000000000002")!
+
+        XCTAssertEqual(ledger.entries.count, 5,
+                       "v3 → v6 rewrites nothing: three no-op bumps in a row")
+
+        // The absences. Everything written before verification existed counted
+        // whatever the user said counted, and a workout from then was the
+        // user's own word — because that was all there was.
+        let run = try XCTUnwrap(ledger.state.commitments[runID]).commitment
+        XCTAssertEqual(run.requirement.verification, .selfReported)
+        let workout = try XCTUnwrap(ledger.state.workouts.first)
+        XCTAssertEqual(workout.evidence, .selfReported)
+        XCTAssertNil(workout.activeEnergyKilocalories,
+                     "a v3 workout reported no energy — not zero energy")
+
+        // And the obligation still resolves the way it did: the 5.2km run met
+        // a 5km distance requirement, on time.
+        XCTAssertEqual(ledger.state.commitments[runID]?.resolution,
+                       .completed(at: d(22, 9, 35)))
+        let progress = try XCTUnwrap(ledger.state.progress(for: runID))
+        XCTAssertEqual(progress.achieved, 5200)
+        XCTAssertEqual(progress.unit, .meters)
+
+        XCTAssertEqual(ledger.state.commitments[liftID]?.resolution,
+                       .overridden(.accountability, at: d(23, 11, 30)))
+    }
+
+    // MARK: - v4
+
+    /// A ledger from the build that had verification tiers but not energy.
+    ///
+    /// The pair to the v3 fixture: here the keys are *present*, so this is what
+    /// stops a future tolerant-decoding change from quietly ignoring them. An
+    /// `appVerified` requirement that decoded as `.selfReported` would turn the
+    /// strictest obligation in the file into the loosest, and nothing on screen
+    /// would look different.
+    private let v4Fixture = """
+    {
+      "version": 4,
+      "entries": [
+        {
+          "id": "40000000-0000-0000-0000-000000000001",
+          "date": "2026-08-22T08:00:00Z",
+          "event": {
+            "commitmentCreated": {
+              "_0": {
+                "id": "C4000000-0000-0000-0000-000000000001",
+                "title": "Run 30 minutes, vouched for",
+                "requirement": {
+                  "activity": { "types": { "_0": ["running"] } },
+                  "metric": { "totalDuration": { "_0": 1800 } },
+                  "verification": "appVerified"
+                },
+                "eligibleFrom": "2026-08-22T08:00:00Z",
+                "deadline": "2026-08-22T20:00:00Z",
+                "createdAt": "2026-08-22T08:00:00Z",
+                "configuredCorrectionWindow": 7200,
+                "overridePolicy": {
+                  "approvalsRequired": 2,
+                  "accountabilityWindow": 1800,
+                  "soloEscalation": {
+                    "recentWindow": 2592000,
+                    "steps": [
+                      { "effortUnits": 60, "minimumElapsed": 600 },
+                      { "effortUnits": 180, "minimumElapsed": 1800 },
+                      { "effortUnits": 360, "minimumElapsed": 3600 }
+                    ]
+                  }
+                },
+                "restrictions": { "tokens": ["youtube"] },
+                "rewardEligible": true
+              }
+            }
+          }
+        },
+        {
+          "id": "40000000-0000-0000-0000-000000000002",
+          "date": "2026-08-22T10:00:00Z",
+          "event": {
+            "workoutRecorded": {
+              "_0": {
+                "id": "A4000000-0000-0000-0000-000000000001",
+                "activity": "running",
+                "start": "2026-08-22T09:00:00Z",
+                "end": "2026-08-22T09:20:00Z",
+                "evidence": { "selfReported": {} }
+              }
+            }
+          }
+        },
+        {
+          "id": "40000000-0000-0000-0000-000000000003",
+          "date": "2026-08-22T11:00:00Z",
+          "event": {
+            "workoutRecorded": {
+              "_0": {
+                "id": "A4000000-0000-0000-0000-000000000002",
+                "activity": "running",
+                "start": "2026-08-22T10:00:00Z",
+                "end": "2026-08-22T10:40:00Z",
+                "evidence": { "appVerified": { "source": "com.apple.health" } }
+              }
+            }
+          }
+        }
+      ]
+    }
+    """
+
+    func testV4GoldenFixtureKeepsItsVerificationTier() throws {
+        let ledger = try Self.decoder.decode(Ledger.self, from: Data(v4Fixture.utf8))
+        let commitmentID = UUID(uuidString: "C4000000-0000-0000-0000-000000000001")!
+
+        XCTAssertEqual(ledger.entries.count, 3, "v4 → v6 rewrites nothing")
+
+        let commitment = try XCTUnwrap(ledger.state.commitments[commitmentID]).commitment
+        XCTAssertEqual(commitment.requirement.verification, .appVerified)
+
+        // The self-reported 20 minutes is not evidence this commitment accepts,
+        // so it contributes nothing — the 40-minute vouched-for run is what
+        // completed it, and it did so at *its* end, not the earlier one.
+        XCTAssertEqual(ledger.state.commitments[commitmentID]?.resolution,
+                       .completed(at: d(22, 10, 40)))
+        let progress = try XCTUnwrap(ledger.state.progress(for: commitmentID))
+        XCTAssertEqual(progress.achieved, 2400,
+                       "only the app-verified workout counts toward an appVerified requirement")
+    }
+
+    // MARK: - Empty and unidentifiable files
+
+    /// An empty ledger at every shape that has existed, because "no history
+    /// yet" is the most common state a real phone is in and the least likely to
+    /// be tested. A migration that throws on an empty file would greet a fresh
+    /// install with a quarantine notice.
+    func testEmptyLedgersAtEverySchemaLoadAsEmpty() throws {
+        let shapes = ["[]",
+                      #"{"version": 1, "entries": []}"#,
+                      #"{"version": 2, "entries": []}"#,
+                      #"{"version": 3, "entries": []}"#,
+                      #"{"version": 4, "entries": []}"#,
+                      #"{"version": 5, "entries": []}"#,
+                      #"{"version": 6, "entries": []}"#]
+        for shape in shapes {
+            let ledger = try Self.decoder.decode(Ledger.self, from: Data(shape.utf8))
+            XCTAssertTrue(ledger.entries.isEmpty, "\(shape) should load as empty")
+            XCTAssertTrue(ledger.state.commitments.isEmpty, "\(shape) should project nothing")
+        }
+    }
+
+    /// A ledger from a *newer* build is refused by version rather than read
+    /// partially. Dropping an event it cannot decode would silently lose an
+    /// obligation, which is the one outcome no failure mode may have.
+    func testALedgerFromANewerBuildIsRefused() {
+        let future = #"{"version": 99, "entries": []}"#
+        XCTAssertThrowsError(
+            try Self.decoder.decode(Ledger.self, from: Data(future.utf8))
+        ) { error in
+            guard case LedgerMigration.MigrationError.unknownVersion(99) = error else {
+                XCTFail("expected unknownVersion(99), got \(error)")
+                return
+            }
+        }
+    }
+
+    /// An envelope with entries and no version is refused, not read as v1.
+    ///
+    /// No build has ever written that shape — v1 had no envelope and every
+    /// version since writes the key — so calling it v1 would be a guess, and
+    /// it is the one guess that costs something: v1 → v2 is the only migration
+    /// that rewrites history, and it inserts a million effort units in front of
+    /// every solo override in the file. A file Earned cannot identify is
+    /// quarantined intact, which a user can recover from; a file silently
+    /// rewritten is not.
+    func testAnEnvelopeWithNoVersionIsRefusedRatherThanGuessed() {
+        let ambiguous = """
+        {
+          "entries": [
+            {
+              "id": "50000000-0000-0000-0000-000000000001",
+              "date": "2026-08-22T08:00:00Z",
+              "event": { "waterAcknowledged": {} }
+            }
+          ]
+        }
+        """
+        XCTAssertThrowsError(
+            try Self.decoder.decode(Ledger.self, from: Data(ambiguous.utf8))
+        ) { error in
+            guard case LedgerDocument.DocumentError.envelopeWithoutVersion = error else {
+                XCTFail("expected envelopeWithoutVersion, got \(error)")
+                return
+            }
+        }
+    }
+
+    /// Truncated and corrupt files throw rather than replaying a prefix. The
+    /// app moves the file aside and says so; what it must never do is load
+    /// half of someone's history and treat the missing half as never having
+    /// happened.
+    func testCorruptFilesThrowRatherThanLoadingAPrefix() {
+        let corrupt = [
+            "",
+            "{",
+            #"{"version": 6, "entries": [{"id": "not-a-uuid", "date": "2026-08-22T08:00:00Z", "event": {"waterAcknowledged": {}}}]}"#,
+            #"{"version": 6, "entries": [{"id": "50000000-0000-0000-0000-000000000001", "date": "2026-08-22T08:00:00Z", "event": {"somethingFromTheFuture": {}}}]}"#,
+            #"{"version": 6}"#,
+        ]
+        for file in corrupt {
+            XCTAssertThrowsError(
+                try Self.decoder.decode(Ledger.self, from: Data(file.utf8)),
+                "should have refused: \(file)")
+        }
+    }
 }

@@ -85,6 +85,23 @@ enum ShieldScheduler {
         SharedContainer.save(ShieldPlan(generatedAt: now, windows: planned))
     }
 
+    /// Give up every scheduled wake-up and empty the plan.
+    ///
+    /// For when Screen Time authorization has gone away. The app's own shield
+    /// is dropped in that case (`ScreenTimeController.clear()`) on the grounds
+    /// that holding restrictions the user can no longer manage is a trap — and
+    /// the same argument applies to restrictions scheduled for later, which
+    /// were simply invisible. Leaving them registered also left a plan
+    /// describing a state that may be months stale by the time authorization
+    /// returns; `reschedule` rebuilds both from scratch, so there is nothing
+    /// to preserve.
+    static func clear() {
+        let center = DeviceActivityCenter()
+        let existing = center.activities.filter { $0.rawValue.hasPrefix(prefix) }
+        if !existing.isEmpty { center.stopMonitoring(existing) }
+        SharedContainer.save(ShieldPlan(generatedAt: Date(), windows: []))
+    }
+
     private static func encode<T: Encodable>(_ token: T) -> Data? {
         try? JSONEncoder().encode(token)
     }

@@ -33,6 +33,10 @@ final class HealthImporter: ObservableObject {
     /// The last import's failure, if any, in Health's words. Cleared by the
     /// next pass that works.
     @Published private(set) var failure: String?
+    /// When the importer last ran, and whether it worked. A commitment that
+    /// will not complete is nearly always this line saying "Not yet", and a
+    /// tester cannot report a pass that never happened.
+    @Published private(set) var lastImport: SyncStamp?
 
     private let store: HKHealthStore?
 
@@ -66,8 +70,18 @@ final class HealthImporter: ObservableObject {
             access = .requested
         } catch {
             failure = error.localizedDescription
+            lastImport = .failed(error.localizedDescription)
         }
     }
+
+    /// Whether a workout finished on this phone could reach the ledger at all.
+    ///
+    /// Health is the only route a release build has: manual entry is a debug
+    /// tool (NORTHSTAR §15 makes it legitimate evidence, but shipping a
+    /// "mark it done" button is a product decision, not a diagnostic). So a
+    /// commitment on a phone where this is false cannot be *kept* — only
+    /// overridden — and the screens that promise otherwise have to say so.
+    var canImport: Bool { access == .requested }
 
     /// Pull in any Health workout the ledger has not seen that could move an
     /// unresolved commitment.
@@ -94,9 +108,11 @@ final class HealthImporter: ObservableObject {
             workouts = try await finishedWorkouts(in: store, since: horizon)
         } catch {
             failure = error.localizedDescription
+            lastImport = .failed(error.localizedDescription)
             return
         }
         failure = nil
+        lastImport = .succeeded()
 
         let known = Set(earned.state.workouts.map(\.id))
         for sample in workouts where !known.contains(sample.uuid) {

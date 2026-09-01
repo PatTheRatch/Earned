@@ -73,12 +73,33 @@ public struct LedgerDocument: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey { case version, entries }
 
+    public enum DocumentError: Error, CustomStringConvertible {
+        case envelopeWithoutVersion
+
+        public var description: String {
+            "A ledger envelope with no schema version is not a format Earned has "
+                + "ever written. Refusing to guess which one it is."
+        }
+    }
+
     /// Reads either the current envelope or a v1 file, which was a bare array of
     /// entries with no envelope at all.
+    ///
+    /// An envelope *with* entries but *without* a version is refused rather than
+    /// read as v1. No build has ever written that shape — v1 had no envelope at
+    /// all, and every version since writes the key — so assuming v1 would be
+    /// guessing, and this is the one guess that is not free: the v1 migration is
+    /// the only one that rewrites history, and it would stamp a million effort
+    /// units in front of every solo override in the file. A file we cannot
+    /// identify is quarantined intact (`LedgerStorage.load`), which is
+    /// recoverable; a file silently rewritten is not.
     public init(from decoder: Decoder) throws {
         if let container = try? decoder.container(keyedBy: CodingKeys.self),
            container.contains(.entries) {
-            version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
+            guard let stated = try container.decodeIfPresent(Int.self, forKey: .version) else {
+                throw DocumentError.envelopeWithoutVersion
+            }
+            version = stated
             entries = try container.decode([LedgerEntry].self, forKey: .entries)
             return
         }

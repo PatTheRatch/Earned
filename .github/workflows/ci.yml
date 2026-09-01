@@ -75,6 +75,19 @@ jobs:
       - name: Test the link router
         run: deno test web/src/
 
+  release-config:
+    # The build below signs nothing, so it cannot notice the failure modes that
+    # only a *distributable* build has: a stripped entitlement, an App Group
+    # the two processes no longer share, a missing privacy string. Each of those
+    # is green here and fatal on a device, days later. Cheap enough to run on
+    # Linux without Xcode.
+    name: Release config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate signing, entitlements and Info.plist
+        run: python3 tools/validate-release-config.py
+
   app-build:
     name: iOS app builds
     runs-on: macos-15
@@ -84,6 +97,20 @@ jobs:
         run: brew install xcodegen
       - name: Generate Xcode project
         run: xcodegen generate --spec app/project.yml --project app
+      # `xcodegen generate` writes plists as well as the project, and it used to
+      # write an empty one over the monitor's entitlements — stripping Family
+      # Controls and the App Group, with a green build either side of it. The
+      # config check catches the declaration that causes it; this catches the
+      # effect, including any other way generation could rewrite these files.
+      - name: Generation did not rewrite the entitlements
+        run: git diff --exit-code -- 'app/**/*.entitlements'
+      - name: The generated Info.plist carries the version keys
+        run: |
+          for key in CFBundleShortVersionString CFBundleVersion \
+                     ITSAppUsesNonExemptEncryption NSHealthShareUsageDescription; do
+            /usr/libexec/PlistBuddy -c "Print :$key" app/Earned/Info.plist >/dev/null \
+              || { echo "generated Info.plist is missing $key" >&2; exit 1; }
+          done
       - name: Build
         run: |
           xcodebuild build \

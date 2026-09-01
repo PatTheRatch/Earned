@@ -49,9 +49,12 @@ struct PartnersView: View {
             Section {
                 Button("Add accountability partner") { showingAdd = true }
             } footer: {
-                Text("A friend on Earned can be asked in-app. Anyone else gets one message "
-                     + "with a link — Earned sends it itself, so the link never passes "
-                     + "through your phone.")
+                Text(Partner.contactInvitationsDeliverable
+                     ? "A friend on Earned can be asked in-app. Anyone else gets one message "
+                       + "with a link — Earned sends it itself, so the link never passes "
+                       + "through your phone."
+                     : "A friend on Earned can be asked in-app. Inviting someone who isn't "
+                       + "on Earned isn't in this build.")
             }
 
             if let failure = account.partnerFailure {
@@ -154,12 +157,14 @@ struct AddPartnerPickerView: View {
             List {
                 Section {
                     if social.profileState.profile == nil {
-                        Text("Set up your profile on the Social tab to ask friends in-app. "
-                             + "Anyone can still be invited by text or email below.")
+                        Text("Set up your profile on the Social tab to ask friends in-app."
+                             + (Partner.contactInvitationsDeliverable
+                                ? " Anyone can still be invited by text or email below." : ""))
                             .foregroundStyle(Theme.muted)
                     } else if social.friends.isEmpty {
-                        Text("No friends on Earned yet. Add some from the Social tab — or "
-                             + "invite anyone by text or email below.")
+                        Text("No friends on Earned yet. Add some from the Social tab"
+                             + (Partner.contactInvitationsDeliverable
+                                ? " — or invite anyone by text or email below." : "."))
                             .foregroundStyle(Theme.muted)
                     } else {
                         ForEach(social.friends) { friend in
@@ -174,12 +179,22 @@ struct AddPartnerPickerView: View {
                 }
 
                 Section {
-                    Button("Invite by text or email") { showingExternal = true }
+                    if Partner.contactInvitationsDeliverable {
+                        Button("Invite by text or email") { showingExternal = true }
+                    } else {
+                        Text("Not in this build. Earned can't send the invitation yet, and "
+                             + "an ask nobody receives is a way out that was never going to "
+                             + "open. Only friends on Earned can be partners for now.")
+                            .foregroundStyle(Theme.muted)
+                    }
                 } header: {
                     Text("Someone else")
                 } footer: {
-                    Text("They don't need an Earned account or the app — they can consent "
-                         + "and approve from the web.")
+                    Text(Partner.contactInvitationsDeliverable
+                         ? "They don't need an Earned account or the app — they can consent "
+                           + "and approve from the web."
+                         : "The Solo Override is unaffected: it needs nobody's permission and "
+                           + "works with no signal at all.")
                 }
 
                 if let failure = account.partnerFailure {

@@ -25,7 +25,7 @@ trusted. Re-verify against the code when it drifts.
 
 | Area | Status | Notes |
 |---|---|---|
-| Gate engine — hydration, exercise, hardening, debt, overrides | **Real** | EarnedKit, 94 tests on Linux + macOS |
+| Gate engine — hydration, exercise, hardening, debt, overrides | **Real** | EarnedKit, 175 tests on Linux + macOS |
 | Per-Gate restrictions, eligibility windows, recurring plans | **Real** | Added in the correction pass |
 | All six screens, poster identity, persistence | **Real** | Ledger saved as versioned JSON, replayed and re-validated on launch |
 | Deadline warnings | **Real** | Local notifications; no entitlement needed. Informational only — no snooze |
@@ -33,24 +33,26 @@ trusted. Re-verify against the code when it drifts.
 | What "done" means | **Real** | Show up, total time, total distance, or **active calories** — the one target a minute of standing still cannot satisfy |
 | Restriction tokens | **Real** | Apple's picker; opaque tokens Earned itself cannot read |
 | Enforcement — apps actually blocked | **Real** | `ManagedSettingsStore` shields the union of closed Gates |
-| Enforcement while the app is closed | **Built, unverified on device** | `EarnedMonitor`, a `DeviceActivityMonitor` extension, applies a plan the app computes ahead of each deadline. Needs the App Group and a second Family Controls entitlement to actually run |
+| Enforcement while the app is closed | **Built, unverified on device** | `EarnedMonitor`, a `DeviceActivityMonitor` extension, applies a plan the app computes ahead of each deadline. The App Group is configured in both targets and CI checks the two agree; the extension's own Family Controls (Distribution) approval is a separate Apple review from the app's. Never observed working on hardware — `docs/beta-readiness.md` B‑2 |
 | Enforcement integrity — noticing a revocation | **Partial** | Detected the next time Earned runs. iOS never tells a backgrounded app its authorization went away, so a revocation is invisible until launch |
 | Deleting and reinstalling erases what is owed | **Hole, narrowed** | The ledger is still a file in the app's container, so a reinstall wipes local commitments, debt and bypass records. The server now holds every registered Contract Envelope, so *terms* survive — but nothing yet rebuilds obligations from them on reinstall |
 | Enforcement can be revoked | **By design, unfixable** | iOS Settings → Screen Time → Apps With Screen Time Access. No app can prevent this; a Screen Time passcode is the only friction |
 | Custom shield screen (`NICE TRY.`) | **Missing** | Blocked apps show Apple's default shield; needs a `ShieldConfiguration` extension |
 | Sign in with Apple + Contract Envelopes | **Real** | `Backend/AccountStore.swift`: nonce-checked sign-in, `ensure_account`, idempotent envelope registration and re-sync on every foreground. Optional to everything local (S8) |
-| Accountability partners | **Real** (backend deployed per `deployment.md`; end-to-end device verification is the open item) | Nomination with server-sent consent links, partner list and roster eligibility in-app (`Backend/PartnersView.swift`), override requests with frozen snapshots, the partner approval page, concurrent-safe voting, Ed25519-signed grants verified on-device against a compiled-in root key (`Grants/`), applied to the ledger which may still refuse a stale grant |
+| Accountability partners | **Real for friends already on Earned** (backend deployed per `deployment.md`; end-to-end device verification is the open item) | Nomination by identity, partner list and roster eligibility in-app (`Backend/PartnersView.swift`), override requests with frozen snapshots, the partner approval page, concurrent-safe voting, Ed25519-signed grants verified on-device against a compiled-in root key (`Grants/`), applied to the ledger which may still refuse a stale grant. Inviting someone who is *not* on Earned is switched off — the message cannot be delivered, see the row below |
 | Social — profiles, friends, Social tab | **Real** (Milestone S1) | Profile with unique handle + avatar, friend requests/accept/decline/remove/block, handle search, Social tab. See `docs/social-architecture.md` |
 | Social — commitment sharing, activity, streaks | **Real** (Milestone S2) | Per-commitment Private/Friends choice (default Private), friends' Recent shelf (bounded, 30-day horizon, meaningful events only), and the two streak figures ("12 commitments kept · 6 since last Override"). Overrides are told only when the owner shares Override usage |
 | Social — check-ins and the quiet surface | **Real** (Milestone S3) | Opt-in: friends see "Hasn't checked in · 4 days" (whole days, only past 72 hours, never a live status) and how many shared commitments were open at the last check-in. Facts only — motive is never claimed |
-| Earned-user accountability partners | **Real** (migration 0019; not yet on the hosted project) | An accepted friend can be nominated by identity — no number, no email — and consents in-app; their approval requests arrive in-app through the same snapshot and vote transaction as the web page. External partners keep the full no-account web flow. Block revokes accountability both ways; unblock restores nothing |
-| Shared Commitments — doing it together | **Real** (Milestone SC1; migration 0021, not yet on the hosted project) | "With friends" at creation invites accepted Earned friends; each accepts through their own Deal and gets their own ordinary commitment — own Gate, own rules, own hardening clock from their own acceptance. The roster shows everyone's self-reported line against the shared target; no ranking, no shared consequence. See `docs/shared-commitments.md` |
+| Earned-user accountability partners | **Real** (migration 0019, applied to the hosted project 1 September 2026) | An accepted friend can be nominated by identity — no number, no email — and consents in-app; their approval requests arrive in-app through the same snapshot and vote transaction as the web page. Block revokes accountability both ways; unblock restores nothing |
+| External accountability partners | **Switched off** | The server half is built and tested, but nothing drains `message_outbox` and the consent page has no function behind its route, so an invitation is composed and never delivered. Rather than let a user build a commitment on a partner who will never hear about it, the invite form says so and is disabled (`Partner.contactInvitationsDeliverable`). See `docs/beta-readiness.md` B‑8 |
+| Shared Commitments — doing it together | **Real** (Milestone SC1; migrations 0021–0022, applied to the hosted project 1 September 2026) | "With friends" at creation invites accepted Earned friends; each accepts through their own Deal and gets their own ordinary commitment — own Gate, own rules, own hardening clock from their own acceptance. The roster shows everyone's self-reported line against the shared target; no ranking, no shared consequence. See `docs/shared-commitments.md` |
 
 **One-sentence version:** the contract machinery is real, the identity is real, Earned
 takes apps away when a Gate is closed, a partner's approval can genuinely unlock a phone,
-and there is now a Social tab with real friends on it — the remaining holes are that a
-Gate closing while the app isn't running waits for the next launch, blocked apps show
-Apple's shield rather than ours, and deleting the app still erases the local ledger.
+and there is now a Social tab with real friends on it — the remaining holes are that the
+extension which shields while the app is closed has never been watched doing it on a phone,
+blocked apps show Apple's shield rather than ours, external partners cannot be reached at
+all, and deleting the app still erases the local ledger.
 
 ---
 
@@ -300,10 +302,15 @@ changing.
 
 ### Doing the thing
 
-Settings → Testing → *Log a workout by hand*. Activity, duration, optional distance, how
-long ago it finished; stays open across entries so several can be backfilled. Each entry
-appends `workoutRecorded`, and the engine re-checks every commitment in **deadline order**,
-so the oldest debt clears first.
+In a release build, Apple Health. A finished workout imported by `HealthImporter` appends
+`workoutRecorded`, and the engine re-checks every commitment in **deadline order**, so the
+oldest debt clears first. That import is the *only* route a completed workout has into the
+ledger, which is why Health authorization is now requested whenever a workout commitment is
+created rather than only on the app-verified tier.
+
+Debug builds keep a manual entry at You → Advanced → *Log a workout by hand* — activity,
+duration, optional distance, how long ago it finished; stays open across entries so several
+can be backfilled. It appends exactly the same event.
 
 ### The eligibility window
 
@@ -447,10 +454,18 @@ Against the north star's MVP list (§35):
 **The Developer Program enrollment landed, and enforcement went in with it.** Earned now
 takes apps away rather than describing what it would take away. What remains:
 
-1. **`DeviceActivityMonitor` extension.** The one real hole in enforcement: a Gate that
-   closes while Earned isn't running isn't shielded until the app next opens. This also
-   moves the ledger to a shared App Group container so the extension can read gate state —
-   `Store/LedgerStorage.swift` exists to make that a one-file change.
+1. ~~**`DeviceActivityMonitor` extension.**~~ Built (`app/EarnedMonitor/`), and built without
+   moving the ledger: rather than teach a second process to replay an event log, the app
+   computes a `ShieldPlan` ahead of each deadline and leaves it in the App Group, and the
+   extension's whole job on waking is to apply it. One file compiled into both targets, so
+   the format cannot drift. `intervalDidEnd` is empty on purpose — the extension never lifts
+   a shield, because only the app knows whether the commitment was met.
+
+   **What it still needs is a phone.** DeviceActivity schedules do not run in the simulator
+   and CI signs nothing, so nobody has yet watched a restricted app go dark at a deadline
+   with Earned force-quit. The failure mode is quiet — the app shields on next launch and
+   everything looks fine — so it will not be noticed by accident. `docs/beta-readiness.md`
+   B‑2 is the nine-step test that would settle it.
 2. **`ShieldConfiguration` extension.** Blocked apps currently show Apple's default shield.
    The `NICE TRY.` surface has been reserved in `docs/design-language.md` since the identity
    pass for exactly this moment — the one place the loud voice is earned, because the user

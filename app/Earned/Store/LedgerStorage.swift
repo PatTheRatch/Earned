@@ -4,10 +4,14 @@ import EarnedKit
 /// Persists the event ledger as JSON. Only events are stored; state is rebuilt
 /// and re-validated by replay on load (see ARCHITECTURE.md §2).
 ///
-/// MVP writes to the app's Documents directory. When the Screen Time extensions
-/// arrive (roadmap step 3) this moves to a shared App Group container so the
-/// shield extension can read gate state — that migration is why every path goes
-/// through this type rather than being scattered through the app.
+/// Writes to the app's Documents directory, and stays there. The plan used to
+/// be to move it into the App Group so a Screen Time extension could read gate
+/// state; the extension landed and that plan was deliberately dropped. Replay
+/// is not something to attempt under an extension's memory ceiling, this is the
+/// one file that must never be corrupted, and none of it is needed — what
+/// crosses the process boundary is a `ShieldPlan`, a few dozen bytes of
+/// already-decided answer. Every path still goes through this type, which is
+/// what made that a decision rather than a rewrite.
 struct LedgerStorage {
     let url: URL
 

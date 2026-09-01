@@ -10,26 +10,30 @@ struct FriendProfileView: View {
 
     let handle: String
 
-    @State private var profile: PublicProfile?
-    @State private var loaded = false
+    /// Nil until the first lookup returns. The three loaded answers are
+    /// distinct on purpose: a network failure that rendered as "NOBODY HERE"
+    /// told a user their friend had vanished when the truth was a bad
+    /// connection.
+    @State private var lookup: SocialStore.ProfileLookup?
     @State private var confirmingRemove = false
     @State private var confirmingBlock = false
     @State private var confirmingNomination = false
 
     var body: some View {
         Group {
-            if let profile {
+            switch lookup {
+            case .found(let profile):
                 card(profile)
-            } else if loaded {
-                VStack(spacing: 12) {
-                    Text("NOBODY HERE")
-                        .font(Theme.display(34)).foregroundStyle(Theme.ink)
-                    + Text(".").font(Theme.display(34)).foregroundStyle(Theme.signal)
-                    Text("No profile by that handle.")
-                        .foregroundStyle(Theme.muted)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
+            case .notFound:
+                notice(title: "NOBODY HERE",
+                       message: "No profile by that handle.")
+            case .failed(let message):
+                notice(title: "COULDN'T ASK",
+                       message: "Earned couldn't reach the server, so it doesn't know "
+                                + "whether this profile exists.",
+                       detail: message,
+                       retry: true)
+            case nil:
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
@@ -37,9 +41,26 @@ struct FriendProfileView: View {
         .task { await refresh() }
     }
 
+    private func notice(title: String,
+                        message: String,
+                        detail: String? = nil,
+                        retry: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            EmptyState(title: title, message: message)
+            if let detail {
+                Text(detail).font(Theme.footnote).foregroundStyle(Theme.signal)
+            }
+            if retry {
+                Button("TRY AGAIN") { Task { await refresh() } }
+                    .buttonStyle(UnderlineButtonStyle())
+            }
+        }
+        .padding(Theme.pagePadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
     private func refresh() async {
-        profile = await social.profile(handle: handle)
-        loaded = true
+        lookup = await social.lookUpProfile(handle: handle)
     }
 
     private func card(_ profile: PublicProfile) -> some View {

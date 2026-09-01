@@ -7,7 +7,7 @@ struct OnboardingView: View {
     @EnvironmentObject private var store: EarnedStore
 
     private enum Page: Int, CaseIterable {
-        case idea, gates, hydration, restrictions, hardening, activate
+        case idea, gates, hydration, restrictions, proof, ways, hardening, activate
     }
 
     @State private var page: Page = .idea
@@ -91,6 +91,32 @@ struct OnboardingView: View {
                        + "you're ready — until you do, Earned tracks your Gates and tells you "
                        + "exactly what would be locked.")
 
+        // Health and the Overrides were both absent from onboarding, and both
+        // are things a first-time user has to know before they agree to
+        // anything: one is a permission Earned will ask for, the other is the
+        // reason agreeing is safe.
+        case .proof:
+            Screen(title: "Proving you did it",
+                   message: "A workout counts when Apple Health has it. Earned will ask to "
+                       + "read finished workouts — a run from your watch, the Fitness app, "
+                       + "or Strava synced into Health. It reads nothing else and writes "
+                       + "nothing back.\n\nPer commitment you choose whether your own word "
+                       + "counts or only a workout another app recorded. Without Health "
+                       + "access, nothing can complete a commitment — only an Override can "
+                       + "end one.")
+
+        case .ways:
+            Screen(title: "Ways out",
+                   message: "You are never trapped. Every commitment has three exits, and "
+                       + "all of them work on this phone with no signal and nobody else "
+                       + "involved:\n\nA Free Override, earned by keeping commitments on "
+                       + "time.\n\nA Solo Override, available after a wait you choose, "
+                       + "behind deliberate effort.\n\nOr asking someone you nominated to "
+                       + "release you early — the only exit that needs other people, and "
+                       + "the only one Earned's servers touch.\n\nCommitments, water, debt "
+                       + "and restrictions all live on this phone. Friends and partners "
+                       + "only ever see what you choose to share with them.")
+
         case .hardening:
             Screen(title: "Make Earned harder to escape",
                    message: "Earned enforces your Gates using Screen Time — but iOS still lets "
@@ -107,7 +133,11 @@ struct OnboardingView: View {
                    message: "Commitments can be corrected for a short window after you make them. "
                        + "After that they can get harder, never easier.\n\nMissing a deadline "
                        + "doesn't clear the obligation — it follows you until it's done or "
-                       + "overridden.")
+                       + "overridden.\n\nEverything Earned takes away, you are choosing to "
+                       + "let it take away. Every permission it asks for is yours to refuse "
+                       + "and yours to withdraw in iOS Settings at any time — and if you "
+                       + "withdraw one, Earned stops enforcing rather than pretending it "
+                       + "still can.")
         }
     }
 

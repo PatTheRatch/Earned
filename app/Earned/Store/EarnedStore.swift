@@ -16,8 +16,16 @@ final class EarnedStore: ObservableObject {
     /// Set when the domain engine refuses an event; surfaced to the user and
     /// cleared on the next successful one.
     @Published var rejection: String?
-    /// Non-nil when a saved ledger could not be replayed on launch.
+    /// Non-nil when a saved ledger could not be replayed on launch. Cleared
+    /// when the user dismisses the alert, because an alert that will not go
+    /// away is its own bug.
     @Published var loadFailure: String?
+    /// The quarantined file's name, if history was set aside this launch. Kept
+    /// after `loadFailure` is dismissed: a tester who taps OK on the alert and
+    /// then reports "all my commitments vanished" needs the diagnostics screen
+    /// to still know it happened, and to name the file that has their history
+    /// in it.
+    @Published private(set) var quarantinedHistory: String?
     @Published var hasOnboarded: Bool {
         didSet { UserDefaults.standard.set(hasOnboarded, forKey: Self.onboardedKey) }
     }
@@ -60,6 +68,7 @@ final class EarnedStore: ObservableObject {
             let location = backup.map { " Saved to \($0.lastPathComponent)." } ?? ""
             self.loadFailure = "Your saved history could not be read and was set aside.\(location) "
                 + "Starting fresh. (\(error))"
+            self.quarantinedHistory = backup?.lastPathComponent ?? "moving it aside also failed"
         }
         ticker = Timer.publish(every: 1, on: .main, in: .common)
             .autoconnect()
@@ -119,8 +128,13 @@ final class EarnedStore: ObservableObject {
         if screenTime.authorization.canShield {
             syncShield()
         } else {
-            // Holding restrictions the user can no longer manage would be a trap.
+            // Holding restrictions the user can no longer manage would be a
+            // trap — including the ones scheduled for later, which were never
+            // visible to manage in the first place. Dropping the schedules too
+            // costs nothing: `syncShield` rebuilds them from scratch whenever
+            // authorization comes back.
             screenTime.clear()
+            ShieldScheduler.clear()
         }
     }
 

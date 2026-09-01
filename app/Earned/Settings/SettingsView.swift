@@ -12,6 +12,8 @@ struct YouView: View {
     @EnvironmentObject private var store: EarnedStore
     @EnvironmentObject private var account: AccountStore
     @EnvironmentObject private var social: SocialStore
+    @EnvironmentObject private var health: HealthImporter
+    @State private var reportingProblem = false
 
     var body: some View {
         NavigationStack {
@@ -19,10 +21,36 @@ struct YouView: View {
                 PageHeader(title: "YOU")
                 identity
                 destinations
+                beta
             }
             .toolbar(.hidden, for: .navigationBar)
             .rejectionAlert()
+            .sheet(isPresented: $reportingProblem) { ReportProblemView() }
         }
+    }
+
+    // MARK: - Beta
+
+    /// The private-beta block: which build this is, and how to complain about
+    /// it. Both are the same problem — a report nobody can tie to a binary is
+    /// a report nobody can act on — so they sit together and stay obvious
+    /// rather than hiding under Advanced.
+    @ViewBuilder
+    private var beta: some View {
+        SectionLabel(text: "Beta").padding(.top, Theme.blockSpacing)
+        Button { reportingProblem = true } label: {
+            DestinationRow(title: "Report a problem")
+        }
+        .buttonStyle(.plain)
+        NavigationLink { AboutView() } label: {
+            DestinationRow(title: "About", detail: AppBuild.current.short)
+        }
+        .buttonStyle(.plain)
+        HairRule()
+        Text("Earned Beta \(AppBuild.current.short)")
+            .font(Theme.footnote)
+            .foregroundStyle(Theme.muted)
+            .padding(.top, 12)
     }
 
     // MARK: - Identity
@@ -114,6 +142,16 @@ struct YouView: View {
                                detailColor: store.shielding == .denied
                                    ? Theme.signal : Theme.muted)
             }
+            // Apple Health is the only route a finished workout has into the
+            // ledger in a release build, and until now nothing in the app said
+            // so or offered to ask for it — a commitment could sit unfinishable
+            // with no explanation anywhere on screen.
+            NavigationLink { HealthSettingsView() } label: {
+                DestinationRow(title: "Apple Health",
+                               detail: healthSummary,
+                               detailColor: health.access == .notDetermined
+                                   ? Theme.signal : Theme.muted)
+            }
             if !store.activePlans.isEmpty {
                 NavigationLink { PlansSettingsView() } label: {
                     DestinationRow(title: "Repeating plans",
@@ -172,6 +210,70 @@ struct YouView: View {
         case .denied: return "Notifications off"
         }
     }
+
+    private var healthSummary: String {
+        switch health.access {
+        case .unavailable: return "Not on this device"
+        case .notDetermined: return "Not connected"
+        case .requested: return "Connected"
+        }
+    }
+}
+
+// MARK: - Apple Health
+
+/// The only route a finished workout has into the ledger, said out loud.
+///
+/// Health hides read denials by design — an app cannot tell "denied" from "no
+/// data" — so this screen never claims to know which it is. What it can say
+/// honestly is whether Earned has asked, what happens if the answer was no,
+/// and where to change it.
+struct HealthSettingsView: View {
+    @EnvironmentObject private var health: HealthImporter
+
+    var body: some View {
+        List {
+            Section {
+                switch health.access {
+                case .unavailable:
+                    Text("This device has no Apple Health, so workouts can't be read here.")
+                        .foregroundStyle(Theme.muted)
+                case .notDetermined:
+                    Text("Earned hasn't asked for workouts yet, so nothing can complete a "
+                         + "commitment.")
+                        .foregroundStyle(Theme.signal)
+                    Button("Connect Apple Health") { Task { await health.requestAccess() } }
+                case .requested:
+                    LabeledContent("Workouts", value: "Asked for")
+                    LabeledContent("Last check", value: health.lastImport.summary)
+                }
+                if let failure = health.lastImport.failureMessage {
+                    Text(failure).font(.footnote).foregroundStyle(Theme.signal)
+                }
+            } header: {
+                Text("Workouts")
+            } footer: {
+                Text("Earned reads finished workouts and nothing else, and never writes "
+                     + "anything back. A run from your watch, the Fitness app, or Strava "
+                     + "synced into Health all arrive the same way.")
+            }
+
+            if health.access == .requested {
+                Section {
+                    Button("Open iOS Settings") { openSystemSettings() }
+                } footer: {
+                    // The honest version of "are we allowed?". Saying "granted"
+                    // here would be inventing a fact iOS refuses to give us.
+                    Text("Apple doesn't tell apps whether workout access was allowed or "
+                         + "refused — only that you were asked. If a finished workout never "
+                         + "moves a commitment, check Privacy & Security → Health → Earned. "
+                         + "Until then, a commitment can still be ended with an Override.")
+                }
+            }
+        }
+        .paperList()
+        .navigationTitle("Apple Health")
+    }
 }
 
 // MARK: - Account
@@ -180,6 +282,7 @@ struct YouView: View {
 struct AccountDetailView: View {
     @EnvironmentObject private var store: EarnedStore
     @EnvironmentObject private var account: AccountStore
+    @State private var confirmingSignOut = false
 
     var body: some View {
         List {
@@ -198,8 +301,27 @@ struct AccountDetailView: View {
             if let failure = account.syncFailure {
                 Section { Text(failure).font(.footnote).foregroundStyle(Theme.signal) }
             }
+            // Signing out is the one destructive action here that looks free
+            // and is not: it takes away every accountability route while
+            // leaving every obligation exactly where it was. Saying so is the
+            // difference between an escape hatch and a trapdoor.
             Section {
-                Button("Sign out", role: .destructive) { account.signOut() }
+                Button("Sign out", role: .destructive) { confirmingSignOut = true }
+                    .confirmationDialog("Sign out of Earned?",
+                                        isPresented: $confirmingSignOut,
+                                        titleVisibility: .visible) {
+                        Button("Sign out", role: .destructive) { account.signOut() }
+                    } message: {
+                        Text("Your commitments, debt and restrictions stay exactly as they "
+                             + "are — they live on this phone. What stops is everything "
+                             + "involving other people: partners can't be asked, approvals "
+                             + "can't arrive, and shared commitments and friends disappear "
+                             + "from this app until you sign back in. The Solo Override "
+                             + "keeps working throughout.")
+                    }
+            } footer: {
+                Text("There is no delete-account button yet. Ask Patrick and it is done by "
+                     + "hand — see Report a problem.")
             }
         }
         .paperList()
@@ -431,16 +553,19 @@ struct AdvancedView: View {
 
     var body: some View {
         List {
-            Section("Diagnostics") {
-                LabeledContent("Events recorded", value: "\(store.ledger.entries.count)")
-                LabeledContent("Commitments", value: "\(store.state.commitments.count)")
-                LabeledContent("Workouts", value: "\(store.state.workouts.count)")
+            Section {
+                NavigationLink { DiagnosticsView() } label: {
+                    LabeledContent("Diagnostics", value: "Version, permissions, sync")
+                }
+            } footer: {
+                Text("One screen with everything a bug report needs, and a button that "
+                     + "copies it.")
             }
 
             // Enforcement while Earned is closed depends on two processes
             // agreeing through a shared container, and every way that can fail
             // fails silently: the monitor wakes on time and shields nothing.
-            // These three lines are the difference between noticing that and
+            // These lines are the difference between noticing that and
             // discovering it weeks later.
             Section {
                 LabeledContent("Shared container",

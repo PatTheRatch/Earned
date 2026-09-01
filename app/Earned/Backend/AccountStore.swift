@@ -52,6 +52,12 @@ final class AccountStore: ObservableObject {
     /// asked.
     @Published private(set) var lastRequest: OverrideRequestReceipt?
     @Published private(set) var requestFailure: String?
+    /// When the envelope and grant passes last ran, for the diagnostics screen.
+    /// `syncFailure`/`grantFailure` say *what* went wrong; these say *when*,
+    /// which is the half that distinguishes a broken sync from one that has
+    /// simply never been attempted on this phone.
+    @Published private(set) var lastEnvelopeSync: SyncStamp?
+    @Published private(set) var lastGrantSync: SyncStamp?
 
     /// Shared with `SocialStore`, which rides the same session rather than
     /// holding a second one. Internal, not private, for exactly that reader.
@@ -130,6 +136,32 @@ final class AccountStore: ObservableObject {
                 }
             }
         }
+    }
+
+    /// Picks up the session left behind by the last launch.
+    ///
+    /// Sign in with Apple cannot be replayed silently — Apple hands over an
+    /// identity token only in response to a deliberate gesture — so without
+    /// this, every cold launch was signed out until the user happened to tap
+    /// the button again. That quietly broke the thing accounts exist for: a
+    /// partner's approval, a friend's request and a shared commitment's roster
+    /// all arrive on the foreground sync pass, and that pass does nothing
+    /// while signed out. The user opens Earned to find out whether they have
+    /// been let off, and Earned does not ask.
+    ///
+    /// Silent on failure. Nothing local waits on a session (S8), and a launch
+    /// with no network should look like the signed-out launch it already
+    /// looked like, not like something went wrong.
+    func restoreSession() async {
+        guard let client, case .signedOut = session else { return }
+        guard let displayName = UserDefaults.standard.string(forKey: Self.displayNameKey),
+              let appleUserID else { return }
+        guard (try? await client.restoreSession()) == true else { return }
+        session = .signedIn(displayName: displayName)
+        // The account row is the server's own idempotent upsert, and running
+        // it here keeps a restored session indistinguishable from a fresh
+        // sign-in for everything downstream.
+        _ = try? await client.ensureAccount(appleUserID: appleUserID, displayName: displayName)
     }
 
     func signOut() {
@@ -286,6 +318,7 @@ final class AccountStore: ObservableObject {
         }
         storage.save(registry)
         syncFailure = failure
+        lastEnvelopeSync = failure.map { SyncStamp.failed($0) } ?? .succeeded()
     }
 
     /// A new version only when the server already acknowledged an earlier one;
@@ -442,7 +475,71 @@ final class AccountStore: ObservableObject {
         let outcome = await GrantSync(client: client, store: grants).run(policyDigests: digests)
         heldGrants = outcome.held
         grantFailure = outcome.failure ?? outcome.refused.first
+        lastGrantSync = grantFailure.map { SyncStamp.failed($0) } ?? .succeeded()
         return outcome.verified
+    }
+
+    // MARK: - Standing the partners down
+
+    /// Tells the server a request stopped mattering, so the people who were
+    /// asked hear about it (migration 0020).
+    ///
+    /// The ledger already refuses a stale grant — a partner tapping approve
+    /// after the workout landed cannot reopen a resolved commitment (§12) — so
+    /// this is not a correctness fix. It is the courtesy half: without it, a
+    /// friend who was texted at 7am is still holding a live-looking link at
+    /// lunchtime, and the first thing a beta tester's partner learns about
+    /// Earned is that it wastes their attention.
+    ///
+    /// Safe to call repeatedly: the server no-ops for a commitment nobody
+    /// asked about, and closed ids are remembered locally so the ordinary
+    /// foreground pass does not re-send.
+    func closeResolvedRequests(in state: EarnedState) async {
+        guard let client, case .signedIn = session else { return }
+        var closed = Self.closedRequestIDs
+
+        for request in state.overrideRequests.values {
+            guard !closed.contains(request.id.uuidString) else { continue }
+            // A request the partners themselves resolved needs no telling.
+            guard request.grantedKind != .accountability else { continue }
+            guard let outcome = Self.closureOutcome(
+                for: state.commitments[request.commitmentID]?.resolution,
+                grantedKind: request.grantedKind) else { continue }
+            do {
+                try await client.closeOverrideRequest(commitmentID: request.commitmentID,
+                                                     outcome: outcome)
+                closed.insert(request.id.uuidString)
+            } catch {
+                // Nothing local depends on this landing, and retrying next
+                // foreground costs one request. Recorded rather than shown:
+                // the user did not ask for it and cannot act on it.
+                syncFailure = syncFailure ?? error.localizedDescription
+            }
+        }
+        Self.closedRequestIDs = closed
+    }
+
+    /// `moot` when the commitment was actually met or overridden away, so the
+    /// partner is told "no action needed"; `cancelled` when the user withdrew
+    /// the commitment itself. Nil while it is still live — an open request on
+    /// an open commitment is exactly the request the partners should keep.
+    private static func closureOutcome(for resolution: CommitmentResolution?,
+                                       grantedKind: OverrideKind?) -> String? {
+        switch resolution {
+        case .completed: return "moot"
+        case .overridden: return grantedKind == .accountability ? nil : "moot"
+        case .cancelled: return "cancelled"
+        case nil: return nil
+        }
+    }
+
+    /// A cache, not a record: losing it costs one redundant no-op call per
+    /// request, and the server is idempotent about exactly that.
+    private static let closedRequestsKey = "earned.closedOverrideRequests"
+
+    private static var closedRequestIDs: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: closedRequestsKey) ?? []) }
+        set { UserDefaults.standard.set(Array(newValue), forKey: closedRequestsKey) }
     }
 
     /// Called back once the ledger has accepted a grant's event.

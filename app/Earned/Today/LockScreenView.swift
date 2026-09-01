@@ -13,7 +13,14 @@ struct LockScreenView: View {
             if store.access.isFullAccess {
                 earned
             } else {
-                locked(store.access.lockReasons)
+                // A stack, so the notice can lead somewhere. This screen used
+                // to be a dead end with a CLOSE button: it named every Gate
+                // holding the phone shut and offered no route to the ways out
+                // of any of them. Someone who opens this at 11pm because they
+                // cannot get into an app is exactly the person who must not
+                // have to remember that overrides live two taps away on
+                // another tab (NORTHSTAR §19, §22).
+                NavigationStack { locked(store.access.lockReasons) }
             }
         }
     }
@@ -58,19 +65,7 @@ struct LockScreenView: View {
 
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(reasons.enumerated()), id: \.offset) { _, reason in
-                    VStack(alignment: .leading, spacing: 0) {
-                        Rectangle().fill(Theme.paper).frame(height: 3)
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(headline(for: reason))
-                                .font(.system(size: 16, weight: .bold))
-                            Spacer()
-                            Text(detail(for: reason))
-                                .font(.system(size: 13, weight: .bold))
-                                .tracking(1)
-                        }
-                        .foregroundStyle(Theme.paper)
-                        .padding(.vertical, 13)
-                    }
+                    reasonRow(reason)
                 }
                 Rectangle().fill(Theme.paper).frame(height: 3)
             }
@@ -82,7 +77,9 @@ struct LockScreenView: View {
                 Text("THE DEAL STILL STANDS.")
                     .font(Theme.display(24))
                     .foregroundStyle(Theme.paper)
-                Text("You set this one.")
+                Text(hasCommitmentReason(reasons)
+                     ? "You set this one. Tap a line above for its ways out."
+                     : "You set this one.")
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.paper.opacity(0.8))
             }
@@ -94,6 +91,53 @@ struct LockScreenView: View {
         .padding(28)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .background(Theme.signal)
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    /// One closed Gate. A commitment leads to its own deal — and its ways out;
+    /// hydration leads nowhere, because a glass of water is the only way out
+    /// of hydration and there is nothing to negotiate.
+    @ViewBuilder
+    private func reasonRow(_ reason: LockReason) -> some View {
+        switch reason.gate {
+        case .commitment(let id):
+            NavigationLink {
+                CommitmentDetailView(commitmentID: id)
+            } label: {
+                rowBody(reason, chevron: true)
+            }
+            .buttonStyle(.plain)
+        case .hydration:
+            rowBody(reason, chevron: false)
+        }
+    }
+
+    private func rowBody(_ reason: LockReason, chevron: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Rectangle().fill(Theme.paper).frame(height: 3)
+            HStack(alignment: .firstTextBaseline) {
+                Text(headline(for: reason))
+                    .font(.system(size: 16, weight: .bold))
+                Spacer()
+                Text(detail(for: reason))
+                    .font(.system(size: 13, weight: .bold))
+                    .tracking(1)
+                if chevron {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+            }
+            .foregroundStyle(Theme.paper)
+            .padding(.vertical, 13)
+        }
+        .contentShape(Rectangle())
+    }
+
+    private func hasCommitmentReason(_ reasons: [LockReason]) -> Bool {
+        reasons.contains { reason in
+            if case .commitment = reason.gate { return true }
+            return false
+        }
     }
 
     private func headline(for reason: LockReason) -> String {
@@ -214,11 +258,18 @@ struct OverrideMenu: View {
                 Text("An approval arrived that this app cannot verify yet. "
                      + "Retrying after the next key refresh.")
             } else if let receipt = account.lastRequest, receipt.partnersNotified > 0 {
+                // "Asked" is what the server did; it is not the same as "they
+                // have seen it". Push is not delivered yet (docs/deployment.md
+                // §6), so an Earned-user partner finds the ask the next time
+                // they open the app — which can be hours. Saying so is the
+                // difference between waiting and wondering whether it worked.
                 Text("Asked \(receipt.partnersNotified) "
                      + "\(receipt.partnersNotified == 1 ? "partner" : "partners"). "
-                     + "Waiting to hear back.")
+                     + "They'll see it next time they open Earned — nudge them "
+                     + "if it's urgent.")
             } else if account.hasAccountabilityRoute(for: record.commitment.id) {
-                Text("Waiting to hear back from your partners.")
+                Text("Waiting to hear back from your partners. They see it when they "
+                     + "next open Earned.")
             } else {
                 Text("No accountability route on this commitment; "
                      + "the solo route is the only one that ends in an unlock.")

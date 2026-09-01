@@ -34,6 +34,12 @@ final class SocialStore: ObservableObject {
     /// The last thing that went wrong, in the server's own words. Cleared by
     /// the next successful call.
     @Published var failure: String?
+    /// When the social pass last ran, and whether it worked. `failure` says
+    /// what broke; this says whether anything has been attempted at all, which
+    /// is the difference between "no friends yet" and "never reached the
+    /// server" — indistinguishable on screen, and the first thing a beta
+    /// report needs to separate.
+    @Published private(set) var lastSync: SyncStamp?
     /// Set once when a fresh sign-in finds no profile, so the setup flow can
     /// be offered immediately rather than waiting to be discovered in a tab.
     @Published var setupOffered = false
@@ -137,6 +143,18 @@ final class SocialStore: ObservableObject {
     /// Re-encodes whatever the picker produced and uploads the derivative.
     /// The original bytes never leave this method (docs/social-architecture.md
     /// §6.1); the replaced object is deleted once the pointer has moved.
+    /// Picked a photo, and the photo never arrived.
+    ///
+    /// `loadTransferable` fails on an iCloud original that will not download
+    /// and on a format the picker offers but cannot hand over. Both used to be
+    /// swallowed by a `try?` in the view: the user chose a picture, watched the
+    /// sheet close, and nothing whatsoever happened — indistinguishable from a
+    /// tap that missed.
+    func avatarCouldNotBeRead() {
+        failure = "That photo couldn't be read — it may still be in iCloud. "
+            + "Try one that's on the phone."
+    }
+
     func setAvatar(pickedData: Data) async {
         guard let client else { return }
         do {
@@ -190,8 +208,10 @@ final class SocialStore: ObservableObject {
             requests = try await client.loadFriendRequests()
             blocked = try await client.loadBlocked()
             failure = nil
+            lastSync = .succeeded()
         } catch {
             failure = error.localizedDescription
+            lastSync = .failed(error.localizedDescription)
         }
     }
 
@@ -236,6 +256,33 @@ final class SocialStore: ObservableObject {
     func profile(handle: String) async -> PublicProfile? {
         guard let client else { return nil }
         return try? await client.loadProfile(handle: handle)
+    }
+
+    /// The three answers a profile lookup can actually have.
+    ///
+    /// `profile(handle:)` collapses the last two, which is wrong on a screen:
+    /// "no such person" and "we could not ask" look identical and mean
+    /// opposite things. A friend whose phone is on a bad train connection must
+    /// not read as a friend who blocked you.
+    enum ProfileLookup: Equatable {
+        case found(PublicProfile)
+        /// Not found — deliberately also the answer for blocked and
+        /// undiscoverable (§5.3). The server does not distinguish them and
+        /// neither may this.
+        case notFound
+        case failed(String)
+    }
+
+    func lookUpProfile(handle: String) async -> ProfileLookup {
+        guard let client else { return .failed("Sign in to look up profiles.") }
+        do {
+            guard let profile = try await client.loadProfile(handle: handle) else {
+                return .notFound
+            }
+            return .found(profile)
+        } catch {
+            return .failed(error.localizedDescription)
+        }
     }
 
     // MARK: - Commitment sharing (docs/social-architecture.md §7, §9)

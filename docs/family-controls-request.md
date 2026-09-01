@@ -86,7 +86,8 @@ device's own clock, so an outage on our side can never extend a restriction.
 
 **Shields fail open when authorization goes away.** If Screen Time permission is revoked,
 Earned drops every shield rather than continuing to act on stale authority
-(`ScreenTimeController.clearShields`).
+(`ScreenTimeController.clear()`, called from `EarnedStore.refreshShielding()` on launch and
+on every return to the foreground).
 
 ## 4. Draft answers
 
