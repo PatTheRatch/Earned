@@ -282,6 +282,7 @@ struct HealthSettingsView: View {
 struct AccountDetailView: View {
     @EnvironmentObject private var store: EarnedStore
     @EnvironmentObject private var account: AccountStore
+    @State private var confirmingSignOut = false
 
     var body: some View {
         List {
@@ -300,8 +301,27 @@ struct AccountDetailView: View {
             if let failure = account.syncFailure {
                 Section { Text(failure).font(.footnote).foregroundStyle(Theme.signal) }
             }
+            // Signing out is the one destructive action here that looks free
+            // and is not: it takes away every accountability route while
+            // leaving every obligation exactly where it was. Saying so is the
+            // difference between an escape hatch and a trapdoor.
             Section {
-                Button("Sign out", role: .destructive) { account.signOut() }
+                Button("Sign out", role: .destructive) { confirmingSignOut = true }
+                    .confirmationDialog("Sign out of Earned?",
+                                        isPresented: $confirmingSignOut,
+                                        titleVisibility: .visible) {
+                        Button("Sign out", role: .destructive) { account.signOut() }
+                    } message: {
+                        Text("Your commitments, debt and restrictions stay exactly as they "
+                             + "are — they live on this phone. What stops is everything "
+                             + "involving other people: partners can't be asked, approvals "
+                             + "can't arrive, and shared commitments and friends disappear "
+                             + "from this app until you sign back in. The Solo Override "
+                             + "keeps working throughout.")
+                    }
+            } footer: {
+                Text("There is no delete-account button yet. Ask Patrick and it is done by "
+                     + "hand — see Report a problem.")
             }
         }
         .paperList()

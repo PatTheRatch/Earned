@@ -246,6 +246,33 @@ final class SocialStore: ObservableObject {
         return try? await client.loadProfile(handle: handle)
     }
 
+    /// The three answers a profile lookup can actually have.
+    ///
+    /// `profile(handle:)` collapses the last two, which is wrong on a screen:
+    /// "no such person" and "we could not ask" look identical and mean
+    /// opposite things. A friend whose phone is on a bad train connection must
+    /// not read as a friend who blocked you.
+    enum ProfileLookup: Equatable {
+        case found(PublicProfile)
+        /// Not found — deliberately also the answer for blocked and
+        /// undiscoverable (§5.3). The server does not distinguish them and
+        /// neither may this.
+        case notFound
+        case failed(String)
+    }
+
+    func lookUpProfile(handle: String) async -> ProfileLookup {
+        guard let client else { return .failed("Sign in to look up profiles.") }
+        do {
+            guard let profile = try await client.loadProfile(handle: handle) else {
+                return .notFound
+            }
+            return .found(profile)
+        } catch {
+            return .failed(error.localizedDescription)
+        }
+    }
+
     // MARK: - Commitment sharing (docs/social-architecture.md §7, §9)
 
     func isShared(_ commitmentID: UUID) -> Bool { sharing.isShared(commitmentID) }
