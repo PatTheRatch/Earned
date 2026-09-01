@@ -55,6 +55,26 @@ struct Partner: Identifiable, Equatable, Sendable {
         case earnedUser = "earned_user"
     }
 
+    /// Whether an invitation to someone who is *not* on Earned can actually
+    /// reach them.
+    ///
+    /// The server half is built and tested: `nominate_partner` normalises,
+    /// encrypts and blind-indexes the address, composes the invitation and
+    /// queues it. What does not exist is the last two steps — nothing drains
+    /// `message_outbox` (docs/deployment.md §6), and the consent page the
+    /// queued link points at has no function behind it. So the invitation is
+    /// written, no message is sent, and the partner sits at "awaiting consent"
+    /// permanently.
+    ///
+    /// Offering the form anyway would be the app's worst kind of lie: a user
+    /// texts their mother's number into it, is told she will get one message,
+    /// and builds a commitment on a route that was never going to open. Worse
+    /// than absent, because absent is honest.
+    ///
+    /// Flip this to `true` in the same change that lands the drainer and the
+    /// consent page, not before.
+    static let contactInvitationsDeliverable = false
+
     let id: UUID
     let displayName: String
     let channel: Channel
