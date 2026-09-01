@@ -20,6 +20,7 @@ struct ProfileSetupView: View {
     @State private var city = ""
     @State private var photoItem: PhotosPickerItem?
     @State private var photoData: Data?
+    @State private var photoFailure: String?
     @State private var saving = false
 
     var body: some View {
@@ -96,9 +97,24 @@ struct ProfileSetupView: View {
                             .font(.headline)
                     }
                 }
+                if let failure = photoFailure {
+                    Text(failure).font(.footnote).foregroundStyle(Theme.signal)
+                }
             }
             .onChange(of: photoItem) { _, item in
-                Task { photoData = try? await item?.loadTransferable(type: Data.self) }
+                guard let item else { return }
+                Task {
+                    // An iCloud original that will not download fails here, and
+                    // a `try?` alone would leave the placeholder sitting there
+                    // looking like a tap that missed.
+                    if let data = try? await item.loadTransferable(type: Data.self) {
+                        photoData = data
+                        photoFailure = nil
+                    } else {
+                        photoFailure = "That photo couldn't be read — it may still be in "
+                            + "iCloud. Try one that's on the phone, or skip this."
+                    }
+                }
             }
 
         case .city:

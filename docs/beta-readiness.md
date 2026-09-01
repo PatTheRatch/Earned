@@ -415,8 +415,13 @@ refusals are passed through deliberately — PostgREST messages here are written
 ("this contract has hardened; its accountability terms are frozen") and are better than
 anything a generic handler would substitute.
 
+A fourth was found while auditing permissions: a picked avatar that could not be loaded —
+an iCloud original that will not download — was swallowed by a `try?` in both profile
+screens. The sheet closed and nothing happened, indistinguishable from a tap that missed.
+Both now say what went wrong.
+
 **Still needs a device:** expired auth (now handled by the refresh added in B‑9, unproven),
-avatar upload failure, and malformed responses. **Requires:** device testing with a second
+avatar *upload* failure, and malformed responses. **Requires:** device testing with a second
 account and a deliberately broken network.
 
 ## R‑3 · Observability
@@ -476,7 +481,7 @@ afterwards, what the app does and what happens if they want out. Their answer is
 | HealthKit | You → Apple Health shows the state; an unfinishable commitment says so on its own screen (R‑1). |
 | Notifications | Warnings stop; Gates are unaffected. Re-read on every foreground. |
 | Sign in with Apple cancelled | Everything local keeps working. Cancellation is not treated as an error. |
-| Photos | **Not audited.** Avatar picking uses PhotosUI; the denial path has not been walked. |
+| Photos | **No denial path exists.** `PhotosPicker` runs out of process, so Earned never sees the library and iOS never asks — which is also why there is no `NSPhotoLibraryUsageDescription` and there should not be. What *did* exist was a silent failure next door: a picked photo that would not load (an iCloud original that will not download) was swallowed by a `try?`, the sheet closed, and nothing happened. Both pickers now say so. |
 
 **Requires:** device testing for all five, and a code read for Photos.
 
@@ -673,8 +678,13 @@ Only then: one tester, who is in the same building as you.
    that is not yours.
 4. Confirm the **ledger survives an upgrade** (B‑5) — install the previous build, make a
    commitment, upgrade, check nothing moved.
-5. Watch the rate limits with real traffic: three override requests per day per account, and
-   the Worker's per-IP cap.
+5. Watch the rate limits with real traffic. **Three override requests per account per day**
+   (`private.max_requests_per_day`) and **five partner nominations**
+   (`private.max_nominations_per_day`); the Worker adds roughly 20 requests per minute per IP
+   on approval links. Three is tight for a tester who is deliberately exercising the escape
+   routes — the script asks for two, and a retry after a failure spends a third. The fourth
+   ask is refused with "too many override requests today", which reads like a bug to someone
+   testing. Either brief them, or raise the cap for the beta and put it back afterwards.
 6. Have a **support answer ready** for the two questions that will come: "how do I get out
    of this" and "how do I delete my account". The first is in the script. The second is
    "message Patrick", and there is no button.

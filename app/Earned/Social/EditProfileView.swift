@@ -134,6 +134,8 @@ struct EditProfileView: View {
             Task {
                 if let data = try? await item.loadTransferable(type: Data.self) {
                     await social.setAvatar(pickedData: data)
+                } else {
+                    social.avatarCouldNotBeRead()
                 }
                 photoItem = nil
             }

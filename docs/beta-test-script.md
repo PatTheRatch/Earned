@@ -209,6 +209,9 @@ Not worth reporting — but tell us if any of them is worse than described:
 - **Turning off Screen Time access in iOS Settings turns enforcement off.** No app can
   prevent that. Earned notices the next time you open it and stops claiming to enforce.
 - **There is no delete-account button.** Ask and it gets done by hand.
+- **Three override requests a day.** A fourth is refused with "too many override requests
+  today". That is a deliberate limit, not a fault — but if you hit it while testing and it
+  got in your way, say so, because that is useful to know.
 
 ## If you get stuck
 

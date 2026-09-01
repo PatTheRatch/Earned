@@ -143,6 +143,18 @@ final class SocialStore: ObservableObject {
     /// Re-encodes whatever the picker produced and uploads the derivative.
     /// The original bytes never leave this method (docs/social-architecture.md
     /// §6.1); the replaced object is deleted once the pointer has moved.
+    /// Picked a photo, and the photo never arrived.
+    ///
+    /// `loadTransferable` fails on an iCloud original that will not download
+    /// and on a format the picker offers but cannot hand over. Both used to be
+    /// swallowed by a `try?` in the view: the user chose a picture, watched the
+    /// sheet close, and nothing whatsoever happened — indistinguishable from a
+    /// tap that missed.
+    func avatarCouldNotBeRead() {
+        failure = "That photo couldn't be read — it may still be in iCloud. "
+            + "Try one that's on the phone."
+    }
+
     func setAvatar(pickedData: Data) async {
         guard let client else { return }
         do {
