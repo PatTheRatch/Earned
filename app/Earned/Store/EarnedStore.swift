@@ -128,8 +128,13 @@ final class EarnedStore: ObservableObject {
         if screenTime.authorization.canShield {
             syncShield()
         } else {
-            // Holding restrictions the user can no longer manage would be a trap.
+            // Holding restrictions the user can no longer manage would be a
+            // trap — including the ones scheduled for later, which were never
+            // visible to manage in the first place. Dropping the schedules too
+            // costs nothing: `syncShield` rebuilds them from scratch whenever
+            // authorization comes back.
             screenTime.clear()
+            ShieldScheduler.clear()
         }
     }
 
