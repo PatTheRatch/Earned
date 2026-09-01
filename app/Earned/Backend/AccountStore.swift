@@ -52,6 +52,12 @@ final class AccountStore: ObservableObject {
     /// asked.
     @Published private(set) var lastRequest: OverrideRequestReceipt?
     @Published private(set) var requestFailure: String?
+    /// When the envelope and grant passes last ran, for the diagnostics screen.
+    /// `syncFailure`/`grantFailure` say *what* went wrong; these say *when*,
+    /// which is the half that distinguishes a broken sync from one that has
+    /// simply never been attempted on this phone.
+    @Published private(set) var lastEnvelopeSync: SyncStamp?
+    @Published private(set) var lastGrantSync: SyncStamp?
 
     /// Shared with `SocialStore`, which rides the same session rather than
     /// holding a second one. Internal, not private, for exactly that reader.
@@ -286,6 +292,7 @@ final class AccountStore: ObservableObject {
         }
         storage.save(registry)
         syncFailure = failure
+        lastEnvelopeSync = failure.map { SyncStamp.failed($0) } ?? .succeeded()
     }
 
     /// A new version only when the server already acknowledged an earlier one;
@@ -442,6 +449,7 @@ final class AccountStore: ObservableObject {
         let outcome = await GrantSync(client: client, store: grants).run(policyDigests: digests)
         heldGrants = outcome.held
         grantFailure = outcome.failure ?? outcome.refused.first
+        lastGrantSync = grantFailure.map { SyncStamp.failed($0) } ?? .succeeded()
         return outcome.verified
     }
 

@@ -31,6 +31,13 @@ struct EarnedApp: App {
             // foreground rather than trusting what we saw at launch.
             guard phase == .active else { return }
             Task { await store.refreshWarnings() }
+            // Screen Time authorization can be revoked in iOS Settings while
+            // Earned isn't running, and iOS never tells a backgrounded app that
+            // it happened (NORTHSTAR §33). Launch was the only moment this was
+            // re-read, so a revocation mid-session left the app claiming to
+            // enforce for as long as the process lived — and left stale
+            // DeviceActivity schedules registered behind it.
+            store.refreshShielding()
             // Health first, before anything network: a run finished ten
             // minutes ago should resolve its Gate here and now, not after a
             // round trip — and a Gate resolved locally is one less override

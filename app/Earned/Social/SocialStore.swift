@@ -34,6 +34,12 @@ final class SocialStore: ObservableObject {
     /// The last thing that went wrong, in the server's own words. Cleared by
     /// the next successful call.
     @Published var failure: String?
+    /// When the social pass last ran, and whether it worked. `failure` says
+    /// what broke; this says whether anything has been attempted at all, which
+    /// is the difference between "no friends yet" and "never reached the
+    /// server" — indistinguishable on screen, and the first thing a beta
+    /// report needs to separate.
+    @Published private(set) var lastSync: SyncStamp?
     /// Set once when a fresh sign-in finds no profile, so the setup flow can
     /// be offered immediately rather than waiting to be discovered in a tab.
     @Published var setupOffered = false
@@ -190,8 +196,10 @@ final class SocialStore: ObservableObject {
             requests = try await client.loadFriendRequests()
             blocked = try await client.loadBlocked()
             failure = nil
+            lastSync = .succeeded()
         } catch {
             failure = error.localizedDescription
+            lastSync = .failed(error.localizedDescription)
         }
     }
 

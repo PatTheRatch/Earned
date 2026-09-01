@@ -12,6 +12,8 @@ struct YouView: View {
     @EnvironmentObject private var store: EarnedStore
     @EnvironmentObject private var account: AccountStore
     @EnvironmentObject private var social: SocialStore
+    @EnvironmentObject private var health: HealthImporter
+    @State private var reportingProblem = false
 
     var body: some View {
         NavigationStack {
@@ -19,10 +21,36 @@ struct YouView: View {
                 PageHeader(title: "YOU")
                 identity
                 destinations
+                beta
             }
             .toolbar(.hidden, for: .navigationBar)
             .rejectionAlert()
+            .sheet(isPresented: $reportingProblem) { ReportProblemView() }
         }
+    }
+
+    // MARK: - Beta
+
+    /// The private-beta block: which build this is, and how to complain about
+    /// it. Both are the same problem — a report nobody can tie to a binary is
+    /// a report nobody can act on — so they sit together and stay obvious
+    /// rather than hiding under Advanced.
+    @ViewBuilder
+    private var beta: some View {
+        SectionLabel(text: "Beta").padding(.top, Theme.blockSpacing)
+        Button { reportingProblem = true } label: {
+            DestinationRow(title: "Report a problem")
+        }
+        .buttonStyle(.plain)
+        NavigationLink { AboutView() } label: {
+            DestinationRow(title: "About", detail: AppBuild.current.short)
+        }
+        .buttonStyle(.plain)
+        HairRule()
+        Text("Earned Beta \(AppBuild.current.short)")
+            .font(Theme.footnote)
+            .foregroundStyle(Theme.muted)
+            .padding(.top, 12)
     }
 
     // MARK: - Identity
@@ -431,16 +459,19 @@ struct AdvancedView: View {
 
     var body: some View {
         List {
-            Section("Diagnostics") {
-                LabeledContent("Events recorded", value: "\(store.ledger.entries.count)")
-                LabeledContent("Commitments", value: "\(store.state.commitments.count)")
-                LabeledContent("Workouts", value: "\(store.state.workouts.count)")
+            Section {
+                NavigationLink { DiagnosticsView() } label: {
+                    LabeledContent("Diagnostics", value: "Version, permissions, sync")
+                }
+            } footer: {
+                Text("One screen with everything a bug report needs, and a button that "
+                     + "copies it.")
             }
 
             // Enforcement while Earned is closed depends on two processes
             // agreeing through a shared container, and every way that can fail
             // fails silently: the monitor wakes on time and shields nothing.
-            // These three lines are the difference between noticing that and
+            // These lines are the difference between noticing that and
             // discovering it weeks later.
             Section {
                 LabeledContent("Shared container",
