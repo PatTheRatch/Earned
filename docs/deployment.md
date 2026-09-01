@@ -19,7 +19,7 @@ day you want another human to receive a message.
 | 4 | [The app's own config](#4-the-apps-config) | The app reaching the backend |
 | 5 | [Domain and the partner page](#5-the-domain-and-the-partner-page) | A partner opening a link |
 | 6 | [Sending messages](#6-sending-messages) | A partner *receiving* a link |
-| 7 | [Scheduled jobs](#7-scheduled-jobs-optional) | Tidiness, not correctness |
+| 7 | [Scheduled jobs](#7-scheduled-jobs-one-of-them-load-bearing) | Tidiness — and the shared-start event |
 
 ---
 
@@ -533,11 +533,17 @@ with whoever is billing you.
 
 ---
 
-## 7. Scheduled jobs (optional)
+## 7. Scheduled jobs (one of them load-bearing)
 
-Three housekeeping functions. None is load-bearing — expiry and the receipt window are
-recomputed wherever they are read, and request creation retires anything elapsed on its way
-past — so these keep stored state tidy rather than keeping the system correct.
+Five functions: four housekeeping, one not. The housekeeping four are not load-bearing —
+expiry and the receipt window are recomputed wherever they are read, and request creation
+retires anything elapsed on its way past — so they keep stored state tidy rather than
+keeping the system correct.
+
+**`announce-shared-starts` is the exception**, and the reason this section is no longer
+titled "optional": nothing else ever emits the `shared_started` event, so leaving that one
+unscheduled would not make the database untidy, it would make a feature silently not
+happen.
 
 ```sh
 psql "$DB" -c "
@@ -566,6 +572,13 @@ relocates pg_cron to `pg_catalog` regardless of the `with schema extensions` cla
 the clause is accepted, the extension picks its own home, and `cron.schedule` works the
 same either way.
 
+**Check what is actually scheduled.** The failure mode here is a job nobody ever created,
+which from the outside looks exactly like a quiet week:
+
+```sh
+psql "$DB" -c "select jobname, schedule, active from cron.job order by jobname;"
+```
+
 ---
 
 ## 8. Social (Milestone S1)
@@ -581,6 +594,19 @@ stored fact is one timestamp the switch itself deletes).
 verified by SQL the same day — except the two-device pass, which still needs real phones.
 **`0019` (earned-user partners) is applied to the hosted project (1 September 2026)** —
 it went up by the same road as the rest, and needs no bucket, cron, or dashboard step.
+
+Verified independently from outside the database, with only the publishable key — worth
+recording because it is a check anyone can repeat without the connection string. PostgREST
+distinguishes a function that exists and refuses `anon` (`401`, SQLSTATE `42501`) from one
+that is not there at all (`404`, `PGRST202`), so one RPC probe per migration proves it
+landed: `my_partner_requests` (0019), `close_override_request` (0020),
+`my_shared_commitments` and `my_shared_invitations` (0021), `register_push_token`,
+`announce_shared_starts` and `purge_shared_commitments` (0022) all answered `42501`,
+against a control of a made-up name answering `PGRST202`. The four new tables —
+`shared_commitment_agreement`, `shared_commitment_participant`, `push_device`,
+`push_outbox` — each refuse an anonymous read with `42501`, matching `profile` and
+`social_event`. That every new function answered at all also confirms the
+`notify pgrst, 'reload schema'` step landed.
 
 **`0020`–`0022` are applied to the hosted project (1 September 2026).** `0020` (close an
 override request when it stops mattering) needs nothing special. `0021`/`0022` are Shared
