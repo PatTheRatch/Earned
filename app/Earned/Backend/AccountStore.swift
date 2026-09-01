@@ -453,6 +453,69 @@ final class AccountStore: ObservableObject {
         return outcome.verified
     }
 
+    // MARK: - Standing the partners down
+
+    /// Tells the server a request stopped mattering, so the people who were
+    /// asked hear about it (migration 0020).
+    ///
+    /// The ledger already refuses a stale grant — a partner tapping approve
+    /// after the workout landed cannot reopen a resolved commitment (§12) — so
+    /// this is not a correctness fix. It is the courtesy half: without it, a
+    /// friend who was texted at 7am is still holding a live-looking link at
+    /// lunchtime, and the first thing a beta tester's partner learns about
+    /// Earned is that it wastes their attention.
+    ///
+    /// Safe to call repeatedly: the server no-ops for a commitment nobody
+    /// asked about, and closed ids are remembered locally so the ordinary
+    /// foreground pass does not re-send.
+    func closeResolvedRequests(in state: EarnedState) async {
+        guard let client, case .signedIn = session else { return }
+        var closed = Self.closedRequestIDs
+
+        for request in state.overrideRequests.values {
+            guard !closed.contains(request.id.uuidString) else { continue }
+            // A request the partners themselves resolved needs no telling.
+            guard request.grantedKind != .accountability else { continue }
+            guard let outcome = Self.closureOutcome(
+                for: state.commitments[request.commitmentID]?.resolution,
+                grantedKind: request.grantedKind) else { continue }
+            do {
+                try await client.closeOverrideRequest(commitmentID: request.commitmentID,
+                                                     outcome: outcome)
+                closed.insert(request.id.uuidString)
+            } catch {
+                // Nothing local depends on this landing, and retrying next
+                // foreground costs one request. Recorded rather than shown:
+                // the user did not ask for it and cannot act on it.
+                syncFailure = syncFailure ?? error.localizedDescription
+            }
+        }
+        Self.closedRequestIDs = closed
+    }
+
+    /// `moot` when the commitment was actually met or overridden away, so the
+    /// partner is told "no action needed"; `cancelled` when the user withdrew
+    /// the commitment itself. Nil while it is still live — an open request on
+    /// an open commitment is exactly the request the partners should keep.
+    private static func closureOutcome(for resolution: CommitmentResolution?,
+                                       grantedKind: OverrideKind?) -> String? {
+        switch resolution {
+        case .completed: return "moot"
+        case .overridden: return grantedKind == .accountability ? nil : "moot"
+        case .cancelled: return "cancelled"
+        case nil: return nil
+        }
+    }
+
+    /// A cache, not a record: losing it costs one redundant no-op call per
+    /// request, and the server is idempotent about exactly that.
+    private static let closedRequestsKey = "earned.closedOverrideRequests"
+
+    private static var closedRequestIDs: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: closedRequestsKey) ?? []) }
+        set { UserDefaults.standard.set(Array(newValue), forKey: closedRequestsKey) }
+    }
+
     /// Called back once the ledger has accepted a grant's event.
     func recordReceipt(for verified: GrantSync.Verified) {
         guard let client else { return }

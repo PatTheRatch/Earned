@@ -521,6 +521,19 @@ actor BackendClient {
         return try OverrideRequestReceipt(json: await rpc("create_override_request", params))
     }
 
+    /// Tell the server this account's open request for a commitment has stopped
+    /// mattering, so its partners are stood down (migration 0020).
+    ///
+    /// `outcome` is `moot` (the commitment resolved) or `cancelled` (the user
+    /// withdrew it); the server refuses anything else. A commitment with no
+    /// open request is a no-op rather than an error, which is what makes this
+    /// safe to call from an idempotent foreground pass.
+    func closeOverrideRequest(commitmentID: UUID, outcome: String) async throws {
+        _ = try await rpc("close_override_request",
+                          ["p_commitment_id": commitmentID.uuidString,
+                           "p_outcome": outcome])
+    }
+
     /// The published key set, with the root signature beside it.
     ///
     /// Deliberately callable signed out: it is public by design (§10.2), and

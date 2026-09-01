@@ -80,6 +80,11 @@ struct EarnedApp: App {
                 // commitment whose envelope has not synced yet has nothing to
                 // check against and its grant would be held for no reason.
                 await applyGrants()
+                // And after the grants, because a grant is the one resolution
+                // that needs no telling — the server decided it. Everything
+                // else that closed a request while partners were still being
+                // asked stands them down here (migration 0020).
+                await account.closeResolvedRequests(in: store.ledger.state)
             }
         }
     }
