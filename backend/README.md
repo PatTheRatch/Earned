@@ -41,6 +41,9 @@ no authority over anything above and is read by nothing above.
 | `migrations/0017` | Streak figures (`social_streaks`), the sharing-switch RPC that withdraws what it stops sharing, `friend_activity` behind its 30-day horizon, and the purge that deletes behind the same number |
 | `migrations/0018` | Check-in sharing: one timestamp, stored only while shared, surfaced to friends as whole days past 72 hours — never a live status, never a motive |
 | `migrations/0019` | Earned-user partners (S18/S19): account-linked identity, nomination through friendship, in-app consent and in-app voting through the same snapshot and vote transaction as the web page, and the block rule that revokes accountability both ways |
+| `migrations/0020` | `close_override_request`: the writer for the terminal states 0009 reserved, so a link stops being approvable once the requester finished or withdrew (§12) |
+| `migrations/0021` | Shared Commitments (NORTHSTAR §46): the agreement and the participant row that doubles as the invitation, acceptance only ever from the invitee's own session, self-reported roster progress, and the block rule that withdraws unanswered asks without touching an obligation |
+| `migrations/0022` | Shared-commitment follow-ups: creator deletion orphans rather than dissolves, the five roster event kinds on the Recent shelf, and the push outbox whose vocabulary is the allow-list — commitment-relevant asks only |
 | [`supabase/functions/approval/`](../supabase/functions/approval/) | The partner page: a server-rendered edge function over those two functions (§18). It lives beside `supabase/config.toml` because that is where the CLI looks |
 | [`supabase/functions/grants/`](../supabase/functions/grants/) | Signs grants with the Ed25519 key, because Postgres cannot (§9) |
 
