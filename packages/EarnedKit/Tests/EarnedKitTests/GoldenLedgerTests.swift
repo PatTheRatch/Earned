@@ -581,4 +581,243 @@ final class GoldenLedgerTests: XCTestCase {
         XCTAssertEqual(reloaded.entries.count, 3)
         XCTAssertEqual(reloaded.state.commitments.count, 1)
     }
+
+    // MARK: - v5
+
+    /// A ledger exactly as the build before `sessionCount` wrote it.
+    ///
+    /// v1 and v2 above pin the two oldest formats; **v3, v4 and v5 had no
+    /// golden fixture at all** until this one, which is the gap that mattered
+    /// most: v5 is the format sitting on every phone that has not yet run a
+    /// build with schema 6 on it. Everything v3–v5 added and v2 cannot express
+    /// is here on purpose — verification tiers and workout evidence (v4), the
+    /// active-energy metric and its recorded figure (v5), a server-granted
+    /// accountability override (v3), and an enforcement bypass opened and
+    /// closed around a hardened obligation.
+    ///
+    /// Hand-written to be what a v5 build wrote, never re-encoded from the
+    /// current types: a regenerated fixture guards nothing.
+    private let v5Fixture = """
+    {
+      "version": 5,
+      "entries": [
+        {
+          "id": "F0000000-0000-0000-0000-000000000001",
+          "date": "2026-08-22T07:00:00Z",
+          "event": {
+            "hydrationConfigured": {
+              "_0": {
+                "enabled": true,
+                "interval": 3600,
+                "activeHours": {
+                  "startMinuteOfDay": 480,
+                  "endMinuteOfDay": 1320,
+                  "timeZoneIdentifier": "UTC"
+                },
+                "restrictions": { "tokens": ["instagram"] },
+                "warningLead": 600
+              }
+            }
+          }
+        },
+        {
+          "id": "F0000000-0000-0000-0000-000000000002",
+          "date": "2026-08-22T08:00:00Z",
+          "event": {
+            "commitmentCreated": {
+              "_0": {
+                "id": "C5000000-0000-0000-0000-000000000001",
+                "title": "Burn 200 calories running",
+                "requirement": {
+                  "activity": { "types": { "_0": ["running"] } },
+                  "metric": { "totalActiveEnergy": { "_0": 200 } },
+                  "verification": "appVerified"
+                },
+                "eligibleFrom": "2026-08-22T08:00:00Z",
+                "deadline": "2026-08-22T20:00:00Z",
+                "createdAt": "2026-08-22T08:00:00Z",
+                "configuredCorrectionWindow": 7200,
+                "overridePolicy": {
+                  "approvalsRequired": 2,
+                  "accountabilityWindow": 1800,
+                  "soloEscalation": {
+                    "recentWindow": 2592000,
+                    "steps": [
+                      { "effortUnits": 60, "minimumElapsed": 600 },
+                      { "effortUnits": 180, "minimumElapsed": 1800 },
+                      { "effortUnits": 360, "minimumElapsed": 3600 }
+                    ]
+                  }
+                },
+                "restrictions": { "tokens": ["youtube"] },
+                "rewardEligible": true
+              }
+            }
+          }
+        },
+        {
+          "id": "F0000000-0000-0000-0000-000000000003",
+          "date": "2026-08-22T08:05:00Z",
+          "event": { "enforcementRestored": {} }
+        },
+        {
+          "id": "F0000000-0000-0000-0000-000000000004",
+          "date": "2026-08-22T12:00:00Z",
+          "event": { "enforcementUnavailableDetected": {} }
+        },
+        {
+          "id": "F0000000-0000-0000-0000-000000000005",
+          "date": "2026-08-22T14:00:00Z",
+          "event": { "enforcementRestored": {} }
+        },
+        {
+          "id": "F0000000-0000-0000-0000-000000000006",
+          "date": "2026-08-22T15:00:00Z",
+          "event": {
+            "workoutRecorded": {
+              "_0": {
+                "id": "A5000000-0000-0000-0000-000000000001",
+                "activity": "running",
+                "start": "2026-08-22T14:00:00Z",
+                "end": "2026-08-22T14:30:00Z",
+                "distanceMeters": 5000,
+                "activeEnergyKilocalories": 250,
+                "evidence": { "appVerified": { "source": "com.apple.health" } }
+              }
+            }
+          }
+        },
+        {
+          "id": "F0000000-0000-0000-0000-000000000007",
+          "date": "2026-08-23T08:00:00Z",
+          "event": {
+            "commitmentCreated": {
+              "_0": {
+                "id": "C5000000-0000-0000-0000-000000000002",
+                "title": "Any workout",
+                "requirement": {
+                  "activity": { "any": {} },
+                  "metric": { "anyQualifyingWorkout": {} },
+                  "verification": "selfReported"
+                },
+                "eligibleFrom": "2026-08-23T08:00:00Z",
+                "deadline": "2026-08-23T10:00:00Z",
+                "createdAt": "2026-08-23T08:00:00Z",
+                "configuredCorrectionWindow": 7200,
+                "overridePolicy": {
+                  "approvalsRequired": 2,
+                  "accountabilityWindow": 1800,
+                  "soloEscalation": {
+                    "recentWindow": 2592000,
+                    "steps": [
+                      { "effortUnits": 60, "minimumElapsed": 600 },
+                      { "effortUnits": 180, "minimumElapsed": 1800 },
+                      { "effortUnits": 360, "minimumElapsed": 3600 }
+                    ]
+                  }
+                },
+                "restrictions": { "tokens": ["youtube"] },
+                "rewardEligible": true
+              }
+            }
+          }
+        },
+        {
+          "id": "F0000000-0000-0000-0000-000000000008",
+          "date": "2026-08-23T11:00:00Z",
+          "event": {
+            "overrideRequested": {
+              "id": "D5000000-0000-0000-0000-000000000001",
+              "commitmentID": "C5000000-0000-0000-0000-000000000002"
+            }
+          }
+        },
+        {
+          "id": "F0000000-0000-0000-0000-000000000009",
+          "date": "2026-08-23T11:30:00Z",
+          "event": {
+            "accountabilityOverrideGranted": {
+              "requestID": "D5000000-0000-0000-0000-000000000001",
+              "decidedAt": "2026-08-23T11:30:00Z",
+              "roster": [
+                { "partnerDisplayName": "Mom", "vote": "approve", "at": "2026-08-23T11:20:00Z" },
+                { "partnerDisplayName": "Maya", "vote": "approve", "at": "2026-08-23T11:29:00Z" }
+              ],
+              "serverGrantID": "60000000-0000-0000-0000-000000000001"
+            }
+          }
+        }
+      ]
+    }
+    """
+
+    func testV5GoldenFixtureStillLoadsUnderSchemaSix() throws {
+        let ledger = try Self.decoder.decode(Ledger.self, from: Data(v5Fixture.utf8))
+
+        let energyID = UUID(uuidString: "C5000000-0000-0000-0000-000000000001")!
+        let anyID = UUID(uuidString: "C5000000-0000-0000-0000-000000000002")!
+
+        // v5 → v6 rewrites nothing, so the history is exactly what was written.
+        XCTAssertEqual(ledger.entries.count, 9,
+                       "the v5→v6 migration inserts nothing — sessionCount is a case no v5 ledger could hold")
+
+        // v5's metric and v4's verification tier both survive the migration
+        // meaning what they meant, which is the whole point of the bump.
+        let energy = try XCTUnwrap(ledger.state.commitments[energyID]).commitment
+        XCTAssertEqual(energy.requirement.metric, .totalActiveEnergy(200))
+        XCTAssertEqual(energy.requirement.verification, .appVerified)
+        XCTAssertEqual(energy.requirement.activity, .only(.running))
+
+        // The workout's evidence is what satisfies that tier; a v5 workout that
+        // an app vouched for must not silently decode as the user's own word.
+        let workout = try XCTUnwrap(ledger.state.workouts.first)
+        XCTAssertEqual(workout.evidence, .appVerified(source: "com.apple.health"))
+        XCTAssertEqual(workout.activeEnergyKilocalories, 250)
+
+        let progress = try XCTUnwrap(ledger.state.progress(for: energyID))
+        XCTAssertEqual(progress.achieved, 250)
+        XCTAssertEqual(progress.required, 200)
+        XCTAssertEqual(progress.unit, .kilocalories)
+        XCTAssertEqual(ledger.state.commitments[energyID]?.resolution,
+                       .completed(at: d(22, 14, 30)))
+
+        // v3's server-granted override: the semantic fact, still resolving the
+        // commitment it named.
+        XCTAssertEqual(ledger.state.commitments[anyID]?.resolution,
+                       .overridden(.accountability, at: d(23, 11, 30)))
+        let request = try XCTUnwrap(ledger.state.overrideRequests[
+            UUID(uuidString: "D5000000-0000-0000-0000-000000000001")!])
+        XCTAssertEqual(request.serverGrantID,
+                       UUID(uuidString: "60000000-0000-0000-0000-000000000001")!)
+        XCTAssertEqual(request.roster.count, 2)
+        XCTAssertEqual(request.roster.first?.partnerDisplayName, "Mom")
+
+        // The bypass is projected during replay, not stored, so this is also
+        // the assertion that projection is still deterministic: ordinal 0, the
+        // hardened commitment that was outstanding, and the gap's shape.
+        XCTAssertEqual(ledger.state.enforcementBypasses.count, 1)
+        let bypass = try XCTUnwrap(ledger.state.enforcementBypasses.first)
+        XCTAssertEqual(bypass.id, 0)
+        XCTAssertEqual(bypass.detectedAt, d(22, 12))
+        XCTAssertEqual(bypass.outstandingCommitmentIDs, [energyID])
+        XCTAssertEqual(bypass.resolvedAt, d(22, 14))
+        XCTAssertFalse(bypass.isOngoing)
+    }
+
+    func testAV5LedgerIsRewrittenAsV6WithoutChangingItsEvents() throws {
+        let decoded = try Self.decoder.decode(Ledger.self, from: Data(v5Fixture.utf8))
+        let document = try Self.decoder.decode(
+            LedgerDocument.self, from: try Self.encoder.encode(decoded))
+
+        XCTAssertEqual(document.version, Ledger.currentSchemaVersion,
+                       "saving a v5 ledger stamps the current version")
+        XCTAssertEqual(document.entries.count, 9, "and invents no events on the way")
+        XCTAssertEqual(document.entries.map(\.id), decoded.entries.map(\.id))
+
+        let replayed = try Ledger(replaying: document.entries)
+        XCTAssertEqual(replayed.state.commitments, decoded.state.commitments,
+                       "a v6 rewrite of a v5 ledger replays to the same state")
+        XCTAssertEqual(replayed.state.enforcementBypasses, decoded.state.enforcementBypasses,
+                       "including the projected bypasses, ordinals and all")
+    }
 }
