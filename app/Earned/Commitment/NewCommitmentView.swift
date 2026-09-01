@@ -635,6 +635,14 @@ struct NewCommitmentView: View {
     }
 
     private func commit() {
+        // Every commitment here is satisfied by a *workout*, and in a release
+        // build Apple Health is the only way one reaches the ledger — manual
+        // logging is a debug tool. Health used to be asked for only when the
+        // user chose "an app has to vouch", so the default commitment ("my word
+        // counts") was created on a phone that had never been asked, and no
+        // finished run could ever complete it. Ask on the way in, for either
+        // tier: the sheet arrives beside the screen that promised it.
+        Task { await health.requestAccess() }
         if repeats == .weekly {
             let start = Calendar.current.startOfDay(for: day)
             let created = store.createPlan(

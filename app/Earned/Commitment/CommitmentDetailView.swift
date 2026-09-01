@@ -67,6 +67,21 @@ struct CommitmentDetailView: View {
 
     private var record: CommitmentRecord? { store.state.commitments[commitmentID] }
 
+    /// Why no workout can finish this one, in the terms of whichever refusal it
+    /// is. Never claims Health *denied* Earned: Health hides read denials, so
+    /// "not asked" is the only refusal the app can honestly name.
+    private var healthWarning: String {
+        switch health.access {
+        case .unavailable:
+            return "This device has no Apple Health, so a workout can't be read here. "
+                + "This commitment can only be ended with an Override."
+        default:
+            return "Apple Health isn't connected, so a finished workout can't reach "
+                + "Earned and nothing can complete this. Connect it, or end this "
+                + "commitment with an Override."
+        }
+    }
+
     private func stateWord(_ record: CommitmentRecord) -> (String, Color)? {
         switch record.resolution {
         case .completed(let at):
@@ -130,6 +145,24 @@ struct CommitmentDetailView: View {
                                   : Format.relative(commitment.hardensAt, from: store.now))
                 }
                 RegistrationRow(registration: account.registration(of: commitment))
+            }
+
+            // Apple Health is the only route a finished workout has into the
+            // ledger, so an unresolved commitment on a phone that was never
+            // asked cannot be *kept* at all — only overridden. Every other row
+            // on this screen implies a run would resolve it, so the exception
+            // belongs here rather than buried in You.
+            if !record.isResolved, !health.canImport {
+                Section {
+                    Text(healthWarning)
+                        .font(Theme.footnote)
+                        .foregroundStyle(Theme.signal)
+                    if health.access == .notDetermined {
+                        Button("Connect Apple Health") {
+                            Task { await health.requestAccess() }
+                        }
+                    }
+                }
             }
 
             Section {

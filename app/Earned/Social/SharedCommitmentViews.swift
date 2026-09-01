@@ -175,6 +175,10 @@ struct AcceptSharedInvitationView: View {
 
     private func accept() {
         accepting = true
+        // Whichever tier they chose: Apple Health is the only route a finished
+        // workout has into a release build's ledger, so a commitment accepted
+        // on a phone that was never asked cannot be kept — only overridden.
+        Task { await health.requestAccess() }
         Task {
             let policy = OverridePolicy(approvalsRequired: approvals,
                                         accountabilityWindow: accountabilityMinutes * 60)

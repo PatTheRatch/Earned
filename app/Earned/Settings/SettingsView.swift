@@ -142,6 +142,16 @@ struct YouView: View {
                                detailColor: store.shielding == .denied
                                    ? Theme.signal : Theme.muted)
             }
+            // Apple Health is the only route a finished workout has into the
+            // ledger in a release build, and until now nothing in the app said
+            // so or offered to ask for it — a commitment could sit unfinishable
+            // with no explanation anywhere on screen.
+            NavigationLink { HealthSettingsView() } label: {
+                DestinationRow(title: "Apple Health",
+                               detail: healthSummary,
+                               detailColor: health.access == .notDetermined
+                                   ? Theme.signal : Theme.muted)
+            }
             if !store.activePlans.isEmpty {
                 NavigationLink { PlansSettingsView() } label: {
                     DestinationRow(title: "Repeating plans",
@@ -199,6 +209,70 @@ struct YouView: View {
         case .notDetermined: return "Will ask"
         case .denied: return "Notifications off"
         }
+    }
+
+    private var healthSummary: String {
+        switch health.access {
+        case .unavailable: return "Not on this device"
+        case .notDetermined: return "Not connected"
+        case .requested: return "Connected"
+        }
+    }
+}
+
+// MARK: - Apple Health
+
+/// The only route a finished workout has into the ledger, said out loud.
+///
+/// Health hides read denials by design — an app cannot tell "denied" from "no
+/// data" — so this screen never claims to know which it is. What it can say
+/// honestly is whether Earned has asked, what happens if the answer was no,
+/// and where to change it.
+struct HealthSettingsView: View {
+    @EnvironmentObject private var health: HealthImporter
+
+    var body: some View {
+        List {
+            Section {
+                switch health.access {
+                case .unavailable:
+                    Text("This device has no Apple Health, so workouts can't be read here.")
+                        .foregroundStyle(Theme.muted)
+                case .notDetermined:
+                    Text("Earned hasn't asked for workouts yet, so nothing can complete a "
+                         + "commitment.")
+                        .foregroundStyle(Theme.signal)
+                    Button("Connect Apple Health") { Task { await health.requestAccess() } }
+                case .requested:
+                    LabeledContent("Workouts", value: "Asked for")
+                    LabeledContent("Last check", value: health.lastImport.summary)
+                }
+                if let failure = health.lastImport.failureMessage {
+                    Text(failure).font(.footnote).foregroundStyle(Theme.signal)
+                }
+            } header: {
+                Text("Workouts")
+            } footer: {
+                Text("Earned reads finished workouts and nothing else, and never writes "
+                     + "anything back. A run from your watch, the Fitness app, or Strava "
+                     + "synced into Health all arrive the same way.")
+            }
+
+            if health.access == .requested {
+                Section {
+                    Button("Open iOS Settings") { openSystemSettings() }
+                } footer: {
+                    // The honest version of "are we allowed?". Saying "granted"
+                    // here would be inventing a fact iOS refuses to give us.
+                    Text("Apple doesn't tell apps whether workout access was allowed or "
+                         + "refused — only that you were asked. If a finished workout never "
+                         + "moves a commitment, check Privacy & Security → Health → Earned. "
+                         + "Until then, a commitment can still be ended with an Override.")
+                }
+            }
+        }
+        .paperList()
+        .navigationTitle("Apple Health")
     }
 }
 
