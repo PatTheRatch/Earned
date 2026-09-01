@@ -576,7 +576,28 @@ stored fact is one timestamp the switch itself deletes).
 verified by SQL the same day — except the two-device pass, which still needs real phones.
 **`0019` (earned-user partners) is built and tested but not yet applied to the hosted
 project** — it goes up by the same road when wanted, and needs no bucket, cron, or
-dashboard step. Notes from the run:
+dashboard step.
+
+**Also built, tested, and not yet applied: `0020`–`0022`.** `0020` (close an override
+request when it stops mattering) needs nothing special. `0021`/`0022` are Shared
+Commitments (`docs/shared-commitments.md`) and are the first social migrations since
+`0017` that **want cron**, so applying them without scheduling is a half-deployment:
+
+- **`announce_shared_starts()`** — emits the `shared_started` event when a shared
+  window opens. Unscheduled, that moment simply never reaches anyone's shelf. Hourly is
+  ample; the function is idempotent (`start_announced_at` is the latch), so a missed run
+  costs lateness, never a duplicate.
+- **`purge_shared_commitments()`** — the same not-load-bearing shape as
+  `purge_social_events`: retention behind the 30-day horizon plus agreements no
+  participant stands on any more. Daily, beside the existing purge cron in §7.
+
+Both are `service_role` only and deliberately not granted to `authenticated`, so they
+are scheduled exactly like `purge-social-events`. Nothing else in `0021`/`0022` needs a
+bucket or a dashboard step. The `push_outbox` they create is **queued but never
+drained** until an APNs sender exists — rows accumulating there are the expected state,
+not a fault, exactly as `message_outbox` awaited its SMS sender.
+
+Notes from the 0013–0018 run:
 
 - `apply.sh` needs the database connection string, which deliberately lives nowhere on
   disk. When it isn't to hand, there is a second sanctioned road: the **Management API's
