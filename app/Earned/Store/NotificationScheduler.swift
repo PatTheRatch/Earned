@@ -72,11 +72,19 @@ final class NotificationScheduler: ObservableObject {
     /// a permission prompt with no warning behind it is a prompt the user has
     /// no way to evaluate.
     private func requestAuthorization() async {
-        do {
-            let granted = try await center.requestAuthorization(options: [.alert, .sound])
-            authorization = granted ? .granted : .denied
-        } catch {
-            authorization = .denied
+        // Queued behind any other system prompt. This one is reached
+        // indirectly — a ledger append reschedules warnings — so it can arrive
+        // at the same instant as a prompt the user *did* ask for, and iOS
+        // stacks rather than queues them (`SystemPrompts`).
+        await SystemPrompts.serialized { [weak self] in
+            guard let self else { return }
+            do {
+                let granted = try await self.center
+                    .requestAuthorization(options: [.alert, .sound])
+                self.authorization = granted ? .granted : .denied
+            } catch {
+                self.authorization = .denied
+            }
         }
     }
 

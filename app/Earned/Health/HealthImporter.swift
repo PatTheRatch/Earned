@@ -63,14 +63,22 @@ final class HealthImporter: ObservableObject {
     }
 
     /// Ask for read access to workouts — one type, nothing else.
+    ///
+    /// Queued behind any other system prompt. Committing a first commitment
+    /// asks for this *and*, through the ledger append it performs, for
+    /// notification permission a few milliseconds later; two dialogs presented
+    /// at once put one on top of the other with the app invisible behind them,
+    /// which reads as a freeze (`SystemPrompts`).
     func requestAccess() async {
         guard let store, access == .notDetermined else { return }
-        do {
-            try await store.requestAuthorization(toShare: [], read: [.workoutType()])
-            access = .requested
-        } catch {
-            failure = error.localizedDescription
-            lastImport = .failed(error.localizedDescription)
+        await SystemPrompts.serialized { [weak self] in
+            do {
+                try await store.requestAuthorization(toShare: [], read: [.workoutType()])
+                self?.access = .requested
+            } catch {
+                self?.failure = error.localizedDescription
+                self?.lastImport = .failed(error.localizedDescription)
+            }
         }
     }
 

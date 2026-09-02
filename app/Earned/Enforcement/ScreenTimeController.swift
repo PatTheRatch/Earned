@@ -71,6 +71,13 @@ final class ScreenTimeController: ObservableObject {
     /// Earned is a deal with yourself, not a parent restricting a child.
     func requestAuthorization() async {
         failure = nil
+        // Queued with the other system prompts. Onboarding asks for this one
+        // deliberately and alone, but nothing stops a warning reschedule
+        // landing in the same moment (`SystemPrompts`).
+        await SystemPrompts.serialized { [weak self] in await self?.askForAuthorization() }
+    }
+
+    private func askForAuthorization() async {
         do {
             try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
             authorization = Self.authorization(from: AuthorizationCenter.shared.authorizationStatus)
