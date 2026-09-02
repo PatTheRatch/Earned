@@ -60,15 +60,40 @@ extension EarnedState {
     /// - Parameter limit: how many windows to return. The system caps how many
     ///   activities may be monitored at once, so this is bounded on purpose
     ///   rather than by exhausting the schedule.
-    public func shieldWindows(from now: Date, limit: Int = 10) -> [ShieldWindow] {
+    /// - Parameter horizon: how far ahead to look. See below — this is what
+    ///   makes the search terminate.
+    public func shieldWindows(from now: Date, limit: Int = 10,
+                              horizon: TimeInterval = 30 * 24 * 3600) -> [ShieldWindow] {
         guard limit > 0 else { return [] }
         var windows: [ShieldWindow] = []
         var cursor = now
         var previous = accessState(now: now).effectiveRestrictions
+        // **This bound is the whole reason the function returns.**
+        //
+        // It used to say that `nextTransition` returning strictly later dates
+        // was enough to terminate. Strictly later guarantees *progress*, not
+        // termination. An enabled Hydration Gate has a next transition
+        // forever — active hours open and close every day until the end of
+        // time — so the only other exit is the window count reaching `limit`,
+        // and a window is only appended when the effective restrictions
+        // *change*.
+        //
+        // When every Gate's profile is empty, nothing ever changes, nothing is
+        // ever appended, and the loop walks into the next millennium. That is
+        // not a contrived state: it is what a user has the moment they finish
+        // setup without picking any apps. On a device with Screen Time granted
+        // this ran on the main thread on the first ledger append and hung the
+        // app — permanently, since the same computation reran at every launch.
+        // It was found by a paused backtrace showing this loop at the year
+        // 5184.
+        //
+        // Thirty days is far past anything schedulable: the plan is rebuilt on
+        // every ledger change and every foreground, and the system monitors a
+        // handful of activities at a time. Nothing changing within a month
+        // means there is nothing to schedule, and `[]` is the honest answer.
+        let end = now.addingTimeInterval(horizon)
 
-        // `nextTransition` returns strictly later dates, so this terminates
-        // whether or not the limit is reached.
-        while windows.count < limit, let next = nextTransition(after: cursor) {
+        while windows.count < limit, let next = nextTransition(after: cursor), next <= end {
             let inForce = accessState(now: next.addingTimeInterval(Self.transitionEpsilon))
                 .effectiveRestrictions
             if inForce != previous {

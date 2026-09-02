@@ -93,6 +93,8 @@ struct NewCommitmentView: View {
     @State private var customTime = Date()
     @State private var approvals = 2
     @State private var explainingHealth = false
+    /// Set by the explanation's Allow button, acted on once the sheet is gone.
+    @State private var wantsHealthAccess = false
     /// Who this commitment's accountability route runs through. Only
     /// partners who have already accepted can be picked (invariant 22).
     @State private var roster: Set<UUID> = []
@@ -212,7 +214,17 @@ struct NewCommitmentView: View {
                           health.access == .notDetermined else { return }
                     explainingHealth = true
                 }
-                .sheet(isPresented: $explainingHealth) {
+                // Apple's sheet is asked for in `onDismiss`, once ours has
+                // actually gone. Requesting it from the button handler asks
+                // UIKit to present into a view that is still dismissing, and
+                // the request is dropped: on a device the explanation closed
+                // and no Health prompt ever appeared, leaving a commitment
+                // that says an app must vouch on a phone that was never asked.
+                .sheet(isPresented: $explainingHealth, onDismiss: {
+                    guard wantsHealthAccess else { return }
+                    wantsHealthAccess = false
+                    Task { await health.requestAccess() }
+                }) {
                     healthExplanation.presentationDetents([.medium])
                 }
 
@@ -483,8 +495,11 @@ struct NewCommitmentView: View {
             Spacer()
             VStack(alignment: .leading, spacing: 14) {
                 Button("ALLOW HEALTH ACCESS") {
+                    // Recorded, then asked for on the way out — see the sheet's
+                    // onDismiss. Asking here presents into a dismissing view
+                    // and the system drops it silently.
+                    wantsHealthAccess = true
                     explainingHealth = false
-                    Task { await health.requestAccess() }
                 }
                 .buttonStyle(PosterButtonStyle())
                 // Declining is a real choice with a real consequence, so it
