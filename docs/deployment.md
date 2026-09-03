@@ -731,8 +731,29 @@ sender reaching Apple and being refused — the reason is Apple's own word for i
 with no `push_device` row for its recipient completes without error and without a buzz,
 which is the correct outcome for someone who refused notifications.
 
-**Not deployed as of this writing.** `0024` is built and tested locally; the APNs key,
-secrets, function deploy and cron are the steps above and need Patrick's Apple account.
+**Applied to the hosted project, 3 September 2026,** and verified there: the three
+delivery columns on `push_outbox`, all five sender functions present,
+`private.social_name` present, `claim_push_batch` and `forget_push_token` executable by
+`service_role` only and refused to `authenticated` and `anon`, `ensure_account` carrying
+the no-clobber `coalesce`, and RLS still 22 tables / 0 without / 0 write policies. The
+`push` function is deployed and ACTIVE with `verify_jwt = true`, so only a caller holding a
+valid project JWT can trigger a drain.
+
+`pg_net` was not enabled — cron needs it to call an edge function — so it was created, and
+the sender's credential went into Vault as `push_sender_key` rather than inline in the job
+definition, where it would sit in `cron.job` in clear text. Two jobs are scheduled and
+active:
+
+- **`drain-push-outbox`**, every minute, `net.http_post` to the function with the
+  service-role JWT read from Vault.
+- **`purge-push-outbox`**, `31 3 * * *`, beside the other purges in §7.
+
+**Still needed before a phone actually buzzes:** the APNs Auth Key and the three secrets
+above. Until they exist the drain runs every minute and returns
+`503 {"error":"APNs credentials are not configured"}` — verified, and deliberately harmless:
+the credential check happens *before* anything is claimed, so no ask is burned or marked
+attempted while waiting. Setting the secrets is the only remaining step; nothing needs
+re-scheduling afterwards.
 
 ---
 
