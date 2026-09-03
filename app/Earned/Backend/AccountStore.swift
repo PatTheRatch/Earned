@@ -117,8 +117,17 @@ final class AccountStore: ObservableObject {
             // is kept when offered and reused forever after.
             let name = [credential.fullName?.givenName, credential.fullName?.familyName]
                 .compactMap { $0 }.joined(separator: " ")
+            // Empty means "Apple told us nothing", and the server treats that
+            // as no new information rather than a new name (migration 0024).
+            //
+            // It used to substitute the literal string "Someone", which
+            // `ensure_account` then wrote over whatever the user had chosen in
+            // profile setup — so signing in on a second device, or after a
+            // reinstall, made a person anonymous to all of their friends at
+            // once. Apple sends the name on the *first* authorization only, so
+            // that path is the normal one, not the edge case.
             let displayName = name.isEmpty
-                ? (UserDefaults.standard.string(forKey: Self.displayNameKey) ?? "Someone")
+                ? (UserDefaults.standard.string(forKey: Self.displayNameKey) ?? "")
                 : name
             UserDefaults.standard.set(credential.user, forKey: Self.appleUserKey)
             UserDefaults.standard.set(displayName, forKey: Self.displayNameKey)
@@ -128,9 +137,20 @@ final class AccountStore: ObservableObject {
             Task {
                 do {
                     try await client.signInWithApple(identityToken: token, nonce: nonce)
-                    try await client.ensureAccount(appleUserID: credential.user,
-                                                   displayName: displayName)
-                    self.session = .signedIn(displayName: displayName)
+                    let account = try await client.ensureAccount(
+                        appleUserID: credential.user, displayName: displayName)
+                    // The server's answer is canonical, not this device's
+                    // guess: it holds the name chosen in profile setup, which
+                    // is the one every other person sees. A second device that
+                    // knows nothing now *learns* the name rather than
+                    // proposing one.
+                    let canonical = (account["display_name"] as? String)
+                        .map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+                    if !canonical.isEmpty {
+                        UserDefaults.standard.set(canonical, forKey: Self.displayNameKey)
+                    }
+                    self.session = .signedIn(displayName: canonical.isEmpty
+                                             ? displayName : canonical)
                 } catch {
                     self.session = .failed(error.localizedDescription)
                 }
@@ -224,6 +244,20 @@ final class AccountStore: ObservableObject {
     /// `my_partners()` carries the live handle for earned rows.
     func earnedPartnerState(handle: String) -> Partner.State? {
         partners.first { $0.kind == .earnedUser && $0.handle == handle }?.state
+    }
+
+    /// Hands this device's APNs token to the backend. Throws rather than
+    /// swallowing, because `PushRegistrar` records the outcome for Diagnostics
+    /// — a device that silently failed to register is the exact thing a tester
+    /// needs to be able to see.
+    func registerPushToken(_ token: String) async throws {
+        guard let client, case .signedIn = session else { return }
+        try await client.registerPushToken(token)
+    }
+
+    func removePushToken(_ token: String) async throws {
+        guard let client else { return }
+        try await client.removePushToken(token)
     }
 
     func refreshPartners() async {

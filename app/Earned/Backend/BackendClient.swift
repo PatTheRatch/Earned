@@ -339,6 +339,19 @@ actor BackendClient {
         _ = try await rpc("block_user", ["p_handle": handle])
     }
 
+    // MARK: - Push devices
+
+    /// Tells the backend which device to buzz. The token is write-only from
+    /// here: `push_device` is revoked from `authenticated` entirely, so no
+    /// client can read anybody's, including its own.
+    func registerPushToken(_ token: String) async throws {
+        _ = try await rpc("register_push_token", ["p_token": token, "p_platform": "ios"])
+    }
+
+    func removePushToken(_ token: String) async throws {
+        _ = try await rpc("remove_push_token", ["p_token": token])
+    }
+
     func unblockUser(handle: String) async throws {
         _ = try await rpc("unblock_user", ["p_handle": handle])
     }

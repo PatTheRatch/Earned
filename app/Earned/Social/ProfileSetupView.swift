@@ -37,6 +37,10 @@ struct ProfileSetupView: View {
             // Apple offers the name exactly once, at first authorization;
             // whatever was kept then is the prefill, and it stays editable.
             if case .signedIn(let displayName) = account.session, name.isEmpty {
+                // "Someone" is no longer produced anywhere (migration 0024),
+                // but an account created before that fix still carries it, and
+                // prefilling the field with it would launder the placeholder
+                // into a name the user appears to have chosen.
                 name = displayName == "Someone" ? "" : displayName
             }
         }

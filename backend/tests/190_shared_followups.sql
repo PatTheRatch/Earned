@@ -49,9 +49,19 @@ select public.create_shared_commitment(
 select test_assert((select count(*) = 2 from public.push_outbox
                      where kind = 'shared_invitation'),
                    'each invitation queues one push to its invitee');
-select test_assert((select bool_and(body like 'Patrick invited you%')
+-- The person goes in the title and the commitment in the body, because a lock
+-- screen shows the title and often nothing else — and "someone invited you" is
+-- exactly the notification a person does not act on.
+select test_assert((select bool_and(title like 'Patrick invited you%')
                       from public.push_outbox where kind = 'shared_invitation'),
-                   'the push names the asker, factually');
+                   'the push titles the asker, factually');
+select test_assert((select bool_and(body like 'Run 3 times this week%')
+                      from public.push_outbox where kind = 'shared_invitation'),
+                   'and the body says what was asked for');
+-- Tapping it has somewhere to land.
+select test_assert((select bool_and(route_id is not null)
+                      from public.push_outbox where kind = 'shared_invitation'),
+                   'every actionable push carries the row it routes to');
 select public.invite_to_shared_commitment(
          (select id from public.shared_commitment_agreement), 'maya');
 select test_assert((select count(*) = 2 from public.push_outbox
