@@ -19,6 +19,23 @@
 	     device build fails to sign. -->
 	<key>com.apple.developer.healthkit</key>
 	<true/>
+	<!-- Remote notifications, for the three actionable asks another person can
+	     make of this user: a shared-commitment invitation, an accountability
+	     partner request, and an override approval. Never social engagement —
+	     the outbox's `kind` column is a three-value check constraint, so the
+	     vocabulary is the allow-list (docs/social-architecture.md §9).
+
+	     `development` here is the sandbox APNs environment, which is what a
+	     Debug build gets; a TestFlight or App Store build is re-signed to
+	     `production` by the distribution profile. The two are separate APNs
+	     hosts and a token from one is rejected by the other, which presents as
+	     silent non-delivery — hence APNS_HOST on the sender.
+
+	     Same capability caveat as the others: the App ID needs Push
+	     Notifications enabled under Signing & Capabilities, or a device build
+	     fails to sign. -->
+	<key>aps-environment</key>
+	<string>development</string>
 	<!-- Shared with the DeviceActivityMonitor extension, which is a separate
 	     process and cannot see this app's Documents directory. It carries the
 	     shield plan and nothing else — the ledger deliberately stays put. -->

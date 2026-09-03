@@ -10,6 +10,12 @@ struct EarnedApp: App {
     /// The lessons onboarding stopped giving up front, each waiting for the
     /// moment it first means something (docs/onboarding.md).
     @StateObject private var teachings = Teachings()
+    /// Registers this device for the three actionable asks and carries a
+    /// tapped notification to the screen that answers it.
+    @StateObject private var push = PushRegistrar.shared
+    /// Only for the three UIApplicationDelegate callbacks SwiftUI has no
+    /// equivalent of — device token, registration failure, notification tap.
+    @UIApplicationDelegateAdaptor(PushAppDelegate.self) private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -28,6 +34,8 @@ struct EarnedApp: App {
                 .environmentObject(social)
                 .environmentObject(health)
                 .environmentObject(teachings)
+                .environmentObject(push)
+                .onAppear { push.attach(account: account) }
                 .task {
                     // Before anything that needs a session, and once per
                     // launch. `scenePhase` may already have gone active by
@@ -51,7 +59,13 @@ struct EarnedApp: App {
         // Notification permission can be revoked in iOS Settings while
         // Earned isn't running, so re-check on every return to the
         // foreground rather than trusting what we saw at launch.
-        Task { await store.refreshWarnings() }
+        Task {
+            await store.refreshWarnings()
+            // Only once permission exists: asking iOS for an APNs token
+            // without it returns nothing at all, which is indistinguishable
+            // from a backend that is refusing the registration.
+            push.registerIfPermitted(authorization: store.warningDelivery)
+        }
         // Screen Time authorization can be revoked in iOS Settings while
         // Earned isn't running, and iOS never tells a backgrounded app that
         // it happened (NORTHSTAR §33). Launch was the only moment this was
@@ -170,6 +184,7 @@ struct RootView: View {
 struct MainTabView: View {
     @EnvironmentObject private var account: AccountStore
     @EnvironmentObject private var social: SocialStore
+    @EnvironmentObject private var push: PushRegistrar
 
     private enum Tab: String { case today, progress, social, you }
     @State private var selection: Tab = {
@@ -207,6 +222,20 @@ struct MainTabView: View {
         // offered: dismissing it costs nothing, and the Social tab repeats the
         // invitation. Nothing local ever waits on this.
         .sheet(isPresented: $social.setupOffered) { ProfileSetupView() }
+        // A tapped notification lands on the surface that answers it, rather
+        // than on a generic tab with the user left to hunt. All three routes
+        // live on Social, so switching tabs is the whole of the routing — the
+        // ask itself is a row that tab already fetches, and `pendingRoute`
+        // survives a cold start, which is the case that matters most.
+        .onChange(of: push.pendingRoute) { _, route in
+            guard route != nil else { return }
+            selection = .social
+            Task {
+                await social.refreshShared()
+                await social.refreshSocial()
+                await account.refreshPartners()
+            }
+        }
         // Sign-in resolves asynchronously wherever it was started (Settings or
         // Social), so the moment the session actually lands is watched here.
         .onChange(of: account.session) { _, session in

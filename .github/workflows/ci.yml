@@ -70,6 +70,8 @@ jobs:
         run: deno test supabase/functions/approval/
       - name: Typecheck and test the grant signer
         run: deno check supabase/functions/grants/index.ts && deno test supabase/functions/grants/
+      - name: Typecheck and test the push sender
+        run: deno check supabase/functions/push/index.ts && deno test supabase/functions/push/
       - name: Typecheck the web worker
         run: deno check web/src/index.ts
       - name: Test the link router

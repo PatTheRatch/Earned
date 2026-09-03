@@ -188,6 +188,11 @@ def main() -> int:
               "its own process against Screen Time, so it needs the capability "
               "on its own — granted per bundle id, and reviewed separately for "
               "distribution")
+    # Without this, `registerForRemoteNotifications` returns no token and no
+    # error — the exact silent failure the rest of this file exists to catch.
+    check(app_ent.get("aps-environment") in ("development", "production"),
+          "the app is missing aps-environment; remote notifications register "
+          "silently to nothing, so an invitation never reaches the other phone")
     check(app_ent.get(HEALTHKIT) is True,
           "the app is missing the HealthKit entitlement; no workout can "
           "complete a commitment")

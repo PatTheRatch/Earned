@@ -97,10 +97,12 @@ struct DiagnosticsReport {
     static func build(store: EarnedStore,
                       account: AccountStore,
                       social: SocialStore,
-                      health: HealthImporter) -> DiagnosticsReport {
+                      health: HealthImporter,
+                      push: PushRegistrar) -> DiagnosticsReport {
         DiagnosticsReport(segments: [
             Segment(title: "App", lines: appLines(store: store)),
-            Segment(title: "Enforcement", lines: enforcementLines(store: store)),
+            Segment(title: "Enforcement", lines: enforcementLines(store: store,
+                                                                   push: push)),
             Segment(title: "Sync", lines: syncLines(account: account, social: social,
                                                     health: health)),
         ])
@@ -131,7 +133,8 @@ struct DiagnosticsReport {
     /// monitor wakes on time and shields nothing. These lines are the
     /// difference between noticing that during a beta and discovering it after.
     @MainActor
-    private static func enforcementLines(store: EarnedStore) -> [Line] {
+    private static func enforcementLines(store: EarnedStore,
+                                        push: PushRegistrar) -> [Line] {
         let plan = SharedContainer.loadPlan()
         var lines = [
             Line(label: "Screen Time", value: screenTimeLabel(store.shielding),
@@ -142,6 +145,16 @@ struct DiagnosticsReport {
             Line(label: "Blocked right now", value: "\(store.effectiveRestrictions.count)"),
             Line(label: "Notifications", value: notificationLabel(store.warningDelivery),
                  problem: store.warningDelivery == .denied),
+            // Whether this phone can be reached at all. Never the token
+            // itself: it is a credential for buzzing this device, a tester
+            // screenshots this screen, and knowing it is registered is the
+            // whole diagnostic value anyway.
+            Line(label: "Push device", value: pushLabel(push.registration),
+                 problem: {
+                     if case .failed = push.registration { return true }
+                     return store.warningDelivery == .granted
+                         && !push.registration.isRegistered
+                 }()),
         ]
         if let plan {
             lines.append(Line(label: "Plan written",
@@ -230,6 +243,18 @@ struct DiagnosticsReport {
         }
     }
 
+    /// Registered, never the token. A device that silently failed to register
+    /// is exactly what a tester needs to be able to see and report — and a
+    /// device token is a credential for making this phone buzz, which does not
+    /// belong in a screenshot.
+    private static func pushLabel(_ registration: PushRegistrar.Registration) -> String {
+        switch registration {
+        case .registered(let at): return "Registered \(Format.relative(at, from: Date()))"
+        case .failed(let reason): return "Failed: \(reason)"
+        case .notRegistered: return "Not registered"
+        }
+    }
+
     private static func healthLabel(_ access: HealthImporter.Access) -> String {
         switch access {
         case .unavailable: return "No Health on this device"
@@ -313,11 +338,12 @@ struct DiagnosticsView: View {
     @EnvironmentObject private var account: AccountStore
     @EnvironmentObject private var social: SocialStore
     @EnvironmentObject private var health: HealthImporter
+    @EnvironmentObject private var push: PushRegistrar
     @State private var copied = false
 
     var body: some View {
         let report = DiagnosticsReport.build(store: store, account: account,
-                                             social: social, health: health)
+                                             social: social, health: health, push: push)
         List {
             ForEach(report.segments) { segment in
                 Section(segment.title) {
@@ -362,6 +388,7 @@ struct ReportProblemView: View {
     @EnvironmentObject private var account: AccountStore
     @EnvironmentObject private var social: SocialStore
     @EnvironmentObject private var health: HealthImporter
+    @EnvironmentObject private var push: PushRegistrar
     @Environment(\.dismiss) private var dismiss
 
     /// Where beta reports go. A person, not a helpdesk — there are ten testers.
@@ -421,7 +448,7 @@ struct ReportProblemView: View {
         var parts = [what.trimmingCharacters(in: .whitespacesAndNewlines)]
         if includeDiagnostics {
             parts.append(DiagnosticsReport.build(store: store, account: account,
-                                                 social: social, health: health).text)
+                                                 social: social, health: health, push: push).text)
         } else {
             // Even the minimal report carries the build: a report nobody can
             // tie to a binary is a report nobody can act on.

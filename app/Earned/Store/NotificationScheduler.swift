@@ -71,7 +71,10 @@ final class NotificationScheduler: ObservableObject {
     /// Asks once, at the first moment there is actually something to deliver —
     /// a permission prompt with no warning behind it is a prompt the user has
     /// no way to evaluate.
-    private func requestAuthorization() async {
+    /// Also called deliberately, from the screen that explains what being
+    /// reachable buys the user — see `SocialView`. Idempotent: iOS answers a
+    /// second request from its record rather than asking again.
+    func requestAuthorization() async {
         // Queued behind any other system prompt. This one is reached
         // indirectly — a ledger append reschedules warnings — so it can arrive
         // at the same instant as a prompt the user *did* ask for, and iOS

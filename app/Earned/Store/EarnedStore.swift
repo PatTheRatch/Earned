@@ -204,6 +204,14 @@ final class EarnedStore: ObservableObject {
     /// Called on launch and whenever the app returns to the foreground, since
     /// notification permission can be revoked in iOS Settings while Earned is
     /// not running.
+    /// Ask for notification permission deliberately, from a screen that has
+    /// just explained what it is for. Distinct from the incidental request
+    /// `reschedule` makes when a warning is first scheduled.
+    func requestWarningAuthorization() async {
+        await notifications.requestAuthorization()
+        await notifications.reschedule(plannedWarnings)
+    }
+
     func refreshWarnings() async {
         await notifications.refreshAuthorization()
         await notifications.reschedule(plannedWarnings)
