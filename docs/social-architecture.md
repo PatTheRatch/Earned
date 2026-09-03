@@ -142,6 +142,32 @@ There is exactly one name, so accountability can never show "Patrick" while Soci
 an independently edited "Pat". If a deliberate separation is ever wanted, it gets designed
 on purpose — it cannot happen by accident.
 
+**One canonical name is not the same as one canonical *writer*, and that gap cost the
+product its identity for two real users** (fixed in migration 0024). Apple hands over a
+display name on the **first authorization only**; every sign-in after that — a second
+device, a reinstall — returns nil. The app substituted the literal string `"Someone"`, and
+`ensure_account` upserted it with `set display_name = excluded.display_name`, so a single
+re-sign-in overwrote the name chosen in profile setup. One person signing in on a new
+phone made themselves anonymous, at once, on every surface that reads this column:
+friends' rosters, shared-commitment participants, the Recent shelf, the partner approval
+page, and every push body.
+
+Three rules now hold it:
+
+1. **The client never invents a name.** Nothing to report is sent as empty.
+2. **`ensure_account` cannot be talked out of a name it already has.** The upsert is
+   `coalesce(nullif(btrim(excluded.display_name), ''), account.display_name)` — silence is
+   not new information about what somebody is called.
+3. **Empty means unknown, and unknown renders as the handle.** `private.social_name()`
+   falls back to `@handle`, which is recognisable and — unlike `"Someone"` — different for
+   every person. That difference is the entire point: a placeholder that renders
+   identically for everybody removes the one thing a social surface exists to show.
+
+The account's own `display_name` check now permits an empty string for exactly this
+reason. `Earned user` remains as a last resort for an account with neither name nor
+handle, which in practice cannot appear on a social surface at all, because a profile
+requires both.
+
 ### 4.2 The profile table (migration 0013)
 
 One row per account, created by the post-sign-in setup flow:
@@ -481,8 +507,32 @@ generic social activity, streak updates, milestones, "your friend finished their
 or any engagement nudge — the shelf is where those live, read when the user chooses.
 Structurally, the server's `push_outbox` (0022) can only spell the allowed kinds; an
 engagement push is not a policy violation waiting to be caught in review, it is a row
-that cannot exist. Delivery (APNs sender, device registration in the app, the aps
-entitlement) is the deployment half and does not ship with the groundwork.
+that cannot exist.
+
+**Delivery landed in S4** (migration 0024, `supabase/functions/push`). Two people on two
+phones found the missing half immediately: an invitation only existed if you thought to go
+and look for it, which two people cannot coordinate.
+
+| | |
+|---|---|
+| Registration | `register_push_token` from the app once notification permission exists. `push_device` is revoked from `authenticated` outright — no client can read any token, including its own. |
+| Claiming | `claim_push_batch` hands a row out **once** (`for update skip locked`, a claim timestamp, an attempt count). Two senders running together, or one retried after a timeout, cannot buzz a person twice. |
+| Collapsing | The payload carries `collapse-id` = the row id, so even a send that reached Apple twice replaces rather than stacks. |
+| Completion | `complete_push` records delivered or failed. A crash between claiming and recording leaves the row claimable when the claim ages out: late, never lost or doubled. |
+| Dead tokens | A 410 / `Unregistered` / `BadDeviceToken` calls `forget_push_token`. Anything else is a retry, because throttling says nothing about the device. |
+| Retirement | `purge_push_outbox` drops asks older than a week, so a phone that was off does not wake to a decision made without it. |
+| Blocking | The enqueue triggers check `private.blocked_between` first. A block stops the phone buzzing, not merely the reads. |
+
+What crosses to Apple: a title, a body, the `kind`, and a `route` — the id of the
+agreement or request the recipient is *already a party to*. Never an account id, never
+Health data, never a restriction profile, never the Override reason text, which is the
+requester's words to a chosen few and not lock-screen material.
+
+**Push is delivery, never authority.** Every ask exists as a row the app fetches on its
+own; notifications only mean a person finds out while it still matters. Refusing them
+costs timeliness and nothing else, which is why permission is asked once, late, from a
+screen that explains it, at the moment somebody first depends on this phone noticing
+something — and never at launch, where there is nothing to be reachable for.
 
 ---
 

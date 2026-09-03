@@ -686,7 +686,7 @@ Documented deliberately, and not built. Required before strangers, not before fa
 
 | | Why it waits |
 |---|---|
-| **APNs sender and `push_outbox` drainer** | `0022` creates the tables; nothing drains them, by design. Until then everything cross-user arrives when the other person next opens the app. Acceptable at ten people who can be texted; not at a hundred. |
+| ~~**APNs sender and `push_outbox` drainer**~~ | *Built in S4* — `0024` plus `supabase/functions/push`. Not yet deployed: needs an APNs key, four secrets and two cron jobs (deployment §9). Until it is, everything cross-user still arrives when the other person next opens the app. |
 | **Message outbox drainer + consent page** | The other half of B‑8. Email (Resend/Postmark/SES, an afternoon plus DNS) is the cheap road; SMS needs 10DLC registration measured in weeks. |
 | **Privacy policy and terms** | A page exists; neither has had legal eyes. |
 | **Account deletion policy** | Product half settled, retention half unresolved (D10). |

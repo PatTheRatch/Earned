@@ -20,6 +20,7 @@ day you want another human to receive a message.
 | 5 | [Domain and the partner page](#5-the-domain-and-the-partner-page) | A partner opening a link |
 | 6 | [Sending messages](#6-sending-messages) | A partner *receiving* a link |
 | 7 | [Scheduled jobs](#7-scheduled-jobs-one-of-them-load-bearing) | Tidiness — and the shared-start event |
+| 9 | [Push notifications](#9-push-notifications-milestone-s4) | The other phone finding out in time |
 
 ---
 
@@ -676,6 +677,62 @@ Verify after applying:
   version cannot drift from the tested rule.
 - A second test account can find the first by handle, connect, and see its avatar; after a
   block, neither can find the other.
+
+---
+
+## 9. Push notifications (Milestone S4)
+
+`push_outbox` has existed since `0022` and was written to and never read, which meant an
+invitation only existed if the other person thought to go and look for it. `0024` adds the
+sender's half — claiming, completion, dead-token removal, retirement — and
+`supabase/functions/push` is the sender.
+
+**Apple side.** In the developer portal: enable **Push Notifications** on
+`com.pattheratch.earned`, then Keys → create an **APNs Auth Key** (`.p8`). You get the file
+once. Note its Key ID, and your Team ID.
+
+```sh
+supabase secrets set APNS_KEY="$(cat AuthKey_XXXXXXXXXX.p8)"
+supabase secrets set APNS_KEY_ID=XXXXXXXXXX
+supabase secrets set APNS_TEAM_ID=L6XMH6SQR9
+supabase secrets set APNS_TOPIC=com.pattheratch.earned
+# Sandbox for a Debug build on a device; production for TestFlight.
+supabase secrets set APNS_HOST=https://api.sandbox.push.apple.com
+supabase functions deploy push
+```
+
+> **The two APNs environments are separate and silent about it.** A token registered by a
+> Debug build is a *sandbox* token, and sending it to the production host fails with
+> `BadDeviceToken` — which looks exactly like a bug in the app. The app's
+> `aps-environment` entitlement says `development`; a TestFlight build is re-signed to
+> `production` by the distribution profile, and `APNS_HOST` has to move with it.
+
+Then schedule the drain, and the retirement sweep:
+
+```sh
+psql "$DB" -c "
+select cron.schedule('drain-push-outbox', '* * * * *',
+  \$\$select net.http_post(
+      url := 'https://<ref>.functions.supabase.co/push',
+      headers := jsonb_build_object('Authorization', 'Bearer <service-role-key>'))\$\$);
+select cron.schedule('purge-push-outbox', '31 3 * * *',
+  \$\$select public.purge_push_outbox()\$\$);"
+```
+
+**Check** — with a device registered, and an invitation sent from another account:
+
+```sh
+psql "$DB" -c "select kind, title, sent_at, attempts, send_error
+                 from public.push_outbox order by created_at desc limit 5;"
+```
+
+A row with `sent_at` set is delivered. `attempts` climbing with a `send_error` is the
+sender reaching Apple and being refused — the reason is Apple's own word for it. An ask
+with no `push_device` row for its recipient completes without error and without a buzz,
+which is the correct outcome for someone who refused notifications.
+
+**Not deployed as of this writing.** `0024` is built and tested locally; the APNs key,
+secrets, function deploy and cron are the steps above and need Patrick's Apple account.
 
 ---
 

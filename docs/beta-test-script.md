@@ -187,6 +187,30 @@ you both see each other.
 **Tell us if:** a search for a handle you know exists came back empty, or a request seemed to
 send but never arrived, or a screen sat spinning.
 
+## Step 10b — Does your phone tell you?
+
+This one needs both phones, and it is the thing S4 exists for.
+
+**Expected:** when someone invites you to a commitment, asks you to be an accountability
+partner, or needs an Override approved, your phone gets a notification naming them —
+`Patrick invited you.` Tapping it opens Earned on Social with the ask visible.
+
+**Expected the first time:** a screen headed **STAY REACHABLE** explaining what Earned
+would notify you about, with **ALLOW NOTIFICATIONS** and a quiet **Not now**. It appears
+once, when someone first depends on you noticing something — never at first launch.
+
+**Expected if you tap Not now, or refuse:** everything still works. Invitations, requests
+and approvals all appear in the app when you open it. Earned should never claim a
+notification was sent, and **You → Advanced → Diagnostics → Push device** should say
+*Not registered* rather than pretending.
+
+**Tell us if:** you got a notification for anything that is *not* one of those three —
+a friend finishing a run, a streak, a summary, or a nudge to open the app. That is not a
+missing setting, it is a bug, and it is the one thing this design promises never to do.
+
+**Also tell us if:** the notification said "Someone" instead of a name, or tapping it left
+you on a screen where you had to go and find the thing yourself.
+
 ## Step 11 — A commitment together
 
 **Expected:** when making a commitment, choose to do it "with friends", pick your friend,
