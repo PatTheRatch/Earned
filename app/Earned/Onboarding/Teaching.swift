@@ -33,6 +33,10 @@ final class Teachings: ObservableObject {
         case waysOut = "earned.taught.waysOut"
         /// Anti-circumvention advice, once enforcement has been felt to work.
         case passcode = "earned.taught.passcode"
+        /// Why notifications are worth allowing — offered the first time this
+        /// user has a relationship where somebody else is waiting on them, and
+        /// never at launch, where there is nothing to be reachable *for*.
+        case reachable = "earned.taught.reachable"
     }
 
     @Published private(set) var seen: Set<Lesson> = []

@@ -18,6 +18,22 @@ struct SocialView: View {
     /// nobody binds to a shared commitment without seeing their own contract
     /// first (docs/shared-commitments.md §4.3).
     @State private var readingInvitation: SharedInvitation?
+    @EnvironmentObject private var teachings: Teachings
+    @EnvironmentObject private var push: PushRegistrar
+    @State private var offeringNotifications = false
+
+    /// True once somebody is actually waiting on this user, or could be.
+    ///
+    /// This is the moment notifications are worth asking for, and it is the
+    /// only moment: at launch there is nothing to be reachable *for*, and a
+    /// permission asked before its reason is a permission refused. A shared
+    /// commitment or an accountability relationship means another person now
+    /// depends on this phone noticing something.
+    private var somebodyIsWaiting: Bool {
+        !social.sharedCommitments.isEmpty || !social.sharedInvitations.isEmpty
+            || !account.partners.isEmpty || !account.partnerRequests.isEmpty
+            || !account.pendingApprovals.isEmpty
+    }
 
     var body: some View {
         NavigationStack {
@@ -43,6 +59,11 @@ struct SocialView: View {
             .sheet(item: $readingInvitation) { invitation in
                 AcceptSharedInvitationView(invitation: invitation)
             }
+            .sheet(isPresented: $offeringNotifications) {
+                reachableSheet.presentationDetents([.medium])
+            }
+            .onChange(of: somebodyIsWaiting) { _, waiting in offerNotifications(waiting) }
+            .onAppear { offerNotifications(somebodyIsWaiting) }
         }
         .task {
             await social.refreshProfile()
@@ -51,6 +72,56 @@ struct SocialView: View {
             await social.refreshActivity()
             await account.refreshPartners()
         }
+    }
+
+    // MARK: - Staying reachable
+
+    /// Offered once, and only once, when somebody first depends on this phone
+    /// noticing something. Refusing costs timeliness and nothing else: every
+    /// ask exists as a row the app fetches on its own, so the in-app surfaces
+    /// remain the source of truth and push is only delivery.
+    private func offerNotifications(_ waiting: Bool) {
+        guard waiting, !teachings.hasSeen(.reachable),
+              store.warningDelivery == .notDetermined,
+              !offeringNotifications else { return }
+        offeringNotifications = true
+        teachings.markSeen(.reachable)
+    }
+
+    private var reachableSheet: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SectionLabel(text: "Earned", color: Theme.ink).padding(.top, 36)
+            StateWord(word: "STAY REACHABLE", size: 40, lines: 2).padding(.top, 4)
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Earned can notify you when someone sends you a commitment, asks "
+                     + "you to be an accountability partner, or needs your approval.")
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Those three, and nothing else. No activity summaries, no streak "
+                     + "updates, no nudges to open the app.")
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .font(.system(size: 15)).foregroundStyle(Theme.muted)
+            .padding(.top, 20)
+            Spacer()
+            VStack(alignment: .leading, spacing: 14) {
+                Button("ALLOW NOTIFICATIONS") {
+                    offeringNotifications = false
+                    // Requested on the way out, once this sheet has actually
+                    // gone: asking while a sheet is dismissing presents into a
+                    // view that is leaving, and iOS drops the request.
+                    Task {
+                        await store.requestWarningAuthorization()
+                        push.registerIfPermitted(authorization: store.warningDelivery)
+                    }
+                }
+                .buttonStyle(PosterButtonStyle())
+                Button("Not now") { offeringNotifications = false }
+                    .buttonStyle(UnderlineButtonStyle(color: Theme.muted))
+            }
+        }
+        .padding(Theme.pagePadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.paper)
     }
 
     // MARK: - Pre-profile states
@@ -142,12 +213,16 @@ struct SocialView: View {
 
             youBlock
 
+            // Order is the argument this screen makes: anything a named person
+            // is waiting on you for, then what you are doing together, then
+            // who your people are, then the bounded shelf of what they chose
+            // to share. Approvals lead because a clock is running on them.
             if !account.pendingApprovals.isEmpty { approvalsBlock }
-            if !account.partnerRequests.isEmpty { accountabilityBlock }
             if !social.sharedInvitations.isEmpty { sharedInvitationsBlock }
+            if !account.partnerRequests.isEmpty { accountabilityBlock }
             if !social.requests.isEmpty { requestsBlock }
-            peopleBlock
             if !social.sharedCommitments.isEmpty { togetherBlock }
+            peopleBlock
             recentBlock
 
             if let failure = social.failure {
@@ -172,33 +247,38 @@ struct SocialView: View {
     private var sharedInvitationsBlock: some View {
         VStack(alignment: .leading, spacing: 0) {
             SectionLabel(text: "Invitations").padding(.top, Theme.blockSpacing)
+            // The most important thing on this screen when it exists, so it
+            // gets the weight: a person's name at blocker size, the commitment
+            // beneath it, and the one act filled. Someone is waiting on an
+            // answer — an invitation that reads like a list row gets treated
+            // like one.
             ForEach(social.sharedInvitations) { invitation in
                 VStack(alignment: .leading, spacing: 0) {
-                    ThickRule().padding(.top, 8)
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("\(invitation.inviterDisplayName) invited you to a commitment.")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Theme.ink)
-                        Text(invitation.title.uppercased())
-                            .font(Theme.blocker(17)).foregroundStyle(Theme.ink)
-                        Text("\(invitation.terms.label) · by "
-                             + Format.deadline(invitation.terms.deadline, from: store.now))
-                            .font(Theme.footnote).foregroundStyle(Theme.muted)
-                        Text("Your own Gate will apply if you accept — your rules, "
-                             + "your restrictions, your ways out.")
-                            .font(Theme.footnote).foregroundStyle(Theme.muted)
-                        HStack(spacing: 12) {
-                            Button("READ THE DEAL") { readingInvitation = invitation }
-                                .buttonStyle(UnderlineButtonStyle())
-                            Button("NO THANKS") {
-                                Task { await social.declineSharedInvitation(invitation) }
-                            }
-                            .buttonStyle(UnderlineButtonStyle(color: Theme.muted))
+                    ThickRule().padding(.top, 10)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("\(invitation.inviterDisplayName.uppercased()) INVITED YOU.")
+                            .font(Theme.blocker(19)).foregroundStyle(Theme.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(invitation.title.uppercased())
+                                .font(Theme.metric(22)).foregroundStyle(Theme.ink)
+                            Text("\(invitation.terms.label) · by "
+                                 + Format.deadline(invitation.terms.deadline, from: store.now))
+                                .font(.system(size: 14)).foregroundStyle(Theme.muted)
                         }
-                        .padding(.top, 4)
+                        Text("Your Gate starts only if you accept.")
+                            .font(Theme.footnote).foregroundStyle(Theme.muted)
+                        Button("READ THE DEAL") { readingInvitation = invitation }
+                            .buttonStyle(PosterButtonStyle())
+                            .padding(.top, 4)
+                        Button("Decline") {
+                            Task { await social.declineSharedInvitation(invitation) }
+                        }
+                        .buttonStyle(UnderlineButtonStyle(color: Theme.muted))
                     }
-                    .padding(.vertical, 10)
+                    .padding(.vertical, 12)
                 }
+                .accessibilityElement(children: .contain)
             }
         }
     }
@@ -262,46 +342,45 @@ struct SocialView: View {
     // MARK: - You
 
     @ViewBuilder
+    /// You, in one line.
+    ///
+    /// This used to be a full profile card — avatar, name, handle, two
+    /// scoreboard metrics and a sharing footnote — which put self-inspection
+    /// above everything Social exists for. The tab answers *what are my people
+    /// doing, and is anything waiting on me?*, and the answer to both was
+    /// below the fold. The whole card still exists, one tap away, where
+    /// looking at yourself is the point.
     private var youBlock: some View {
         if let profile = social.profileState.profile {
             let streaks = store.ledger.state.socialStreaks(now: store.now)
             NavigationLink {
                 EditProfileView(profile: profile)
             } label: {
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 14) {
-                        AvatarView(avatarPath: profile.avatarPath,
-                                   displayName: profile.displayName, size: 56)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(profile.displayName)
-                                .font(Theme.blocker(18)).foregroundStyle(Theme.ink)
-                            Text("@\(profile.handle)")
-                                .font(Theme.footnote).foregroundStyle(Theme.muted)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(Theme.muted)
+                HStack(spacing: 12) {
+                    AvatarView(avatarPath: profile.avatarPath,
+                               displayName: profile.displayName, size: 34)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(profile.displayName)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Theme.ink)
+                        Text("@\(profile.handle) · \(streaks.commitmentsKept) kept · "
+                             + (streaks.sinceLastOverride == nil
+                                ? "no Overrides yet"
+                                : "\(streaks.sinceLastOverride!) since last Override"))
+                            .font(Theme.footnote).foregroundStyle(Theme.muted)
+                            .lineLimit(1)
                     }
-                    HStack(alignment: .top, spacing: Theme.blockSpacing) {
-                        Metric(value: "\(streaks.commitmentsKept) KEPT",
-                               caption: "in a row, on time", size: 26)
-                        Metric(value: streaks.sinceLastOverride.map { "\($0)" } ?? "—",
-                               caption: streaks.sinceLastOverride == nil
-                                        ? "no Overrides yet" : "since last Override",
-                               size: 26)
-                    }
-                    .padding(.top, 14)
-                    Text(profile.shareStreaks
-                         ? "Friends see these numbers."
-                         : "Only you see these numbers.")
-                        .font(Theme.footnote).foregroundStyle(Theme.muted)
-                        .padding(.top, 6)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.muted)
                 }
-                .padding(.top, 18)
+                .padding(.top, 14)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Your profile. \(profile.displayName), "
+                                + "\(streaks.commitmentsKept) kept.")
         }
     }
 
@@ -520,20 +599,31 @@ struct SocialView: View {
                 ForEach(social.activity) { event in
                     VStack(alignment: .leading, spacing: 0) {
                         HairRule().padding(.top, 8)
+                        // Who and what happened, then what it was about, then
+                        // when. Three facts, in that order, because a row that
+                        // only manages "Someone committed: Run" makes the
+                        // person less present rather than more.
                         HStack(alignment: .top, spacing: 12) {
                             AvatarView(avatarPath: event.avatarPath,
-                                       displayName: event.displayName, size: 32)
-                            VStack(alignment: .leading, spacing: 2) {
-                                (Text(event.displayName).fontWeight(.semibold)
-                                 + Text(" \(event.phrase)"))
-                                    .font(.system(size: 14))
+                                       displayName: event.displayName, size: 34)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(event.headline)
+                                    .font(.system(size: 13, weight: .bold))
+                                    .tracking(0.6)
                                     .foregroundStyle(Theme.ink)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                if let detail = event.detail {
+                                    Text(detail)
+                                        .font(.system(size: 14))
+                                        .foregroundStyle(Theme.ink)
+                                }
                                 Text(Format.relative(event.occurredAt, from: store.now))
                                     .font(Theme.footnote)
                                     .foregroundStyle(Theme.muted)
                             }
                         }
-                        .padding(.vertical, 8)
+                        .padding(.vertical, 10)
+                        .accessibilityElement(children: .combine)
                     }
                 }
             }

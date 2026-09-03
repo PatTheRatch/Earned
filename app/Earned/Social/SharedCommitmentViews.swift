@@ -239,9 +239,13 @@ struct SharedCommitmentDetailView: View {
                 }
                 .padding(.top, Theme.blockSpacing)
 
-                Text("Everyone here has their own Gate, their own rules, and their "
-                     + "own ways out. What you share is the promise — and the view.")
-                    .font(Theme.footnote).foregroundStyle(Theme.muted)
+                // One line, because this screen is read every time and the
+                // architecture behind it is read once. The longer version —
+                // own Gate, own rules, own ways out — belongs where somebody
+                // is deciding whether to accept, not on the status page of a
+                // commitment they already made.
+                Text("Same promise. Your own Gate.")
+                    .font(Theme.blocker(16)).foregroundStyle(Theme.ink)
                     .padding(.top, Theme.blockSpacing)
 
                 actions(for: shared)
@@ -309,12 +313,16 @@ struct SharedCommitmentDetailView: View {
         VStack(alignment: .leading, spacing: 10) {
             if shared.createdByMe {
                 if shared.state == "open" {
-                    Button("CLOSE TO NEW PEOPLE") {
+                    // Named for what the server does — stop accepting answers
+                    // to outstanding invitations — rather than for a social
+                    // posture. "Close to new people" reads like a privacy
+                    // setting about who may find you, which is a different
+                    // feature and not this one.
+                    Button("CLOSE INVITES") {
                         Task { await social.cancelShared(shared) }
                     }
                     .buttonStyle(UnderlineButtonStyle(color: Theme.muted))
-                    Text("Unanswered invitations lapse. Everyone already in keeps "
-                         + "exactly the commitment they accepted — including you.")
+                    Text("Pending invites expire. Existing commitments stay unchanged.")
                         .font(Theme.footnote).foregroundStyle(Theme.muted)
                 }
             } else {

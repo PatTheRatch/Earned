@@ -63,61 +63,60 @@ struct FriendProfileView: View {
         lookup = await social.lookUpProfile(handle: handle)
     }
 
+    /// Another person, in the same visual system as everything else.
+    ///
+    /// This was the last screen still built out of grouped-`List` chrome —
+    /// a white profile card, then a white accountability card, then a white
+    /// card of buttons — which made a friend look like a settings page. Open
+    /// layout, hairlines and type instead; containers only where a container
+    /// means something, which here is nowhere.
     private func card(_ profile: PublicProfile) -> some View {
-        List {
-            Section {
-                VStack(alignment: .leading, spacing: 14) {
-                    AvatarView(avatarPath: profile.avatarPath,
-                               displayName: profile.displayName, size: 88)
-                    Text(profile.displayName)
-                        .font(Theme.display(34)).foregroundStyle(Theme.ink)
-                    HStack(spacing: 8) {
-                        Text("@\(profile.handle)")
-                        if let city = profile.city { Text("· \(city)") }
-                    }
-                    .font(Theme.blocker(16))
-                    .foregroundStyle(Theme.muted)
-                    // Present only when this friend shares their figures —
-                    // literal wording, no ranking, no score.
-                    if let kept = profile.commitmentsKept {
-                        ThickRule()
-                        Text("\(kept) COMMITMENT" + (kept == 1 ? "" : "S") + " KEPT")
-                            .font(Theme.blocker(16))
-                            .foregroundStyle(Theme.ink)
-                        Text(profile.sinceLastOverride.map { "\($0) since last Override" }
-                             ?? "No Overrides yet")
-                            .font(.subheadline)
-                            .foregroundStyle(Theme.muted)
-                    }
-                    // The quiet block: what Earned observed, and nothing about
-                    // why. "Deleted the app to escape" is a sentence this
-                    // screen cannot honestly render, so it never will
-                    // (docs/social-architecture.md §10).
-                    if let days = profile.quietDays {
-                        ThickRule()
-                        Text("HASN'T CHECKED IN")
-                            .font(Theme.blocker(16))
-                            .foregroundStyle(Theme.ink)
-                        Text("Last seen by Earned \(days) day\(days == 1 ? "" : "s") ago.")
-                            .font(.subheadline)
-                            .foregroundStyle(Theme.muted)
-                        if let open = profile.openSharedCommitments, open > 0 {
-                            Text("\(open) shared commitment\(open == 1 ? " was" : "s were") "
-                                 + "still open at their last check-in.")
-                                .font(.subheadline)
-                                .foregroundStyle(Theme.muted)
-                        }
-                    }
-                    SectionLabel(text: relationshipLabel(profile.relationship))
-                }
-                .padding(.vertical, 8)
+        PosterPage {
+            AvatarView(avatarPath: profile.avatarPath,
+                       displayName: profile.displayName, size: 76)
+                .padding(.top, 12)
+            Text(profile.displayName.uppercased())
+                .font(Theme.display(38)).foregroundStyle(Theme.ink)
+                .lineLimit(2).minimumScaleFactor(0.6)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 12)
+            Text("@\(profile.handle)" + (profile.city.map { " · \($0)" } ?? ""))
+                .font(.system(size: 15)).foregroundStyle(Theme.muted)
+
+            // Present only when this friend shares their figures — literal
+            // wording, no ranking, no score.
+            if let kept = profile.commitmentsKept {
+                HairRule().padding(.top, Theme.blockSpacing)
+                Metric(value: "\(kept) KEPT",
+                       caption: profile.sinceLastOverride
+                                    .map { "\($0) since last Override" } ?? "No Overrides yet",
+                       size: 30)
+                    .padding(.top, 14)
             }
 
-            accountabilitySection(profile)
+            // What Earned observed, and nothing about why. "Deleted the app to
+            // escape" is a sentence this screen cannot honestly render, so it
+            // never will (docs/social-architecture.md §10).
+            if let days = profile.quietDays {
+                HairRule().padding(.top, Theme.blockSpacing)
+                Text("HASN'T CHECKED IN")
+                    .font(Theme.blocker(15)).foregroundStyle(Theme.ink)
+                    .padding(.top, 14)
+                Text("Last seen by Earned \(days) day\(days == 1 ? "" : "s") ago."
+                     + (profile.openSharedCommitments.map { open in
+                            open > 0 ? " \(open) shared commitment\(open == 1 ? " was" : "s were") "
+                                     + "still open then." : "" } ?? ""))
+                    .font(.system(size: 14)).foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
-            actions(profile)
+            HairRule().padding(.top, Theme.blockSpacing)
+            SectionLabel(text: relationshipLabel(profile.relationship))
+                .padding(.top, 14)
+
+            accountabilityBlock(profile)
+            actionsBlock(profile)
         }
-        .paperList()
         .navigationTitle("@\(profile.handle)")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -137,24 +136,24 @@ struct FriendProfileView: View {
     /// their explicit yes (invariant 24) — so an ordinary friend is never
     /// labelled a partner here, only offered as one.
     @ViewBuilder
-    private func accountabilitySection(_ profile: PublicProfile) -> some View {
+    private func accountabilityBlock(_ profile: PublicProfile) -> some View {
         if profile.relationship == .friend {
-            Section {
+            VStack(alignment: .leading, spacing: 6) {
+                SectionLabel(text: "Accountability")
                 switch account.earnedPartnerState(handle: profile.handle) {
                 case .active:
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("ACCOUNTABILITY PARTNER ✓").font(Theme.blocker(15))
-                        Text("Can approve your Overrides.")
-                            .font(.footnote).foregroundStyle(Theme.muted)
-                    }
+                    Text("ACCOUNTABILITY PARTNER")
+                        .font(Theme.blocker(15)).foregroundStyle(Theme.ink)
+                    Text("Can approve your Overrides.")
+                        .font(Theme.footnote).foregroundStyle(Theme.muted)
                 case .invited:
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("REQUEST SENT").font(Theme.blocker(15))
-                        Text("\(profile.displayName) hasn't accepted yet.")
-                            .font(.footnote).foregroundStyle(Theme.muted)
-                    }
+                    Text("REQUEST SENT")
+                        .font(Theme.blocker(15)).foregroundStyle(Theme.ink)
+                    Text("\(profile.displayName) hasn't accepted yet.")
+                        .font(Theme.footnote).foregroundStyle(Theme.muted)
                 default:
                     Button("Make accountability partner") { confirmingNomination = true }
+                        .buttonStyle(UnderlineButtonStyle())
                         .confirmationDialog(
                             "Make \(profile.displayName) an accountability partner?",
                             isPresented: $confirmingNomination,
@@ -171,35 +170,40 @@ struct FriendProfileView: View {
                                  + "does not give them this authority automatically.")
                         }
                 }
-            } header: {
-                Text("Accountability")
             }
+            .padding(.top, Theme.blockSpacing)
         }
     }
 
     @ViewBuilder
-    private func actions(_ profile: PublicProfile) -> some View {
-        Section {
+    private func actionsBlock(_ profile: PublicProfile) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HairRule()
             switch profile.relationship {
             case .none:
                 Button("Send friend request") {
                     Task { await social.sendRequest(handle: profile.handle); await refresh() }
                 }
+                .buttonStyle(UnderlineButtonStyle())
             case .pendingOutgoing:
-                Button("Cancel request", role: .destructive) {
+                Button("Cancel request") {
                     Task { await social.cancelRequest(handle: profile.handle); await refresh() }
                 }
+                .buttonStyle(UnderlineButtonStyle(color: Theme.muted))
             case .pendingIncoming:
-                Button("Accept") {
+                Button("ACCEPT") {
                     Task { await social.respond(handle: profile.handle, accept: true)
                            await refresh() }
                 }
-                Button("Decline", role: .destructive) {
+                .buttonStyle(PosterButtonStyle())
+                Button("Decline") {
                     Task { await social.respond(handle: profile.handle, accept: false)
                            await refresh() }
                 }
+                .buttonStyle(UnderlineButtonStyle(color: Theme.muted))
             case .friend:
-                Button("Remove friend", role: .destructive) { confirmingRemove = true }
+                Button("Remove friend") { confirmingRemove = true }
+                    .buttonStyle(UnderlineButtonStyle(color: Theme.signal))
                     .confirmationDialog("Remove @\(profile.handle)?",
                                         isPresented: $confirmingRemove) {
                         Button("Remove friend", role: .destructive) {
@@ -213,10 +217,12 @@ struct FriendProfileView: View {
                 Button("Unblock") {
                     Task { await social.unblock(handle: profile.handle); await refresh() }
                 }
+                .buttonStyle(UnderlineButtonStyle())
             }
 
             if profile.relationship != .blocked {
-                Button("Block", role: .destructive) { confirmingBlock = true }
+                Button("Block") { confirmingBlock = true }
+                    .buttonStyle(UnderlineButtonStyle(color: Theme.signal))
                     .confirmationDialog("Block @\(profile.handle)?",
                                         isPresented: $confirmingBlock) {
                         Button("Block", role: .destructive) {

@@ -150,6 +150,43 @@ struct SocialEvent: Identifiable, Equatable, Sendable {
         self.occurredAt = occurred
     }
 
+    /// What happened, as a sentence about a named person.
+    ///
+    /// Recent used to render "Someone committed: Run" — a row too skeletal to
+    /// mean anything, which is a strange result for a shelf whose only job is
+    /// making another person feel present. Split in two so the row can say who
+    /// and what in the poster voice, and what it was about underneath.
+    var headline: String {
+        let name = displayName.uppercased()
+        switch kind {
+        case .commitmentShared:      return "\(name) MADE A COMMITMENT"
+        case .commitmentKept:        return "\(name) KEPT IT."
+        case .commitmentKeptLate:    return "\(name) KEPT IT, LATE."
+        case .overrideUsed:          return "\(name) USED AN OVERRIDE."
+        case .streakMilestone:       return "\(name) IS \(milestone ?? 0) IN A ROW."
+        case .sharedAccepted:        return "\(name) JOINED."
+        case .sharedStarted:         return "IT'S ON."
+        case .sharedCompleted:       return "\(name) FINISHED THEIR PART."
+        case .sharedCompletedLate:   return "\(name) FINISHED THEIR PART, LATE."
+        case .sharedAllCompleted:    return "EVERYONE KEPT IT."
+        }
+    }
+
+    /// What it was about. Only ever the commitment's title, which is the one
+    /// thing its owner chose to share — never a requirement, a deadline, a
+    /// workout or a restriction.
+    var detail: String? {
+        switch kind {
+        case .streakMilestone:
+            return nil
+        case .sharedStarted, .sharedAllCompleted, .sharedCompleted,
+             .sharedCompletedLate, .sharedAccepted:
+            return title.map { "\($0) · shared commitment" }
+        default:
+            return title
+        }
+    }
+
     /// The receipt-language line, minus the name (the row renders that).
     var phrase: String {
         switch kind {

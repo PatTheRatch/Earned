@@ -55,13 +55,11 @@ struct TodayView: View {
                     // EARNED. stays the brand's word for the unlock moment
                     // itself, so the masthead never reads "EARNED / EARNED."
                     Button { showingLockScreen = true } label: {
-                        StateWord(word: store.isRestricted ? "LOCKED" : "CLEAR")
+                        StateWord(word: stateWord)
                     }
                     .buttonStyle(.plain)
                     .padding(.top, 2)
-                    .accessibilityLabel(store.isRestricted
-                                        ? "Locked. Show what is owed."
-                                        : "Clear. Every gate satisfied.")
+                    .accessibilityLabel(stateDescription)
 
                     // Setup that never finished is a different fact from a
                     // permission that was revoked, and only one of them has an
@@ -171,6 +169,36 @@ struct TodayView: View {
         }
     }
 
+    // MARK: - What the masthead is allowed to claim
+
+    /// `LOCKED.` is a claim about the phone, not about the obligation.
+    ///
+    /// Today used to print it whenever a Gate was unsatisfied — directly above
+    /// a notice reading "Earned can't block apps yet", which is the app
+    /// contradicting itself in two lines. Worse, it spends the word: if
+    /// `LOCKED.` sometimes means "nothing is actually blocked", it stops
+    /// meaning anything, and the one state the whole product exists to create
+    /// becomes decoration.
+    ///
+    /// So the obligation and the enforcement are said separately. **OWED.** is
+    /// the honest word for a Gate that is closed while Earned cannot act on
+    /// it: the debt is undiminished — it is stated first and in the same size —
+    /// but the phone is not being held shut, and pretending otherwise would be
+    /// the app taking credit for something it did not do (NORTHSTAR §33).
+    private var stateWord: String {
+        guard store.isRestricted else { return "CLEAR" }
+        return store.shielding.canShield ? "LOCKED" : "OWED"
+    }
+
+    private var stateDescription: String {
+        switch stateWord {
+        case "CLEAR":  return "Clear. Every gate satisfied."
+        case "LOCKED": return "Locked. Show what is owed."
+        default:       return "Owed. Still owed, but Earned cannot block apps "
+                            + "right now. Show what is owed."
+        }
+    }
+
     // MARK: - Just-in-time teaching
 
     /// Which lesson, if any, this screen owes the user right now. Ordered by
@@ -210,8 +238,10 @@ struct TodayView: View {
                         "Earned never sees, stores or transmits that passcode. It can't "
                             + "be recovered from here."],
                 acknowledgement: "NOT NOW")
-        case .waysOut:
-            // Taught where it is needed, on the override surface itself.
+        case .waysOut, .reachable:
+            // Both are taught where they are needed: the Override ladder on
+            // the override surface, notifications on Social at the moment
+            // somebody first depends on this phone noticing something.
             EmptyView()
         }
     }
