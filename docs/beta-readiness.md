@@ -134,6 +134,27 @@ Everything the extension needs is in place and checked:
 - `intervalDidEnd` is deliberately empty: the extension never *lifts* a shield, because the
   app is the only thing that knows whether the commitment was met. Fail-closed by design.
 
+**And for every Debug build so far, iOS could not have used it even if it woke.** Xcode's
+debug dylib splits a target into a launcher stub plus a side dylib holding the code. For an
+app that is invisible; for an *extension* it is not, because iOS resolves
+`NSExtensionPrincipalClass` **by name against the extension's own binary**, and that binary
+was a stub whose Objective-C class count was zero. The extension embedded, signed, and was
+never invoked — silently, with every other check in this document passing.
+
+Found by chasing why the custom shield kept showing Apple's default card, and confirmed by
+comparing the two configurations: Release produced one binary carrying
+`_TtC12EarnedShield28ShieldConfigurationExtension`; Debug produced an 89 KB stub carrying
+nothing. Both extensions now set `ENABLE_DEBUG_DYLIB: NO` — they gain nothing from the
+split, which exists for previews and hot reload in the app — and after the change both
+Debug binaries carry their principal class. `validate-release-config.py` asserts it, with a
+negative test.
+
+**This may be why B‑2 has never been observed working.** Every device test of closed-app
+enforcement so far has been a Debug build, and a monitor extension whose principal class
+cannot be resolved wakes and does nothing. That is exactly the symptom B‑2 describes. It
+does not prove the enforcement works — it removes the most likely reason it appeared not
+to, and the nine-step test below is still owed.
+
 None of that is evidence that iOS wakes the extension. The simulator does not run
 DeviceActivity schedules, CI signs nothing, and the failure mode — the app shields on next
 launch and looks fine — is indistinguishable from success unless someone deliberately

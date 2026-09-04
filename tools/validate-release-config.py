@@ -289,6 +289,17 @@ def main() -> int:
               "will never load it for the job it exists to do")
         check(target.get("type") == "app-extension",
               f"{target_name} is not declared as an app-extension")
+        # iOS resolves NSExtensionPrincipalClass by name against the
+        # extension's own binary. Xcode's debug dylib makes that binary a
+        # launcher stub with no Objective-C classes in it at all, so the
+        # extension embeds, signs, loads — and is never used, silently, in
+        # every Debug build. That is what kept the custom shield showing
+        # Apple's default card while every other check here passed.
+        check(target.get("settings", {}).get("base", {})
+                    .get("ENABLE_DEBUG_DYLIB") is False,
+              f"{target_name} does not set ENABLE_DEBUG_DYLIB: NO. Its Debug "
+              "binary becomes a stub, the principal class cannot be resolved "
+              "by name, and the extension is silently never invoked")
 
     # The shield reads its lines out of the App Group, so the file name has to
     # agree across the two processes the same way the group identifier does.

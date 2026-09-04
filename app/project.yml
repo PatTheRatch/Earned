@@ -151,6 +151,22 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_ENTITLEMENTS: EarnedMonitor/EarnedMonitor.entitlements
         GENERATE_INFOPLIST_FILE: NO
+        # Xcode's debug dylib splits a target into a launcher stub plus a side
+        # dylib holding the actual code. For an app that is invisible. For an
+        # **extension** it is not: iOS resolves NSExtensionPrincipalClass by
+        # name against the extension's own binary, and in a Debug build that
+        # binary is a stub containing no Objective-C classes at all — the class
+        # is in the dylib. The extension then embeds, signs, and is simply never
+        # used, with nothing anywhere saying so.
+        #
+        # Verified by comparing the two builds: Release produces one binary
+        # carrying _TtC12EarnedShield28ShieldConfigurationExtension; Debug
+        # produces an 89 KB stub whose ObjC class count is zero.
+        #
+        # Extensions gain nothing from the split — it exists for previews and
+        # hot reload in the app — so they opt out and behave the same way in
+        # both configurations.
+        ENABLE_DEBUG_DYLIB: NO
 
   # The screen a blocked app actually shows. Without this target iOS draws its
   # own grey "restricted" card, which says nothing about the deal and offers no
@@ -197,3 +213,19 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_ENTITLEMENTS: EarnedShield/EarnedShield.entitlements
         GENERATE_INFOPLIST_FILE: NO
+        # Xcode's debug dylib splits a target into a launcher stub plus a side
+        # dylib holding the actual code. For an app that is invisible. For an
+        # **extension** it is not: iOS resolves NSExtensionPrincipalClass by
+        # name against the extension's own binary, and in a Debug build that
+        # binary is a stub containing no Objective-C classes at all — the class
+        # is in the dylib. The extension then embeds, signs, and is simply never
+        # used, with nothing anywhere saying so.
+        #
+        # Verified by comparing the two builds: Release produces one binary
+        # carrying _TtC12EarnedShield28ShieldConfigurationExtension; Debug
+        # produces an 89 KB stub whose ObjC class count is zero.
+        #
+        # Extensions gain nothing from the split — it exists for previews and
+        # hot reload in the app — so they opt out and behave the same way in
+        # both configurations.
+        ENABLE_DEBUG_DYLIB: NO
