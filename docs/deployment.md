@@ -748,8 +748,32 @@ active:
   service-role JWT read from Vault.
 - **`purge-push-outbox`**, `31 3 * * *`, beside the other purges in §7.
 
-**Still needed before a phone actually buzzes:** the APNs Auth Key and the three secrets
-above. Until they exist the drain runs every minute and returns
+**APNs secrets set, 4 September 2026,** and the sender proven end to end: a queued ask is
+claimed, completed and reported `200 {"claimed":1,"delivered":0,"nobody":1,...}`. Read that
+reply carefully — `delivered` and `nobody` are counted apart on purpose. An ask with no
+registered device is *finished* rather than failed, because the recipient refused
+notifications or has not yet opened the app on a phone that could register; but nothing
+rang, and a sender reporting that as "sent" would be the operator's version of the app
+claiming a restriction it never applied.
+
+**Still needed before a phone actually buzzes:** a device has to register a token, which
+needs a build carrying the `aps-environment` entitlement, Push Notifications enabled on the
+App ID, and the user allowing notifications. `select count(*) from public.push_device`
+answers it in one line; `You → Advanced → Diagnostics → Push device` answers it on the
+phone.
+
+Two things went wrong on the first live run, both worth keeping:
+
+- `complete_push` and `forget_push_token` return `void`, and PostgREST answers a void
+  function with **204 No Content**. The sender parsed every reply as JSON, so it threw
+  *after* the database had marked the first ask delivered — leaving the rest of the batch
+  claimed and untouched, and returning a bare 500. `response.ok` is true for a 204, so the
+  guard has to be about the body rather than the status.
+- One ask that goes wrong now leaves the rest of the batch alone, and anything thrown
+  leaves its row claimed and uncompleted, which the claim timeout hands back. Late, rather
+  than lost.
+
+**Historic superseded note:** the APNs Auth Key and the three secrets Until they exist the drain runs every minute and returns
 `503 {"error":"APNs credentials are not configured"}` — verified, and deliberately harmless:
 the credential check happens *before* anything is claimed, so no ask is burned or marked
 attempted while waiting. Setting the secrets is the only remaining step; nothing needs

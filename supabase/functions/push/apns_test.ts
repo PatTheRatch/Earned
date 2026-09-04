@@ -1,6 +1,7 @@
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { Ask, deliver, payloadFor } from "./apns.ts";
 import { sendAsk, summarise } from "./drain.ts";
+import { callRpc } from "./rpc.ts";
 
 const ask: Ask = {
   id: "11111111-1111-1111-1111-111111111111",
@@ -76,4 +77,47 @@ Deno.test("failures are summarised without leaking the payload", () => {
   assertEquals(summarise([{ token: "a", status: 200, unregistered: false }]), null,
                "a clean send has nothing to record");
   assertEquals(summarise([]), null, "and nobody to send to is not a failure");
+});
+
+Deno.test("a void RPC answers 204, and that is not a parse error", async () => {
+  // complete_push and forget_push_token return void, so PostgREST answers
+  // 204 No Content. Parsing that as JSON threw on the first live run: the
+  // database had already marked one ask delivered, the sender died on the way
+  // back, and the rest of the batch sat claimed and untouched.
+  const result = await callRpc(
+    "https://db.test", "key", "complete_push", { p_id: "x" },
+    () => Promise.resolve(new Response(null, { status: 204 })),
+  );
+  assertEquals(result, null);
+});
+
+Deno.test("an empty 200 body is also not a parse error", async () => {
+  const result = await callRpc(
+    "https://db.test", "key", "complete_push", {},
+    () => Promise.resolve(new Response("", { status: 200 })),
+  );
+  assertEquals(result, null);
+});
+
+Deno.test("a jsonb RPC still parses", async () => {
+  const result = await callRpc(
+    "https://db.test", "key", "claim_push_batch", { p_limit: 1 },
+    () => Promise.resolve(new Response(JSON.stringify([{ id: "a" }]),
+                                       { status: 200 })),
+  );
+  assertEquals(result, [{ id: "a" }]);
+});
+
+Deno.test("a refusal carries what the database said", async () => {
+  let message = "";
+  try {
+    await callRpc("https://db.test", "key", "claim_push_batch", {},
+      () => Promise.resolve(new Response("permission denied for function",
+                                         { status: 403 })));
+  } catch (error) {
+    message = String(error);
+  }
+  assert(message.includes("403"), "the status survives");
+  assert(message.includes("permission denied"),
+         "and the reason, which is the difference between a fix and an afternoon");
 });

@@ -23,6 +23,10 @@
 
 import { Ask, providerToken } from "./apns.ts";
 import { sendAsk, summarise } from "./drain.ts";
+import { callRpc } from "./rpc.ts";
+
+const rpc = (name: string, args: unknown = {}) =>
+  callRpc(SUPABASE_URL, SERVICE_KEY, name, args);
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -34,20 +38,6 @@ const APNS_TOPIC = Deno.env.get("APNS_TOPIC") ?? "com.pattheratch.earned";
 // A token minted on one is rejected by the other, which presents as silent
 // non-delivery, so it is configuration rather than a guess.
 const APNS_HOST = Deno.env.get("APNS_HOST") ?? "https://api.sandbox.push.apple.com";
-
-async function rpc(name: string, args: unknown = {}): Promise<unknown> {
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      apikey: SERVICE_KEY,
-      authorization: `Bearer ${SERVICE_KEY}`,
-    },
-    body: JSON.stringify(args),
-  });
-  if (!response.ok) throw new Error(`${name}: ${response.status}`);
-  return await response.json();
-}
 
 Deno.serve(async (request: Request) => {
   if (request.method !== "POST") {
@@ -72,28 +62,50 @@ Deno.serve(async (request: Request) => {
     );
   }
 
-  const asks = (await rpc("claim_push_batch", { p_limit: 50 })) as Ask[];
-  let sent = 0;
+  let asks: Ask[];
+  try {
+    asks = ((await rpc("claim_push_batch", { p_limit: 50 })) ?? []) as Ask[];
+  } catch (error) {
+    return new Response(JSON.stringify({ error: `claim failed: ${error}` }),
+                        { status: 500, headers: { "content-type": "application/json" } });
+  }
+  // Counted apart on purpose. An ask with no registered device is *finished*
+  // — the recipient refused notifications, or has not opened the app on a
+  // phone yet — but nothing rang, and a sender that reports it as "sent" is
+  // the operator's version of the app claiming a restriction it never applied.
+  let delivered = 0;
+  let nobody = 0;
   let failed = 0;
+  let errored = 0;
   const forgotten = new Set<string>();
 
   for (const ask of asks) {
-    const { delivered, outcomes } = await sendAsk(ask, jwt, APNS_HOST, APNS_TOPIC);
-    for (const outcome of outcomes) {
-      if (outcome.unregistered && !forgotten.has(outcome.token)) {
-        forgotten.add(outcome.token);
-        await rpc("forget_push_token", { p_token: outcome.token });
+    // One ask that goes wrong leaves the rest of the batch alone. Anything
+    // thrown here leaves its row claimed and uncompleted, which the claim
+    // timeout hands back — late, rather than lost.
+    try {
+      const { delivered: took, outcomes } =
+        await sendAsk(ask, jwt, APNS_HOST, APNS_TOPIC);
+      for (const outcome of outcomes) {
+        if (outcome.unregistered && !forgotten.has(outcome.token)) {
+          forgotten.add(outcome.token);
+          await rpc("forget_push_token", { p_token: outcome.token });
+        }
       }
+      // Nobody to tell is done, not failed.
+      const reachable = ask.tokens.length > 0;
+      const error = !reachable || took ? null : summarise(outcomes);
+      await rpc("complete_push", { p_id: ask.id, p_error: error });
+      if (error !== null) failed += 1;
+      else if (reachable) delivered += 1;
+      else nobody += 1;
+    } catch {
+      errored += 1;
     }
-    // Nobody to tell is done, not failed.
-    const error = ask.tokens.length === 0 || delivered
-      ? null : summarise(outcomes);
-    await rpc("complete_push", { p_id: ask.id, p_error: error });
-    if (error === null) sent += 1; else failed += 1;
   }
 
   return new Response(
-    JSON.stringify({ claimed: asks.length, sent, failed,
+    JSON.stringify({ claimed: asks.length, delivered, nobody, failed, errored,
                      forgotten: forgotten.size }),
     { headers: { "content-type": "application/json" } },
   );
