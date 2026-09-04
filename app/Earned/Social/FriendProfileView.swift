@@ -18,6 +18,7 @@ struct FriendProfileView: View {
     @State private var confirmingRemove = false
     @State private var confirmingBlock = false
     @State private var confirmingNomination = false
+    @State private var confirmingRevoke = false
 
     var body: some View {
         Group {
@@ -61,6 +62,13 @@ struct FriendProfileView: View {
 
     private func refresh() async {
         lookup = await social.lookUpProfile(handle: handle)
+    }
+
+    /// Give back the authority this person granted. A no-op if the row has
+    /// already gone, which is the case when two devices do it at once.
+    private func revokePartner(_ profile: PublicProfile) async {
+        guard let partner = account.earnedPartner(handle: profile.handle) else { return }
+        await account.revokePartner(partner)
     }
 
     /// Another person, in the same visual system as everything else.
@@ -146,6 +154,30 @@ struct FriendProfileView: View {
                         .font(Theme.blocker(15)).foregroundStyle(Theme.ink)
                     Text("Can approve your Overrides.")
                         .font(Theme.footnote).foregroundStyle(Theme.muted)
+                    // Offered here because here is where you are thinking
+                    // about this person. It existed only under You →
+                    // Accountability partners, which is a different tab and a
+                    // different mental model, so in practice the authority
+                    // looked permanent once granted.
+                    Button("Remove as accountability partner") {
+                        confirmingRevoke = true
+                    }
+                    .buttonStyle(UnderlineButtonStyle(color: Theme.signal))
+                    .padding(.top, 2)
+                    .confirmationDialog(
+                        "Remove \(profile.displayName) as an accountability partner?",
+                        isPresented: $confirmingRevoke, titleVisibility: .visible
+                    ) {
+                        Button("Remove partner", role: .destructive) {
+                            Task { await revokePartner(profile) }
+                        }
+                    } message: {
+                        Text("They stop being able to approve your Overrides. This never "
+                             + "makes an existing commitment easier — a commitment that "
+                             + "drops below its agreed number of approvers loses the "
+                             + "accountability route entirely rather than lowering it. "
+                             + "You stay friends.")
+                    }
                 case .invited:
                     Text("REQUEST SENT")
                         .font(Theme.blocker(15)).foregroundStyle(Theme.ink)
@@ -205,13 +237,42 @@ struct FriendProfileView: View {
                 Button("Remove friend") { confirmingRemove = true }
                     .buttonStyle(UnderlineButtonStyle(color: Theme.signal))
                     .confirmationDialog("Remove @\(profile.handle)?",
-                                        isPresented: $confirmingRemove) {
-                        Button("Remove friend", role: .destructive) {
-                            Task { await social.removeFriend(handle: profile.handle)
-                                   await refresh() }
+                                        isPresented: $confirmingRemove,
+                                        titleVisibility: .visible) {
+                        // Asked, not assumed. Friendship and override authority
+                        // are consented to separately and on purpose
+                        // (invariant 24), so unfriending cannot silently strip
+                        // a permission this person gave you — but it must not
+                        // silently keep it either, which is what happened: a
+                        // friend removed and re-added came back still holding
+                        // authority nobody had thought about since.
+                        if account.earnedPartnerState(handle: profile.handle) == .active {
+                            Button("Remove friend and partner", role: .destructive) {
+                                Task {
+                                    await revokePartner(profile)
+                                    await social.removeFriend(handle: profile.handle)
+                                    await refresh()
+                                }
+                            }
+                            Button("Remove friend only", role: .destructive) {
+                                Task { await social.removeFriend(handle: profile.handle)
+                                       await refresh() }
+                            }
+                        } else {
+                            Button("Remove friend", role: .destructive) {
+                                Task { await social.removeFriend(handle: profile.handle)
+                                       await refresh() }
+                            }
                         }
                     } message: {
-                        Text("You stop seeing each other's shared things. No message is sent.")
+                        Text(account.earnedPartnerState(handle: profile.handle) == .active
+                             ? "You stop seeing each other's shared things. "
+                               + "\(profile.displayName) is also an accountability partner, "
+                               + "which is a separate permission they gave you — removing "
+                               + "the friendship does not take it back unless you say so. "
+                               + "No message is sent either way."
+                             : "You stop seeing each other's shared things. "
+                               + "No message is sent.")
                     }
             case .blocked:
                 Button("Unblock") {

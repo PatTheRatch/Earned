@@ -111,6 +111,19 @@ select test_assert((select status = 'active' from public.partner where kind = 'e
 select public.send_friend_request('maya');
 select test_sign_in('22222222-2222-2222-2222-222222222222');
 select public.respond_to_friend_request('patrick', true);
+
+-- The round trip that surprised a real user: remove a friend, add them back,
+-- and the accountability partnership is still there — because it was never
+-- part of the friendship. That is the invariant working, and it is also how
+-- somebody ends up holding authority nobody has thought about in weeks. The
+-- answer is not to couple the two, which would let a social gesture silently
+-- revoke a permission this person deliberately granted; it is that revoking
+-- must be offered where the relationship is being looked at, and that removing
+-- a friend must *ask* rather than assume. That half is UI, and it is the half
+-- that was missing.
+select test_assert((select status = 'active' from public.partner where kind = 'earned_user'),
+                   'adding a friend back does not re-grant, because nothing was revoked');
+
 select test_sign_in('11111111-1111-1111-1111-111111111111');
 select public.revoke_partner((select id from public.partner where kind = 'earned_user'));
 select test_assert((select status = 'revoked' from public.partner where kind = 'earned_user'),

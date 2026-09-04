@@ -265,6 +265,31 @@ friendship (
 | any | either blocks | `blocked`, `blocked_by` set | overwrites whatever stood, including `accepted` |
 | `blocked` | blocker unblocks | row deleted | back to strangers; a fresh request is possible after |
 
+### 5.2a Unfriending, and the authority that outlives it
+
+Friendship and override authority are separate consents (invariant 24), so removing a
+friend does not revoke a partnership and never has. That is deliberate: a social gesture
+must not silently take back a permission the *other* person deliberately granted, and the
+reverse — unfriending as a way to quietly disarm your own accountability — is exactly the
+escape hatch the design refuses.
+
+**It was still wrong in practice, and a real user found it.** Remove a friend, add them
+back, and they are still an accountability partner — authority nobody had thought about
+since the day it was granted. The invariant was fine; the affordance was missing. Revoking
+a partner existed only under You → Accountability partners, a different tab and a different
+mental model, so once granted the authority looked permanent.
+
+Two changes, both interface, neither touching the model:
+
+- The friend profile offers **Remove as accountability partner** where the relationship is
+  actually being considered.
+- Removing a friend who is also a partner **asks**: *Remove friend and partner* or *Remove
+  friend only*. Asked, never assumed, in either direction.
+
+Revoking still never makes an existing commitment easier. A commitment that drops below its
+agreed number of approvers loses the accountability route entirely rather than lowering the
+threshold (accountability-architecture §4.3), and the confirmation says so.
+
 ### 5.3 What blocking means
 
 Blocking is the strongest word in the model and it must hold everywhere, not just in the

@@ -243,7 +243,13 @@ final class AccountStore: ObservableObject {
     /// "ask" state. This is the earned-partner lookup, and it works because
     /// `my_partners()` carries the live handle for earned rows.
     func earnedPartnerState(handle: String) -> Partner.State? {
-        partners.first { $0.kind == .earnedUser && $0.handle == handle }?.state
+        earnedPartner(handle: handle)?.state
+    }
+
+    /// The partner row itself, so a screen that knows a handle can revoke
+    /// without sending the user to a different tab to find the same person.
+    func earnedPartner(handle: String) -> Partner? {
+        partners.first { $0.kind == .earnedUser && $0.handle == handle }
     }
 
     /// Hands this device's APNs token to the backend. Throws rather than
