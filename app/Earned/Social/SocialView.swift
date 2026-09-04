@@ -12,15 +12,36 @@ struct SocialView: View {
     @EnvironmentObject private var account: AccountStore
     @EnvironmentObject private var social: SocialStore
 
-    @State private var showingAdd = false
-    @State private var showingSetup = false
-    /// The invitation whose Deal is being read. Accepting happens only there —
-    /// nobody binds to a shared commitment without seeing their own contract
-    /// first (docs/shared-commitments.md §4.3).
-    @State private var readingInvitation: SharedInvitation?
+    /// Every sheet this screen can show, as one value.
+    ///
+    /// SwiftUI reliably presents **one** `.sheet` per view. This had four
+    /// stacked on the same `NavigationStack`, which is a documented way to get
+    /// a sheet that silently fails to present — or a presentation stack that
+    /// wedges, which on a phone is indistinguishable from the app freezing.
+    /// The risk was not theoretical here: tapping a notification switches tab,
+    /// SocialView appears, and its `onAppear` can try to present while the tab
+    /// transition is still running.
+    private enum Sheet: Identifiable {
+        case addFriend
+        case profileSetup
+        case reachable
+        case invitation(SharedInvitation)
+
+        var id: String {
+            switch self {
+            case .addFriend: return "add"
+            case .profileSetup: return "setup"
+            case .reachable: return "reachable"
+            case .invitation(let invitation): return "invite-\(invitation.id)"
+            }
+        }
+    }
+
+    @State private var sheet: Sheet?
+
     @EnvironmentObject private var teachings: Teachings
     @EnvironmentObject private var push: PushRegistrar
-    @State private var offeringNotifications = false
+
 
     /// True once somebody is actually waiting on this user, or could be.
     ///
@@ -54,13 +75,17 @@ struct SocialView: View {
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $showingAdd) { AddFriendView() }
-            .sheet(isPresented: $showingSetup) { ProfileSetupView() }
-            .sheet(item: $readingInvitation) { invitation in
-                AcceptSharedInvitationView(invitation: invitation)
-            }
-            .sheet(isPresented: $offeringNotifications) {
-                reachableSheet.presentationDetents([.medium])
+            .sheet(item: $sheet) { which in
+                switch which {
+                case .addFriend:    AddFriendView()
+                case .profileSetup: ProfileSetupView()
+                case .reachable:    reachableSheet.presentationDetents([.medium])
+                // Accepting happens only here — nobody binds to a shared
+                // commitment without seeing their own contract first
+                // (docs/shared-commitments.md §4.3).
+                case .invitation(let invitation):
+                    AcceptSharedInvitationView(invitation: invitation)
+                }
             }
             .onChange(of: somebodyIsWaiting) { _, waiting in offerNotifications(waiting) }
             .onAppear { offerNotifications(somebodyIsWaiting) }
@@ -83,8 +108,9 @@ struct SocialView: View {
     private func offerNotifications(_ waiting: Bool) {
         guard waiting, !teachings.hasSeen(.reachable),
               store.warningDelivery == .notDetermined,
-              !offeringNotifications else { return }
-        offeringNotifications = true
+              // Never over something the user is already looking at.
+              sheet == nil else { return }
+        sheet = .reachable
         teachings.markSeen(.reachable)
     }
 
@@ -105,7 +131,7 @@ struct SocialView: View {
             Spacer()
             VStack(alignment: .leading, spacing: 14) {
                 Button("ALLOW NOTIFICATIONS") {
-                    offeringNotifications = false
+                    sheet = nil
                     // Requested on the way out, once this sheet has actually
                     // gone: asking while a sheet is dismissing presents into a
                     // view that is leaving, and iOS drops the request.
@@ -115,7 +141,7 @@ struct SocialView: View {
                     }
                 }
                 .buttonStyle(PosterButtonStyle())
-                Button("Not now") { offeringNotifications = false }
+                Button("Not now") { sheet = nil }
                     .buttonStyle(UnderlineButtonStyle(color: Theme.muted))
             }
         }
@@ -184,7 +210,7 @@ struct SocialView: View {
                                     + "a city are optional — this is an identity card, not "
                                     + "a questionnaire.")
                     .padding(.top, Theme.blockSpacing)
-                Button("SET UP YOUR PROFILE") { showingSetup = true }
+                Button("SET UP YOUR PROFILE") { sheet = .profileSetup }
                     .buttonStyle(PosterButtonStyle())
                     .padding(.top, 12)
             }
@@ -199,7 +225,7 @@ struct SocialView: View {
                 PageHeader(title: "SOCIAL")
                 Spacer()
                 Button {
-                    showingAdd = true
+                    sheet = .addFriend
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 17, weight: .bold))
@@ -268,7 +294,7 @@ struct SocialView: View {
                         }
                         Text("Your Gate starts only if you accept.")
                             .font(Theme.footnote).foregroundStyle(Theme.muted)
-                        Button("READ THE DEAL") { readingInvitation = invitation }
+                        Button("READ THE DEAL") { sheet = .invitation(invitation) }
                             .buttonStyle(PosterButtonStyle())
                             .padding(.top, 4)
                         Button("Decline") {
@@ -537,7 +563,7 @@ struct SocialView: View {
                 EmptyState(title: "NO FRIENDS YET",
                            message: "Add someone who'll notice when you keep your word.")
                     .padding(.top, 8)
-                Button("+ ADD A FRIEND") { showingAdd = true }
+                Button("+ ADD A FRIEND") { sheet = .addFriend }
                     .buttonStyle(UnderlineButtonStyle())
             } else {
                 ForEach(social.friends) { person in

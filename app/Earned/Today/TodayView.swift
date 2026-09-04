@@ -8,10 +8,28 @@ import EarnedKit
 struct TodayView: View {
     @EnvironmentObject private var store: EarnedStore
     @EnvironmentObject private var teachings: Teachings
-    @State private var showingNewCommitment = false
-    @State private var showingLockScreen = false
-    @State private var showingFinishSetup = false
-    @State private var teaching: Teachings.Lesson?
+    /// Every sheet Today can show, as one value — SwiftUI reliably presents
+    /// one `.sheet` per view, and this had four on the same `NavigationStack`.
+    /// Today is the screen the app launches into and the one a just-in-time
+    /// lesson fires on, so it is the most likely place for two presentations
+    /// to collide and wedge the stack, which on a phone reads as a freeze.
+    private enum Sheet: Identifiable {
+        case newCommitment
+        case lockScreen
+        case finishSetup
+        case lesson(Teachings.Lesson)
+
+        var id: String {
+            switch self {
+            case .newCommitment: return "new"
+            case .lockScreen: return "lock"
+            case .finishSetup: return "setup"
+            case .lesson(let lesson): return "lesson-\(lesson.rawValue)"
+            }
+        }
+    }
+
+    @State private var sheet: Sheet?
 
     /// Nothing has ever been owed and nothing is owed now — the state a user
     /// lands in the moment setup finishes. It used to be a grey sentence at the
@@ -54,7 +72,7 @@ struct TodayView: View {
                     // The two-second answer. CLEAR. is the day's state;
                     // EARNED. stays the brand's word for the unlock moment
                     // itself, so the masthead never reads "EARNED / EARNED."
-                    Button { showingLockScreen = true } label: {
+                    Button { sheet = .lockScreen } label: {
                         StateWord(word: stateWord)
                     }
                     .buttonStyle(.plain)
@@ -66,7 +84,7 @@ struct TodayView: View {
                     // action attached. Both are honest about the same thing:
                     // Earned is remembering, not enforcing.
                     if !store.setup.isComplete {
-                        SetupNotice(status: store.setup) { showingFinishSetup = true }
+                        SetupNotice(status: store.setup) { sheet = .finishSetup }
                     } else if store.shielding != .approved {
                         EnforcementNotice(owing: !store.unenforceableGates.isEmpty)
                     }
@@ -123,7 +141,7 @@ struct TodayView: View {
                         // commitment has nothing to compare a glass of water
                         // to. Afterwards the everyday order returns.
                         if isFirstUse {
-                            Button("MAKE YOUR FIRST DEAL") { showingNewCommitment = true }
+                            Button("MAKE YOUR FIRST DEAL") { sheet = .newCommitment }
                                 .buttonStyle(PosterButtonStyle())
                             if store.state.hydration?.enabled == true {
                                 Button("I drank some water") { store.acknowledgeWater() }
@@ -134,7 +152,7 @@ struct TodayView: View {
                                 Button("I DRANK SOME WATER") { store.acknowledgeWater() }
                                     .buttonStyle(PosterButtonStyle())
                             }
-                            Button("+ MAKE A COMMITMENT") { showingNewCommitment = true }
+                            Button("+ MAKE A COMMITMENT") { sheet = .newCommitment }
                                 .buttonStyle(UnderlineButtonStyle())
                         }
                     }
@@ -145,26 +163,21 @@ struct TodayView: View {
             }
             .background(Theme.paper)
             .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $showingNewCommitment) { NewCommitmentView() }
-            .sheet(isPresented: $showingLockScreen) { LockScreenView() }
-            .sheet(isPresented: $showingFinishSetup) { FinishSetupView() }
-            .sheet(item: $teaching) { lesson in
-                teachingSheet(lesson).presentationDetents([.medium])
+            .sheet(item: $sheet) { which in
+                switch which {
+                case .newCommitment: NewCommitmentView()
+                case .lockScreen:    LockScreenView()
+                case .finishSetup:   FinishSetupView()
+                case .lesson(let lesson):
+                    teachingSheet(lesson).presentationDetents([.medium])
+                }
             }
             // One lesson at a time, and only when its moment has arrived. The
             // flag is written when the card is *offered*, not when it is
             // dismissed, so a user who swipes it away is not shown it again on
             // the next tick of the clock.
-            .onChange(of: dueLesson) { _, due in
-                guard teaching == nil, let due else { return }
-                teaching = due
-                teachings.markSeen(due)
-            }
-            .onAppear {
-                guard teaching == nil, let due = dueLesson else { return }
-                teaching = due
-                teachings.markSeen(due)
-            }
+            .onChange(of: dueLesson) { _, _ in teachIfIdle() }
+            .onAppear { teachIfIdle() }
             .rejectionAlert()
         }
     }
@@ -209,6 +222,15 @@ struct TodayView: View {
         if shouldTeachGate { return .gate }
         if shouldOfferPasscode { return .passcode }
         return nil
+    }
+
+    /// A lesson only ever arrives over an idle screen. Presenting one while
+    /// another sheet is up — or is still dismissing — is how a presentation
+    /// stack wedges, and the user cannot tell that from a hang.
+    private func teachIfIdle() {
+        guard sheet == nil, let due = dueLesson else { return }
+        sheet = .lesson(due)
+        teachings.markSeen(due)
     }
 
     @ViewBuilder

@@ -230,6 +230,10 @@ struct MainTabView: View {
         .onChange(of: push.pendingRoute) { _, route in
             guard route != nil else { return }
             selection = .social
+            // Cleared once acted on. Left set, a second tap on a notification
+            // of the same kind writes the same value, `onChange` sees no
+            // change, and routing silently stops working after the first one.
+            push.pendingRoute = nil
             Task {
                 await social.refreshShared()
                 await social.refreshSocial()
