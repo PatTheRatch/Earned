@@ -118,6 +118,21 @@ final class LedgerMirror: ObservableObject {
         }
     }
 
+    #if DEBUG
+    /// Throw the backup away too.
+    ///
+    /// Only ever called by the debug reset. Without it, clearing history on the
+    /// phone lasts until the next launch, when the mirror faithfully hands back
+    /// everything that was just deleted — correct behaviour, and maddening
+    /// while testing.
+    func forget() async {
+        guard let database else { return }
+        lastSaved = nil
+        _ = try? await database.deleteRecord(withID: Self.recordID)
+        status = .idle
+    }
+    #endif
+
     // MARK: - Encoding
 
     private static let payloadKey = "entries"

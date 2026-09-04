@@ -142,6 +142,37 @@ final class EarnedStore: ObservableObject {
         Task { await refreshWarnings() }
     }
 
+    #if DEBUG
+    /// Wipe every commitment and lift every shield. Debug builds only.
+    ///
+    /// This is a deliberate bypass of the product's central rule — a hardened
+    /// commitment cannot be cancelled, and that refusal is the whole point of
+    /// Earned — so it exists exactly where a bypass is acceptable and nowhere
+    /// else. Trying out a commitment to see how it behaves currently means
+    /// living with it, which makes the app hard to develop and impossible to
+    /// demonstrate.
+    ///
+    /// It clears the backup too. Otherwise the reset lasts until the next
+    /// launch, when the mirror hands back everything just deleted — correct,
+    /// and maddening.
+    ///
+    /// Deliberately all-or-nothing rather than "cancel this one": a switch that
+    /// releases a single commitment is a switch someone would be tempted to
+    /// ship.
+    func debugEraseEverything() {
+        ledger = Ledger()
+        try? storage.save(ledger)
+        restoredEntries = nil
+        rejection = nil
+        // Nothing is owed, so nothing may be held. Both halves: what is in
+        // force now, and every wake-up scheduled for later.
+        screenTime.clear()
+        ShieldScheduler.clear()
+        Task { await mirror.forget() }
+        Task { await refreshWarnings() }
+    }
+    #endif
+
     // MARK: - Enforcement
 
     /// Puts the currently-unsatisfied Gates' restrictions into force.

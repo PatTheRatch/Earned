@@ -363,9 +363,19 @@ struct HydrationSettingsView: View {
                     Stepper("Every \(Int(config.interval / 60)) min",
                             onIncrement: { adjustInterval(config, by: 15) },
                             onDecrement: { adjustInterval(config, by: -15) })
-                    LabeledContent("Active hours",
-                                   value: "\(Format.timeOfDay(config.activeHours.startMinuteOfDay)) – "
-                                        + "\(Format.timeOfDay(config.activeHours.endMinuteOfDay))")
+                    // Editable, which it was not: the hours were set once in
+                    // onboarding and then rendered as a label with no control
+                    // beside it, so a Gate configured at 08:00 could never be
+                    // moved. The monotonic rule is a separate matter and is
+                    // enforced where it belongs — narrowing the window is a
+                    // loosening and the engine refuses it while something is
+                    // owed, with `rejectionAlert` saying so.
+                    Stepper("Starts \(Format.timeOfDay(config.activeHours.startMinuteOfDay))",
+                            onIncrement: { adjustHours(config, startBy: 30) },
+                            onDecrement: { adjustHours(config, startBy: -30) })
+                    Stepper("Ends \(Format.timeOfDay(config.activeHours.endMinuteOfDay))",
+                            onIncrement: { adjustHours(config, endBy: 30) },
+                            onDecrement: { adjustHours(config, endBy: -30) })
                 } else {
                     Text("Not configured").foregroundStyle(.secondary)
                 }
@@ -382,6 +392,22 @@ struct HydrationSettingsView: View {
     private func adjustInterval(_ config: HydrationConfig, by minutes: Double) {
         var updated = config
         updated.interval = max(15 * 60, config.interval + minutes * 60)
+        store.configureHydration(updated)
+    }
+
+    /// Clamped so the window cannot invert or vanish — a Gate active from
+    /// 22:00 to 08:00 is a different feature, and one active for zero minutes
+    /// is an off switch wearing a schedule.
+    private func adjustHours(_ config: HydrationConfig,
+                             startBy start: Int = 0, endBy end: Int = 0) {
+        let hours = config.activeHours
+        var updated = config
+        updated.activeHours = ActiveHours(
+            startMinuteOfDay: min(max(0, hours.startMinuteOfDay + start),
+                                  hours.endMinuteOfDay - 30),
+            endMinuteOfDay: max(min(24 * 60, hours.endMinuteOfDay + end),
+                                hours.startMinuteOfDay + 30),
+            timeZoneIdentifier: hours.timeZoneIdentifier)
         store.configureHydration(updated)
     }
 }
@@ -550,6 +576,7 @@ struct AdvancedView: View {
     #if DEBUG
     @EnvironmentObject private var teachings: Teachings
     @State private var showingWorkoutSheet = false
+    @State private var confirmingErase = false
     #endif
 
     var body: some View {
@@ -594,13 +621,31 @@ struct AdvancedView: View {
                 // forever, which makes them almost impossible to review without
                 // wiping the app. Debug builds can forget them.
                 Button("Forget one-time explanations") { teachings.forgetEverything() }
+                // The escape hatch that makes the app testable: try a
+                // commitment, watch it lock the phone, and get out again
+                // without waiting for a deadline or spending an Override.
+                Button("Erase all commitments and unlock", role: .destructive) {
+                    confirmingErase = true
+                }
+                .confirmationDialog("Erase everything?", isPresented: $confirmingErase,
+                                    titleVisibility: .visible) {
+                    Button("Erase and unlock", role: .destructive) {
+                        store.debugEraseEverything()
+                    }
+                } message: {
+                    Text("Deletes every commitment, all debt and all history on this "
+                         + "phone, throws away the iCloud backup, and lifts every "
+                         + "shield. Debug builds only — this bypasses the rule that a "
+                         + "hardened commitment cannot be cancelled.")
+                }
             } header: {
                 Text("Testing (debug builds only)")
             } footer: {
                 Text("Logged by hand counts as your word: it moves honor-system "
                      + "commitments fully and app-verified ones not at all. Forgetting "
                      + "explanations re-arms the Gate, Overdue, Ways out and passcode "
-                     + "cards.")
+                     + "cards. Erasing is the way to try a commitment without living "
+                     + "with it — none of this exists in a release build.")
             }
             #endif
         }
