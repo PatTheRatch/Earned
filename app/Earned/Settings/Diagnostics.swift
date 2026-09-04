@@ -121,6 +121,19 @@ struct DiagnosticsReport {
             Line(label: "Commitments", value: "\(store.state.commitments.count)"),
             Line(label: "Workouts", value: "\(store.state.workouts.count)"),
         ]
+        // The backup, and whether it has ever been used. A tester whose
+        // commitments came back needs to see that they came back, and one
+        // whose iCloud is off needs to know before a reinstall rather than
+        // after.
+        lines.append(Line(label: "iCloud backup", value: mirrorLabel(store.mirror.status),
+                          problem: {
+                              if case .failed = store.mirror.status { return true }
+                              if case .unavailable = store.mirror.status { return true }
+                              return false
+                          }()))
+        if let restored = store.restoredEntries {
+            lines.append(Line(label: "Restored", value: "\(restored) events from iCloud"))
+        }
         if let quarantined = store.quarantinedHistory {
             lines.append(Line(label: "History", value: "Set aside: \(quarantined)",
                               problem: true))
@@ -247,6 +260,16 @@ struct DiagnosticsReport {
     /// is exactly what a tester needs to be able to see and report — and a
     /// device token is a credential for making this phone buzz, which does not
     /// belong in a screenshot.
+    private static func mirrorLabel(_ status: LedgerMirror.Status) -> String {
+        switch status {
+        case .idle: return "Not backed up yet"
+        case .saved(let at): return "Saved \(Format.relative(at, from: Date()))"
+        case .restored(let entries): return "Restored \(entries) events"
+        case .unavailable(let why): return why
+        case .failed(let why): return why
+        }
+    }
+
     private static func pushLabel(_ registration: PushRegistrar.Registration) -> String {
         switch registration {
         case .registered(let at): return "Registered \(Format.relative(at, from: Date()))"

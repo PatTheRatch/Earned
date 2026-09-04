@@ -190,6 +190,18 @@ def main() -> int:
               "distribution")
     # Without this, `registerForRemoteNotifications` returns no token and no
     # error — the exact silent failure the rest of this file exists to catch.
+    ICLOUD_CONTAINER = "iCloud.com.pattheratch.earned"
+    check(app_ent.get("com.apple.developer.icloud-services") == ["CloudKit"],
+          "the app is missing the CloudKit entitlement; the ledger has no backup "
+          "and deleting the app clears every commitment and all debt")
+    check(app_ent.get("com.apple.developer.icloud-container-identifiers")
+          == [ICLOUD_CONTAINER],
+          f"the iCloud container is not exactly [{ICLOUD_CONTAINER}]")
+    mirror = (APP / "Earned" / "Store" / "LedgerMirror.swift").read_text()
+    check(f'"{ICLOUD_CONTAINER}"' in mirror,
+          "LedgerMirror names a different container from the entitlement, so the "
+          "backup is written somewhere nothing ever reads it back")
+
     check(app_ent.get("aps-environment") in ("development", "production"),
           "the app is missing aps-environment; remote notifications register "
           "silently to nothing, so an invitation never reaches the other phone")

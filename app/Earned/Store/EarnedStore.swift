@@ -26,6 +26,9 @@ final class EarnedStore: ObservableObject {
     /// to still know it happened, and to name the file that has their history
     /// in it.
     @Published private(set) var quarantinedHistory: String?
+    /// How many entries came back from iCloud this launch, if any. Surfaced in
+    /// Diagnostics so a restore is visible rather than mysterious.
+    @Published private(set) var restoredEntries: Int?
     @Published var hasOnboarded: Bool {
         didSet { UserDefaults.standard.set(hasOnboarded, forKey: Self.onboardedKey) }
     }
@@ -51,6 +54,14 @@ final class EarnedStore: ObservableObject {
 
     var state: EarnedState { ledger.state }
 
+    /// The copy in the user's own iCloud. Local stays authoritative; this is
+    /// written after the fact and read only when there is no local history.
+    let mirror = LedgerMirror()
+    /// Set at launch when the container held nothing, so the mirror is asked
+    /// once. Never on a launch that found history: the local ledger is the
+    /// authority and a backup must not overwrite a working phone.
+    private var restoreFromMirror = false
+
     init(storage: LedgerStorage = .documents()) {
         let notifications = NotificationScheduler()
         let screenTime = ScreenTimeController()
@@ -63,6 +74,10 @@ final class EarnedStore: ObservableObject {
             self.ledger = ledger
         case .empty:
             self.ledger = Ledger()
+            // No local history: a first install, or a reinstall that cleared
+            // the container. The second is what this exists for — deleting the
+            // app was the cheapest way out of a commitment in the product.
+            restoreFromMirror = true
         case .unreadable(let backup, let error):
             self.ledger = Ledger()
             let location = backup.map { " Saved to \($0.lastPathComponent)." } ?? ""
@@ -102,6 +117,29 @@ final class EarnedStore: ObservableObject {
             }
         refreshShielding()
         Task { await self.refreshWarnings() }
+        if restoreFromMirror { Task { await self.adoptMirroredHistory() } }
+    }
+
+    /// Take back what a reinstall cleared.
+    ///
+    /// Only ever called on a launch that found no local history, and it merges
+    /// rather than replaces — belt and braces, since anything appended between
+    /// launch and the network answering must survive. Commitments come back
+    /// exactly as they were made, which means already hardened: hardening is a
+    /// function of the event's own `createdAt`, so reinstalling is not a way
+    /// back into the correction window.
+    ///
+    /// Silent on failure. No iCloud account, no backup, no connection — all
+    /// ordinary, and all leaving the app exactly as it was before this existed.
+    private func adoptMirroredHistory() async {
+        guard let backup = await mirror.restore(), !backup.entries.isEmpty else { return }
+        guard let merged = try? ledger.merged(with: backup) else { return }
+        guard merged.entries.count > ledger.entries.count else { return }
+        ledger = merged
+        try? storage.save(ledger)
+        restoredEntries = merged.entries.count
+        syncShield()
+        Task { await refreshWarnings() }
     }
 
     // MARK: - Enforcement
@@ -281,6 +319,9 @@ final class EarnedStore: ObservableObject {
         rejection = nil
         do {
             try storage.save(ledger)
+            // Best-effort, and after the local write: the copy in iCloud is a
+            // backup, never a precondition for the deal being recorded.
+            mirror.save(ledger)
         } catch {
             // The event is valid and already applied in memory; surface the
             // write failure rather than pretending the commitment is durable.

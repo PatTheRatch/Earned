@@ -19,6 +19,27 @@
 	     device build fails to sign. -->
 	<key>com.apple.developer.healthkit</key>
 	<true/>
+	<!-- The ledger's backup, in the user's own iCloud (Store/LedgerMirror.swift).
+	     Deleting the app used to clear every commitment and all debt, which was
+	     the cheapest way out of a deal in the product.
+
+	     CloudKit rather than our own backend on purpose: the ledger carries the
+	     requirement, the restriction profile and every imported workout, none of
+	     which the server has ever been allowed to see, and "Health data never
+	     leaves the phone" is a promise made to testers. A private database keeps
+	     it — the copy goes from the user's phone to the user's iCloud, and
+	     Earned's servers are not party to it.
+
+	     The App ID needs iCloud enabled with CloudKit and this container, or a
+	     device build fails to sign. -->
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudKit</string>
+	</array>
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>iCloud.com.pattheratch.earned</string>
+	</array>
 	<!-- Remote notifications, for the three actionable asks another person can
 	     make of this user: a shared-commitment invitation, an accountability
 	     partner request, and an override approval. Never social engagement —

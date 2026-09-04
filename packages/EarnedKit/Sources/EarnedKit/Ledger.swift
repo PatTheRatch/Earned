@@ -36,6 +36,33 @@ public struct Ledger: Equatable, Sendable {
         }
     }
 
+    /// Fold another copy of this history into this one.
+    ///
+    /// For the backup mirror: two devices, or one device and the copy left in
+    /// iCloud before a reinstall, hold overlapping prefixes of the same
+    /// append-only record. Both are lists of events the engine already
+    /// *accepted*, and every entry carries its own id, so the union by id is a
+    /// superset of both — nothing invented, nothing dropped, and a duplicate
+    /// event counted once.
+    ///
+    /// Ordered by date because replay requires non-decreasing dates, and by id
+    /// within a date so the result is deterministic rather than dependent on
+    /// which side happened to be `self`. Two devices merging the same pair in
+    /// opposite orders must reach byte-identical history.
+    ///
+    /// Throws if the union does not replay. That is the honest outcome: a merge
+    /// that produces a state the rules would never have allowed is a corrupt
+    /// backup, and adopting it would be worse than refusing it.
+    public func merged(with other: Ledger) throws -> Ledger {
+        var byID: [UUID: LedgerEntry] = [:]
+        for entry in entries { byID[entry.id] = entry }
+        for entry in other.entries where byID[entry.id] == nil { byID[entry.id] = entry }
+        let ordered = byID.values.sorted {
+            $0.date == $1.date ? $0.id.uuidString < $1.id.uuidString : $0.date < $1.date
+        }
+        return try Ledger(replaying: ordered)
+    }
+
     /// Validates and appends one event, followed by any events the engine
     /// derives from it (currently: earning a Free Override). Returns every entry
     /// written, in order.

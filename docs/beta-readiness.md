@@ -604,12 +604,32 @@ afterwards, what the app does and what happens if they want out. Their answer is
 | Remove friend / block | Social visibility ends both ways. Accountability partnership is *separate* and is not revoked by unfriending — deliberate, since partner authority was consented to independently. |
 | Revoke a partner | Never lowers a threshold already agreed. A commitment that loses too many partners becomes *unavailable*, not easier (accountability-architecture §4.3). |
 | Leave a shared commitment | The personal commitment stands. The shared agreement loses a participant. |
-| **Uninstall / reinstall** | **Wipes the ledger, and with it every commitment and all debt.** This is the cheapest escape path in the product and no UI mentions it. |
+| **Uninstall / reinstall** | **Closed.** The ledger is mirrored to the user's own iCloud (`Store/LedgerMirror.swift`) and restored on a launch that finds no local history. Commitments come back **hardened**, because hardening is a function of the event's own `createdAt` — reinstalling is not a way back into the correction window. |
 
-That last row is the one worth a decision. It is inherent to storing the ledger in the app
-container, it is not fixable inside B1, and it is disclosed to testers in
-[`beta-test-script.md`](beta-test-script.md). **Patrick decision:** whether Wave 0 ships
-with it acknowledged, or whether B2 moves the ledger somewhere a reinstall does not clear.
+That last row was the open decision, and it was settled the day it bit: Patrick reinstalled
+to escape a freeze and lost eleven commitments, while the *server* still held every one of
+their envelopes and the Social tab still showed a shared run from a commitment that no
+longer existed on the phone. A commitment app where the sharing survives and the obligation
+does not has the asymmetry backwards.
+
+**Settled: mirror to the user's own iCloud, restore hardened.** CloudKit rather than our own
+backend, because the ledger carries the requirement, the restriction profile and every
+imported workout — none of which the server has ever been allowed to see, and "Health data
+never leaves the phone" is a promise made to testers (R‑9). A private CloudKit database
+keeps it: the copy goes from the user's phone to the user's iCloud, and Earned's servers are
+not party to it. It also removes key management, since encrypting a blob for our own backend
+needs a key that survives a reinstall, which means the keychain, which for a new device
+means iCloud Keychain — the dependency lands on iCloud either way, with more parts and a key
+a user can lose.
+
+Local stays authoritative. The mirror is written after the local save and read on exactly
+one occasion: a launch that found no history. Merging is a union by entry id, so two devices
+cannot lose each other's events and a restore cannot overwrite a working phone.
+
+**What it still cannot do.** A backup the user controls can be rolled back to shed debt — as
+can deleting the app, which is where this started. What makes that visible is the Contract
+Envelope: the server's record of *terms*, which the client cannot write. Cross-checking a
+restored ledger against outstanding envelopes is not built, and is the honest next step.
 
 ## R‑9 · Privacy and tester trust
 
