@@ -202,9 +202,19 @@ def main() -> int:
           "LedgerMirror names a different container from the entitlement, so the "
           "backup is written somewhere nothing ever reads it back")
 
-    check(app_ent.get("aps-environment") in ("development", "production"),
-          "the app is missing aps-environment; remote notifications register "
-          "silently to nothing, so an invitation never reaches the other phone")
+    # Not a literal: a TestFlight build signed `development` registers sandbox
+    # tokens for every tester and delivers to none of them, with BadDeviceToken
+    # reaching nobody who could act on it.
+    check(app_ent.get("aps-environment") == "$(APS_ENVIRONMENT)",
+          "aps-environment is hardcoded rather than $(APS_ENVIRONMENT). A "
+          "TestFlight build signed 'development' registers sandbox tokens and "
+          "silently delivers nothing")
+    app_configs = app.get("settings", {}).get("configs", {})
+    for config, expected in (("Debug", "development"), ("Release", "production")):
+        check(app_configs.get(config, {}).get("APS_ENVIRONMENT") == expected,
+              f"{config} does not set APS_ENVIRONMENT: {expected}; the "
+              "entitlement substitutes an empty string and push registration "
+              "fails with nothing on screen to explain it")
     check(app_ent.get(HEALTHKIT) is True,
           "the app is missing the HealthKit entitlement; no workout can "
           "complete a commitment")

@@ -99,6 +99,16 @@ targets:
         # Sandbox restriction" and authorization can never succeed.
         CODE_SIGN_ENTITLEMENTS: Earned/Earned.entitlements
         GENERATE_INFOPLIST_FILE: NO
+      # Substituted into `aps-environment` at signing time. Sandbox and
+      # production are separate APNs environments on separate hosts, and a
+      # token minted for one is refused by the other with BadDeviceToken —
+      # which reaches nobody and reads as a broken app rather than a wrong
+      # setting. The sender's APNS_HOST secret has to move with this.
+      configs:
+        Debug:
+          APS_ENVIRONMENT: development
+        Release:
+          APS_ENVIRONMENT: production
 
   # The half of enforcement that runs when the app does not: the system wakes
   # this at a scheduled deadline and it applies the shield the app worked out

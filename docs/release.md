@@ -17,29 +17,54 @@ otherwise reveal to you three days later on a device (`tools/validate-release-co
 
 ## 1. What Apple must have approved first
 
-**Family Controls (Distribution), for two bundle identifiers.**
+**Family Controls (Distribution), for three bundle identifiers.** Not two — the shield
+configuration extension landed after this section was first written, and it is a third App ID
+with its own review.
 
 | Target | Bundle id | Needed for TestFlight |
 |---|---|---|
 | The app | `com.pattheratch.earned` | Family Controls (Distribution) |
 | The monitor extension | `com.pattheratch.earned.monitor` | Family Controls (Distribution), **separately** |
+| The shield extension | `com.pattheratch.earned.shield` | Family Controls (Distribution), **separately again** |
 
-Development is self-serve and is all a Xcode-to-device build needs. Distribution is reviewed
+Development is self-serve and is all an Xcode-to-device build needs. Distribution is reviewed
 by a human, takes days to weeks, and is granted per bundle identifier — one approval does not
-cover the extension. See [`docs/family-controls-request.md`](family-controls-request.md) for
+cover the extensions. See [`docs/family-controls-request.md`](family-controls-request.md) for
 the request itself, which is drafted and ready to paste.
 
-Until both are approved, an archive will upload and then fail validation, or install and then
-fail Screen Time authorization on the tester's device with a sandbox error. There is no way to
-work around this and no way to check it from the repository — it is a state in Apple's portal.
+Until all three are approved, an archive will upload and then fail validation, or install and
+then fail Screen Time authorization on the tester's device with a sandbox error. There is no
+way to work around this and no way to check it from the repository — it is a state in Apple's
+portal. **If only the app was approved, stop here and request the other two.**
 
-**Also needed once, on the developer portal:**
+**Also needed once, on the developer portal.** Each of these is a capability the entitlements
+file already claims, and a claim the App ID does not carry is a signing failure at archive
+time rather than a warning:
 
-- [ ] App Group `group.com.pattheratch.earned` created, and added to **both** App IDs.
+- [ ] App Group `group.com.pattheratch.earned` created, and added to **all three** App IDs.
 - [ ] HealthKit enabled on `com.pattheratch.earned`.
 - [ ] Sign in with Apple enabled on `com.pattheratch.earned`, and the Services ID / key pair
       configured for Supabase ([`docs/deployment.md`](deployment.md) §3).
+- [ ] **Push Notifications** enabled on `com.pattheratch.earned`, and an APNs Auth Key created
+      ([`deployment.md`](deployment.md) §9).
+- [ ] **iCloud** enabled on `com.pattheratch.earned` with **CloudKit** and the container
+      `iCloud.com.pattheratch.earned` — this is the ledger's backup, and without it a
+      reinstall still clears every commitment and all debt.
 - [ ] An App Store Connect app record for `com.pattheratch.earned`.
+
+**And one server-side switch that is easy to miss.** `aps-environment` is
+`$(APS_ENVIRONMENT)`, which is `development` in Debug and `production` in Release — so a
+TestFlight build registers **production** APNs tokens. The sender must move with it:
+
+```sh
+supabase secrets set APNS_HOST=https://api.push.apple.com --project-ref <ref>
+```
+
+Sandbox and production are separate APNs environments on separate hosts, and a token minted
+for one is refused by the other with `BadDeviceToken`. That refusal reaches the sender's log
+and nobody else: to a tester it is simply a notification that never arrives. Expect to run a
+mixed fleet during the switchover — your own Debug device holds a sandbox token that the
+production host will reject, and `forget_push_token` will quietly drop it, which is correct.
 
 ## 2. Export compliance
 
