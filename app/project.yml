@@ -64,6 +64,14 @@ targets:
           Earned reads finished workouts so a run recorded by your watch or a
           workout app can complete your commitments. Nothing else is read, and
           nothing is written.
+        # Apple requires both strings whenever the HealthKit entitlement is
+        # present, even for an app that only reads — the upload is refused
+        # without it. Earned writes nothing to Health and this says so rather
+        # than inventing a reason to satisfy a validator.
+        NSHealthUpdateUsageDescription: >-
+          Earned does not write anything to Health. It only reads finished
+          workouts, so that a run you already recorded can complete a
+          commitment you made.
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
     # Screen Time. Family Controls (Development) is self-serve once enrolled in

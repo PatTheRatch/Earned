@@ -272,6 +272,13 @@ def main() -> int:
     check("read" in str(health_usage).lower(),
           "NSHealthShareUsageDescription should say what is read and why — "
           "that sheet is the entire consent conversation")
+    # Apple requires both strings whenever the HealthKit entitlement is
+    # present, even for an app that only reads. The upload is refused without
+    # it, at the end of an archive rather than the start of a build.
+    check(len(str(info.get("NSHealthUpdateUsageDescription", "")).strip()) > 20,
+          "NSHealthUpdateUsageDescription is missing. App Store Connect refuses "
+          "the upload for any app carrying the HealthKit entitlement, whether "
+          "or not it ever writes")
 
     # --- Distribution ------------------------------------------------------
     check(info.get("ITSAppUsesNonExemptEncryption") is False,
