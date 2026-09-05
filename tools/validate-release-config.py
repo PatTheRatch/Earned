@@ -22,6 +22,8 @@ Run: python3 tools/validate-release-config.py
 from __future__ import annotations
 
 import plistlib
+import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -51,7 +53,7 @@ EXTENSIONS = (
      "nothing applies a shield while the app is closed"),
     ("EarnedShield", "the shield", SHIELD_BUNDLE_ID,
      "EarnedShield/EarnedShield.entitlements",
-     "com.apple.ManagedSettings.shield-configuration-service",
+     "com.apple.ManagedSettingsUI.shield-configuration-service",
      "a blocked app shows Apple's default grey card instead of the deal"),
 )
 
@@ -79,6 +81,32 @@ def load_yaml(path: Path) -> dict:
 def load_plist(path: Path) -> dict:
     with path.open("rb") as handle:
         return plistlib.load(handle)
+
+
+def apple_extension_points() -> set[str] | None:
+    """Every iOS extension point identifier Xcode's own templates declare.
+
+    Returns None when the templates cannot be found, so the check skips rather
+    than failing on a machine without Xcode — this runs in CI too. Where Xcode
+    is present, which includes Xcode Cloud, it is the authority: these strings
+    are not in the SDK or the simulator runtime, because extension points are
+    registered by a system daemon at runtime and are not linkable artifacts.
+    """
+    try:
+        developer = subprocess.run(["xcode-select", "-p"], check=True,
+                                   capture_output=True, text=True).stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+    templates = (Path(developer) / "Platforms/iPhoneOS.platform/Developer"
+                 / "Library/Xcode/Templates/Project Templates/iOS"
+                 / "Application Extension")
+    if not templates.is_dir():
+        return None
+    points: set[str] = set()
+    for info in templates.glob("*.xctemplate/TemplateInfo.plist"):
+        points.update(re.findall(r"com\.apple\.[A-Za-z0-9]+\.[a-z0-9-]+",
+                                 info.read_text(errors="ignore")))
+    return points or None
 
 
 def main() -> int:
@@ -294,6 +322,7 @@ def main() -> int:
 
     # --- Wiring ------------------------------------------------------------
     dependencies = app.get("dependencies", [])
+    apple_points = apple_extension_points()
     for target_name, label, _, _, point, consequence in EXTENSIONS:
         target = targets.get(target_name, {})
         check(any(d.get("target") == target_name for d in dependencies),
@@ -304,6 +333,19 @@ def main() -> int:
         check(declared == point,
               f"{label}'s NSExtensionPointIdentifier is not {point}; the system "
               "will never load it for the job it exists to do")
+        # And that the string is one Apple actually defines, not merely one we
+        # agree with ourselves about. The shield configuration extension is
+        # com.apple.ManagedSettingsUI.*, while the shield *action* extension
+        # next to it in the same family is com.apple.ManagedSettings.* — one
+        # suffix apart, and the wrong one costs an upload rather than a build,
+        # since nothing rejects it until App Store Connect does.
+        if apple_points is not None:
+            near = sorted(p for p in apple_points
+                          if p.rsplit(".", 1)[-1] == point.rsplit(".", 1)[-1])
+            check(point in apple_points,
+                  f"{label}'s extension point {point} is not one Xcode defines. "
+                  + (f"Apple spells it {near[0]}" if near
+                     else "no template declares anything by that name"))
         check(target.get("type") == "app-extension",
               f"{target_name} is not declared as an app-extension")
         # iOS resolves NSExtensionPrincipalClass by name against the

@@ -22,8 +22,18 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NSExtension</key>
 	<dict>
+		<!-- ManagedSettings*UI*, and the UI is load-bearing. The shield *action*
+		     extension, which sits beside this one in the same family and is
+		     otherwise its twin, is com.apple.ManagedSettings.shield-action-service
+		     with no UI. Getting the prefix from the wrong sibling costs an upload
+		     rather than a build: it compiles, embeds, signs and archives, and
+		     only App Store Connect rejects it, with "Invalid Info.plist value".
+		     The string is not in the SDK or the simulator runtime — extension
+		     points are registered by a daemon at runtime — so the authority is
+		     Xcode's own template, which tools/validate-release-config.py now
+		     reads directly rather than trusting this comment. -->
 		<key>NSExtensionPointIdentifier</key>
-		<string>com.apple.ManagedSettings.shield-configuration-service</string>
+		<string>com.apple.ManagedSettingsUI.shield-configuration-service</string>
 		<key>NSExtensionPrincipalClass</key>
 		<string>$(PRODUCT_MODULE_NAME).ShieldConfigurationExtension</string>
 	</dict>

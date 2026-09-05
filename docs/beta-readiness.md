@@ -73,7 +73,7 @@ this document will not guess at it.
 | | Main app | Monitor extension | Shield extension |
 |---|---|---|---|
 | Bundle id | `com.pattheratch.earned` | `com.pattheratch.earned.monitor` | `com.pattheratch.earned.shield` |
-| Type | Application | `com.apple.deviceactivity.monitor-extension` | `com.apple.ManagedSettings.shield-configuration-service` |
+| Type | Application | `com.apple.deviceactivity.monitor-extension` | `com.apple.ManagedSettingsUI.shield-configuration-service` |
 | Entitlement | `com.apple.developer.family-controls` | `com.apple.developer.family-controls` | `com.apple.developer.family-controls` |
 | Also needs | `applesignin`, `healthkit`, App Group | App Group | App Group |
 | Development capability | Self-serve in the portal | Self-serve in the portal | Self-serve in the portal |
